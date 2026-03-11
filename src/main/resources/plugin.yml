@@ -1,5 +1,0 @@
-name: mlkyMC
-version: '${version}'
-main: com.mlkymc.MlkyMC
-api-version: '1.21'
-description: mlkyMC server plugin
