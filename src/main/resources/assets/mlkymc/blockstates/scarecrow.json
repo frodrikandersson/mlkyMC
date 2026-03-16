@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,half=lower": { "model": "mlkymc:block/scarecrow", "y": 180 },
+    "facing=south,half=lower": { "model": "mlkymc:block/scarecrow" },
+    "facing=west,half=lower": { "model": "mlkymc:block/scarecrow", "y": 90 },
+    "facing=east,half=lower": { "model": "mlkymc:block/scarecrow", "y": 270 },
+    "facing=north,half=upper": { "model": "mlkymc:block/scarecrow_top" },
+    "facing=south,half=upper": { "model": "mlkymc:block/scarecrow_top" },
+    "facing=west,half=upper": { "model": "mlkymc:block/scarecrow_top" },
+    "facing=east,half=upper": { "model": "mlkymc:block/scarecrow_top" }
+  }
+}

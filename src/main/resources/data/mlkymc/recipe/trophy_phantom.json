@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:phantom_membrane",
+    "mlkymc:milky_star"
+  ],
+  "result": {
+    "id": "mlkymc:trophy_phantom",
+    "count": 1
+  }
+}

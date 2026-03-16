@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep \"\\\\.java$\")",
+      "Bash(xargs -I{} unzip -l {})",
+      "Bash(mv base-top.png trophy_base_base-top.png)",
+      "Bash(mv top-side.png trophy_base_top-side.png)",
+      "Bash(mv top.png trophy_base_top.png)",
+      "Bash(mv wood.png trophy_base_wood.png)",
+      "Read(//c/Users/frodr/AppData/Roaming/.minecraft/**)",
+      "Read(//c/Users/frodr/AppData/Roaming/ATLauncher/instances/mlkymilky12111/**)",
+      "Read(//c/Users/frodr/AppData/Roaming/ATLauncher/instances/KingdomsOfTheValley/**)",
+      "Read(//c/Users/frodr/AppData/Roaming/ATLauncher/instances/**)",
+      "Read(//c/Users/frodr/AppData/Roaming/ATLauncher/servers/mlkyMilky12111NF/**)",
+      "Bash(unzip -l minecraft_server.1.21.11.jar)",
+      "Read(//c/Users/frodr/AppData/Roaming/ATLauncher/**)",
+      "Read(//c/Users/frodr/AppData/Roaming/ATLauncher/libraries/**)",
+      "Bash(unzip -l C:/Users/frodr/AppData/Roaming/ATLauncher/libraries/net/minecraft/client/1.21.11/client-1.21.11.jar)",
+      "Read(//tmp/**)",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(jar xf:*)",
+      "Bash(done)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-21.0.10\" ./gradlew build)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\frodr\\Desktop\\Github_projects\\frodrikandersson\\mlkyMC\\build\\libs",
+      "C:\\Users\\frodr\\AppData\\Roaming\\ATLauncher\\servers\\mlkyMilky12111NF\\mods"
+    ]
+  }
+}

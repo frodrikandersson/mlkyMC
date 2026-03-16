@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:glass_bottle",
+    "minecraft:redstone",
+    "minecraft:glowstone_dust",
+    "mlkymc:milky_star"
+  ],
+  "result": {
+    "id": "mlkymc:trophy_witch",
+    "count": 1
+  }
+}

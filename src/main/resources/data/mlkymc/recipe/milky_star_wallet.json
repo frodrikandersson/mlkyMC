@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " L ",
+    "LGL",
+    " L "
+  ],
+  "key": {
+    "L": "minecraft:leather",
+    "G": "minecraft:gold_nugget"
+  },
+  "result": {
+    "id": "mlkymc:milky_star_jar_empty",
+    "count": 1
+  }
+}

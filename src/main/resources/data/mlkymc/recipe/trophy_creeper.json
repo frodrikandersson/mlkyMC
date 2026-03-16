@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "MMM",
+    "MCM",
+    "MMM"
+  ],
+  "key": {
+    "M": "mlkymc:milky_star",
+    "C": "minecraft:creeper_head"
+  },
+  "result": {
+    "id": "mlkymc:trophy_creeper",
+    "count": 1
+  }
+}

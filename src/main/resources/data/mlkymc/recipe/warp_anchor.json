@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "NEN",
+    "NLN",
+    " R "
+  ],
+  "key": {
+    "N": "minecraft:nether_star",
+    "E": "minecraft:ender_eye",
+    "L": "minecraft:lodestone",
+    "R": "mlkymc:resonant_core"
+  },
+  "result": {
+    "id": "mlkymc:warp_anchor",
+    "count": 1
+  }
+}

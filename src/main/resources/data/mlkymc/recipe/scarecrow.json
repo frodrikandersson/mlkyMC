@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " P ",
+    "SHE",
+    " S "
+  ],
+  "key": {
+    "P": "minecraft:carved_pumpkin",
+    "S": "minecraft:stick",
+    "H": "minecraft:hay_block",
+    "E": "mlkymc:blessed_ember"
+  },
+  "result": {
+    "id": "mlkymc:scarecrow",
+    "count": 1
+  }
+}

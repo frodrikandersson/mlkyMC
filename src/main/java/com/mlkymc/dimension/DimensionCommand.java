@@ -50,6 +50,7 @@ public class DimensionCommand {
     private void showDimensionStatus(CommandSourceStack source, String dimension, String displayName) {
         int progress = dimensionManager.getProgress(dimension);
         int goal = dimensionManager.getGoal(dimension);
+        int total = dimensionManager.getTotalContributed(dimension);
         boolean unlocked = dimensionManager.isUnlocked(dimension);
 
         if (unlocked) {
@@ -61,6 +62,9 @@ public class DimensionCommand {
             String bar = buildProgressBar(progress, goal);
             source.sendSuccess(() -> Component.literal(displayName + ": LOCKED").withColor(0xFF5555), false);
             source.sendSuccess(() -> Component.literal("  " + bar + " " + progress + "/" + goal + " (" + percent + "%)").withColor(0xFFAA00), false);
+        }
+        if (total > 0) {
+            source.sendSuccess(() -> Component.literal("  Total contributed: " + total + " Milky Stars").withColor(0xAAAAAA), false);
         }
     }
 

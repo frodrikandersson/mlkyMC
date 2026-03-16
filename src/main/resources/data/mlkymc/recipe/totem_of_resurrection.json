@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "GMG",
+    "GTE",
+    "GMG"
+  ],
+  "key": {
+    "G": "minecraft:golden_apple",
+    "M": "mlkymc:milky_star",
+    "T": "minecraft:totem_of_undying",
+    "E": "mlkymc:living_essence"
+  },
+  "result": {
+    "id": "mlkymc:totem_of_resurrection",
+    "count": 1
+  }
+}

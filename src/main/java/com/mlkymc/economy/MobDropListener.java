@@ -1,8 +1,6 @@
 package com.mlkymc.economy;
 
 import com.mlkymc.config.MlkyConfig;
-import com.mlkymc.skills.SkillManager;
-import com.mlkymc.skills.SkillType;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Monster;
@@ -18,12 +16,6 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class MobDropListener {
 
-    private final SkillManager skillManager;
-
-    public MobDropListener(SkillManager skillManager) {
-        this.skillManager = skillManager;
-    }
-
     @SubscribeEvent
     public void onMobDeath(LivingDeathEvent event) {
         Entity source = event.getSource().getEntity();
@@ -33,9 +25,7 @@ public class MobDropListener {
         Entity deadEntity = event.getEntity();
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
-        // Calculate drop chance with combat skill bonus
-        int combatLevel = skillManager.getLevel(player.getUUID(), SkillType.COMBAT);
-        double dropChance = MlkyConfig.getMobDropChance() + (combatLevel * 0.005);
+        double dropChance = MlkyConfig.getMobDropChance();
 
         if (random.nextDouble() >= dropChance) return;
 
@@ -53,14 +43,5 @@ public class MobDropListener {
         if (deadEntity.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
             deadEntity.spawnAtLocation(serverLevel, stars);
         }
-
-        // Grant combat XP based on mob type
-        int xp = 10;
-        if (deadEntity instanceof EnderDragon || deadEntity instanceof WitherBoss) {
-            xp = 100;
-        } else if (deadEntity instanceof Warden || deadEntity instanceof ElderGuardian) {
-            xp = 50;
-        }
-        skillManager.addXp(player, SkillType.COMBAT, xp);
     }
 }

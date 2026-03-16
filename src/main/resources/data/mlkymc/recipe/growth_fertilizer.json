@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:bone_meal",
+    "minecraft:bone_meal",
+    "minecraft:bone_meal",
+    "minecraft:rotten_flesh",
+    "mlkymc:milky_star"
+  ],
+  "result": {
+    "id": "mlkymc:growth_fertilizer",
+    "count": 1
+  }
+}

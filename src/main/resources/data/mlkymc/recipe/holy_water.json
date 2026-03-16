@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:nether_star",
+    "minecraft:gold_nugget",
+    "minecraft:gold_nugget",
+    "mlkymc:waystone_shard",
+    "mlkymc:milky_star"
+  ],
+  "result": {
+    "id": "mlkymc:holy_water",
+    "count": 1
+  }
+}

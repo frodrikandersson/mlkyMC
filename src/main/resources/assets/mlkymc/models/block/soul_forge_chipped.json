@@ -1,0 +1,7 @@
+{
+	"parent": "mlkymc:block/soul_forge",
+	"textures": {
+		"0": "mlkymc:block/soul_forge_chipped",
+		"particle": "mlkymc:block/soul_forge_chipped"
+	}
+}

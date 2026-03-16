@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mlkymc:block/trophy_blaze", "y": 180 },
+    "facing=south": { "model": "mlkymc:block/trophy_blaze" },
+    "facing=west": { "model": "mlkymc:block/trophy_blaze", "y": 90 },
+    "facing=east": { "model": "mlkymc:block/trophy_blaze", "y": 270 }
+  }
+}

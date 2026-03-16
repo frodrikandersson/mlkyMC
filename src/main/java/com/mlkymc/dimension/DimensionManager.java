@@ -25,6 +25,7 @@ public class DimensionManager {
     }
 
     public int getProgress(String dimension) {
+        checkExpired(dimension);
         return dimensions.computeIfAbsent(dimension, k -> new DimensionData()).contributed;
     }
 
@@ -36,12 +37,33 @@ public class DimensionManager {
         return MlkyConfig.getDimensionUnlockHours(dimension);
     }
 
+    public int getTotalContributed(String dimension) {
+        return dimensions.computeIfAbsent(dimension, k -> new DimensionData()).totalContributed;
+    }
+
     public boolean isUnlocked(String dimension) {
+        checkExpired(dimension);
         DimensionData data = dimensions.get(dimension);
         if (data == null || data.unlockTimestamp == 0) return false;
         long elapsed = System.currentTimeMillis() - data.unlockTimestamp;
         long duration = getUnlockHours(dimension) * 3600000L;
         return elapsed < duration;
+    }
+
+    /**
+     * If the unlock period has expired, reset contributed back to 0
+     * so the community needs to contribute again for the next unlock.
+     */
+    private void checkExpired(String dimension) {
+        DimensionData data = dimensions.get(dimension);
+        if (data == null || data.unlockTimestamp == 0) return;
+        long elapsed = System.currentTimeMillis() - data.unlockTimestamp;
+        long duration = getUnlockHours(dimension) * 3600000L;
+        if (elapsed >= duration) {
+            data.contributed = 0;
+            data.unlockTimestamp = 0;
+            save();
+        }
     }
 
     public long getRemainingMillis(String dimension) {
@@ -55,6 +77,7 @@ public class DimensionManager {
     public void contribute(String dimension, int amount) {
         DimensionData data = dimensions.computeIfAbsent(dimension, k -> new DimensionData());
         data.contributed += amount;
+        data.totalContributed += amount;
         if (data.contributed >= getGoal(dimension) && data.unlockTimestamp == 0) {
             data.unlockTimestamp = System.currentTimeMillis();
         }
@@ -104,6 +127,7 @@ public class DimensionManager {
 
     public static class DimensionData {
         public int contributed = 0;
+        public int totalContributed = 0;
         public long unlockTimestamp = 0;
     }
 }

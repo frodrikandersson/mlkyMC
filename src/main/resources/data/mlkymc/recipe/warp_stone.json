@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:ender_pearl",
+    "mlkymc:waystone_shard",
+    "mlkymc:milky_star"
+  ],
+  "result": {
+    "id": "mlkymc:warp_stone",
+    "count": 1
+  }
+}

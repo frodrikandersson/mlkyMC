@@ -14,7 +14,22 @@
       "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-21.0.10\" jar xf build/moddev/artifacts/neoforge-21.11.38-beta-sources.jar net/neoforged/neoforge/event/entity/item/ItemTossEvent.java)",
       "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-21.0.10\" ./gradlew.bat build)",
       "Bash(javap -p -cp /c/Users/frodr/.gradle/caches/neoformruntime/artifacts/minecraft_1.21.11_server.jar net.minecraft.server.level.ServerPlayer)",
-      "Bash(javap -p -cp c:/Users/frodr/Desktop/Github_projects/frodrikandersson/mlkyMC/build/moddev/artifacts/neoforge-21.11.38-beta-merged.jar net.minecraft.server.level.ServerPlayer)"
+      "Bash(javap -p -cp c:/Users/frodr/Desktop/Github_projects/frodrikandersson/mlkyMC/build/moddev/artifacts/neoforge-21.11.38-beta-merged.jar net.minecraft.server.level.ServerPlayer)",
+      "Bash(find C:Usersfrodr.gradlecaches -type d -name *minecraft*)",
+      "Bash(find C:Usersfrodr.gradle -type f -name *.java -path *1.21*)",
+      "Bash(find C:Usersfrodr.gradle -type d -name *neoforged*)",
+      "Bash(find /c/Users/frodr/Desktop/Github_projects/frodrikandersson/mlkyMC -type f -name *.java)",
+      "Bash(JAVA_HOME=\"C:\\\\Program Files\\\\Java\\\\jdk-21.0.10\" ./gradlew build)",
+      "Bash(find C:Usersfrodr.gradlecachesmodules-2files-2.1net.minecraft -type f -name *DataComponents*)",
+      "Bash(find /c/Users/frodr/.gradle/caches/modules-2 -type f -name *.jar)",
+      "Bash(jar -tf /c/Users/frodr/.gradle/caches/modules-2/files-2.1/net.neoforged/neoforge/21.11.38-beta/c6531aa28764584a28528b63d288ef185e1d989/neoforge-21.11.38-beta-sources.jar)",
+      "Bash(jar -tf c:UsersfrodrDesktopGithub_projectsfrodrikanderssonmlkyMCbuildmoddevartifactsneoforge-21.11.38-beta-sources.jar)",
+      "Read(//c/tmp/**)",
+      "Bash(jar -xf c:UsersfrodrDesktopGithub_projectsfrodrikanderssonmlkyMCbuildmoddevartifactsneoforge-21.11.38-beta-sources.jar net/minecraft/core/component/DataComponents.java)",
+      "Bash(jar -xf \"/c/Users/frodr/.gradle/caches/forge_gradle/minecraft_user_repo/mcp/1.21.10-20251007.101210/joined/decompile/output.jar\" \"net/minecraft/world/item/component/WrittenBookContent.java\")",
+      "Bash(jar -xf \"/c/Users/frodr/.gradle/caches/forge_gradle/mcp_repo/net/minecraft/joined/1.21.10-20251007.101210/joined-1.21.10-20251007.101210-srg.jar\" \"net/minecraft/world/item/component/WrittenBookContent.java\" -O)",
+      "Bash(jar -xf \"/c/Users/frodr/.gradle/caches/forge_gradle/minecraft_user_repo/mcp/1.21.10-20251007.101210/joined/decompile/output.jar\" \"net/minecraft/server/network/Filterable.java\")",
+      "Bash(jar -xf \"/c/Users/frodr/.gradle/caches/forge_gradle/minecraft_user_repo/mcp/1.21.10-20251007.101210/joined/decompile/output.jar\" \"net/minecraft/core/component/DataComponents.java\")"
     ]
   }
 }

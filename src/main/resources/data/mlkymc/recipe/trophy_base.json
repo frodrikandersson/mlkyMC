@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " S ",
+    "PGP",
+    " P "
+  ],
+  "key": {
+    "S": "minecraft:smooth_stone_slab",
+    "G": "minecraft:gold_nugget",
+    "P": "minecraft:oak_planks"
+  },
+  "result": {
+    "id": "mlkymc:trophy_base",
+    "count": 1
+  }
+}

@@ -105,10 +105,51 @@ public class StreamerManager {
                 if (player.getName().getString().equalsIgnoreCase(mcName)) {
                     player.refreshDisplayName();
                     player.refreshTabListName();
+                    updatePlayerTeam(player);
                     break;
                 }
             }
         });
+    }
+
+    /**
+     * Update a player's scoreboard team to show stream status prefix above their head.
+     * Scoreboard teams are the only server-side way to modify the 3D nameplate.
+     */
+    public void updatePlayerTeam(net.minecraft.server.level.ServerPlayer player) {
+        var scoreboard = server.getScoreboard();
+        String mcName = player.getName().getString();
+        String teamName = "mlkymc_" + mcName.toLowerCase();
+        // Team names limited to 16 chars
+        if (teamName.length() > 16) teamName = teamName.substring(0, 16);
+
+        var team = scoreboard.getPlayerTeam(teamName);
+
+        if (!isRegistered(mcName)) {
+            // Not a streamer - remove team if it exists
+            if (team != null) {
+                scoreboard.removePlayerTeam(team);
+            }
+            return;
+        }
+
+        if (team == null) {
+            team = scoreboard.addPlayerTeam(teamName);
+        }
+
+        boolean isLive = liveStreams.values().stream()
+                .anyMatch(info -> info.mcName().equalsIgnoreCase(mcName));
+
+        if (isLive) {
+            team.setPlayerPrefix(Component.literal("\u25CF ").withColor(0x55FF55)); // Green circle
+        } else {
+            team.setPlayerPrefix(Component.literal("\u25CF ").withColor(0xFF5555)); // Red circle
+        }
+
+        // Add the player to the team if not already there
+        if (!team.getPlayers().contains(mcName)) {
+            scoreboard.addPlayerToTeam(mcName, team);
+        }
     }
 
     public boolean isRegistered(String mcName) {
@@ -228,12 +269,15 @@ public class StreamerManager {
             previouslyLive.clear();
             previouslyLive.addAll(nowLive);
 
-            // Refresh display names so the stream icons update
+            // Refresh display names and scoreboard teams so the stream icons update
             if (server != null) {
                 server.execute(() -> {
                     for (net.minecraft.server.level.ServerPlayer player : server.getPlayerList().getPlayers()) {
                         player.refreshDisplayName();
                         player.refreshTabListName();
+                        if (isRegistered(player.getName().getString())) {
+                            updatePlayerTeam(player);
+                        }
                     }
                 });
             }

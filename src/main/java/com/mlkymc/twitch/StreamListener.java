@@ -2,6 +2,7 @@ package com.mlkymc.twitch;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
@@ -32,6 +33,16 @@ public class StreamListener {
                 current = event.getEntity().getName();
             }
             event.setDisplayName(((MutableComponent) prefix).append(current));
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            String mcName = player.getName().getString();
+            if (streamerManager.isRegistered(mcName)) {
+                streamerManager.updatePlayerTeam(player);
+            }
         }
     }
 

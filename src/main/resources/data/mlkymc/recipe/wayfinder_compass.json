@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "EME",
+    "ECE",
+    "EME"
+  ],
+  "key": {
+    "E": "minecraft:ender_pearl",
+    "M": "mlkymc:milky_star",
+    "C": "minecraft:compass"
+  },
+  "result": {
+    "id": "mlkymc:wayfinder_compass",
+    "count": 1
+  }
+}

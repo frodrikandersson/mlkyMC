@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mlkymc:block/trophy_phantom", "y": 180 },
+    "facing=south": { "model": "mlkymc:block/trophy_phantom" },
+    "facing=west": { "model": "mlkymc:block/trophy_phantom", "y": 90 },
+    "facing=east": { "model": "mlkymc:block/trophy_phantom", "y": 270 }
+  }
+}

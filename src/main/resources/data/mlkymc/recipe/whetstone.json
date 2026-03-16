@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:smooth_stone_slab",
+    "minecraft:flint",
+    "minecraft:iron_ingot"
+  ],
+  "result": {
+    "id": "mlkymc:whetstone",
+    "count": 1
+  }
+}

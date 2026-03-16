@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "mlkymc:item/milky_star_jar_full"
+  }
+}

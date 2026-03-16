@@ -1,0 +1,55 @@
+{
+  "itemGroup.mlkymc.mlkymc_tab": "mlkyMC",
+
+  "item.mlkymc.milky_star": "Milky Star",
+  "item.mlkymc.milky_star_jar_empty": "Milky Star Jar",
+  "item.mlkymc.milky_star_jar_half": "Milky Star Jar",
+  "item.mlkymc.milky_star_jar_full": "Milky Star Jar",
+
+  "item.mlkymc.waystone_shard": "Waystone Shard",
+  "item.mlkymc.blessed_ember": "Blessed Ember",
+  "item.mlkymc.living_essence": "Living Essence",
+  "item.mlkymc.resonant_core": "Resonant Core",
+  "item.mlkymc.tempered_plate": "Tempered Plate",
+
+  "item.mlkymc.wayfinder_compass": "Wayfinder Compass",
+  "item.mlkymc.warp_stone": "Warp Stone",
+  "item.mlkymc.grappling_hook": "Grappling Hook",
+
+  "item.mlkymc.totem_of_resurrection": "Totem of Resurrection",
+  "item.mlkymc.holy_water": "Holy Water",
+  "item.mlkymc.blessing_scroll": "Blessing Scroll",
+
+  "item.mlkymc.growth_fertilizer": "Growth Fertilizer",
+  "item.mlkymc.animal_feed": "Animal Feed",
+
+  "item.mlkymc.reinforced_pickaxe": "Reinforced Pickaxe",
+  "item.mlkymc.reinforced_axe": "Reinforced Axe",
+  "item.mlkymc.builders_wand": "Builder's Wand",
+  "item.mlkymc.ender_chest_backpack": "Ender Chest Backpack",
+
+  "item.mlkymc.whetstone": "Whetstone",
+  "item.mlkymc.armor_plating": "Armor Plating",
+  "item.mlkymc.stall_deed": "Stall Deed",
+  "item.mlkymc.market_catalog": "Market Catalog",
+
+  "block.mlkymc.warp_anchor": "Warp Anchor",
+  "block.mlkymc.trophy_base": "Trophy Base",
+  "block.mlkymc.scarecrow": "Scarecrow",
+  "block.mlkymc.soul_forge": "Soul Forge",
+  "block.mlkymc.trophy_wither": "Wither Trophy",
+  "block.mlkymc.trophy_dragon": "Dragon Trophy",
+  "block.mlkymc.trophy_elder_guardian": "Elder Guardian Trophy",
+  "block.mlkymc.trophy_warden": "Warden Trophy",
+  "block.mlkymc.trophy_blaze": "Blaze Trophy",
+  "block.mlkymc.trophy_ender": "Ender Trophy",
+  "block.mlkymc.trophy_creeper": "Creeper Trophy",
+  "block.mlkymc.trophy_spider": "Spider Trophy",
+  "block.mlkymc.trophy_phantom": "Phantom Trophy",
+  "block.mlkymc.trophy_witch": "Witch Trophy",
+
+  "key.categories.mlkymc": "mlkyMC",
+  "key.category.mlkymc.keybinds": "mlkyMC",
+  "key.mlkymc.class_menu": "Class Menu",
+  "key.mlkymc.minimap": "Toggle Minimap"
+}

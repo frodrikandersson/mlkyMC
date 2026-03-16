@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:spider_eye",
+    "minecraft:fermented_spider_eye",
+    "mlkymc:milky_star"
+  ],
+  "result": {
+    "id": "mlkymc:trophy_spider",
+    "count": 1
+  }
+}

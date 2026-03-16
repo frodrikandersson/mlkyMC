@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "MMM",
+    "CPC",
+    "MMM"
+  ],
+  "key": {
+    "M": "mlkymc:milky_star",
+    "C": "minecraft:chorus_fruit",
+    "P": "minecraft:ender_pearl"
+  },
+  "result": {
+    "id": "mlkymc:trophy_ender",
+    "count": 1
+  }
+}

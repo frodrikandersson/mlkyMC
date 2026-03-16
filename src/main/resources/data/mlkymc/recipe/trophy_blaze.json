@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "MMM",
+    "MBM",
+    "MMM"
+  ],
+  "key": {
+    "M": "mlkymc:milky_star",
+    "B": "minecraft:blaze_rod"
+  },
+  "result": {
+    "id": "mlkymc:trophy_blaze",
+    "count": 1
+  }
+}

@@ -68,6 +68,10 @@ public class MlkyConfig {
         return dimension.equals("end") ? data.dimensions.end.unlockHours : data.dimensions.nether.unlockHours;
     }
 
+    // Spawner aging settings
+    public static boolean isSpawnerAgingEnabled() { return data.spawnerAging.enabled; }
+    public static int getSpawnerMaxSpawns() { return data.spawnerAging.maxSpawns; }
+
     // World settings
     public static boolean getDisableVillagerSpawning() { return data.world.disableVillagerSpawning; }
 
@@ -90,6 +94,7 @@ public class MlkyConfig {
         public ReviveConfig revive = new ReviveConfig();
         public EconomyConfig economy = new EconomyConfig();
         public DimensionsConfig dimensions = new DimensionsConfig();
+        public SpawnerAgingConfig spawnerAging = new SpawnerAgingConfig();
         public WorldConfig world = new WorldConfig();
         public TwitchConfig twitch = new TwitchConfig();
     }
@@ -124,6 +129,11 @@ public class MlkyConfig {
             this.goal = goal;
             this.unlockHours = unlockHours;
         }
+    }
+
+    public static class SpawnerAgingConfig {
+        public boolean enabled = true;
+        public int maxSpawns = 200;
     }
 
     public static class WorldConfig {

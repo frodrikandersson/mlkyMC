@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " D ",
+    "GBG",
+    " W "
+  ],
+  "key": {
+    "D": "minecraft:diamond",
+    "G": "minecraft:gold_block",
+    "B": "minecraft:blaze_rod",
+    "W": "mlkymc:waystone_shard"
+  },
+  "result": {
+    "id": "mlkymc:builders_wand",
+    "count": 1
+  }
+}

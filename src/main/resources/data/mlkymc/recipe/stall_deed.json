@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "PSP",
+    "SGS",
+    "PSP"
+  ],
+  "key": {
+    "P": "minecraft:paper",
+    "S": "minecraft:oak_sign",
+    "G": "minecraft:gold_nugget"
+  },
+  "result": {
+    "id": "mlkymc:stall_deed",
+    "count": 1
+  }
+}

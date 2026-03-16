@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " D ",
+    "MIM",
+    " E "
+  ],
+  "key": {
+    "D": "minecraft:diamond",
+    "M": "mlkymc:milky_star",
+    "I": "minecraft:iron_block",
+    "E": "mlkymc:living_essence"
+  },
+  "result": {
+    "id": "mlkymc:armor_plating",
+    "count": 1
+  }
+}

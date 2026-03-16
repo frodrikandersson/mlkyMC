@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:blaze_powder",
+    "minecraft:gold_ingot",
+    "minecraft:lapis_block"
+  ],
+  "result": {
+    "id": "mlkymc:blessed_ember",
+    "count": 1
+  }
+}

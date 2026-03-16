@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "MMM",
+    "MSM",
+    "MMM"
+  ],
+  "key": {
+    "M": "mlkymc:milky_star",
+    "S": "minecraft:dragon_egg"
+  },
+  "result": {
+    "id": "mlkymc:trophy_dragon",
+    "count": 1
+  }
+}

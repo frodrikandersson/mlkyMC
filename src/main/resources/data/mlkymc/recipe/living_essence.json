@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "minecraft:glistering_melon_slice",
+    "minecraft:honeycomb",
+    "minecraft:bone_meal"
+  ],
+  "result": {
+    "id": "mlkymc:living_essence",
+    "count": 1
+  }
+}

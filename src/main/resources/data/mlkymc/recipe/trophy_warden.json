@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "MMM",
+    "ESE",
+    "MMM"
+  ],
+  "key": {
+    "M": "mlkymc:milky_star",
+    "E": "minecraft:echo_shard",
+    "S": "minecraft:sculk_catalyst"
+  },
+  "result": {
+    "id": "mlkymc:trophy_warden",
+    "count": 1
+  }
+}

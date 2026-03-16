@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "NCN",
+    "EAM",
+    "NCN"
+  ],
+  "key": {
+    "N": "minecraft:netherite_scrap",
+    "C": "minecraft:crying_obsidian",
+    "E": "mlkymc:blessed_ember",
+    "A": "minecraft:anvil",
+    "M": "mlkymc:milky_star"
+  },
+  "result": {
+    "id": "mlkymc:soul_forge",
+    "count": 1
+  }
+}

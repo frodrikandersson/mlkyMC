@@ -33,6 +33,7 @@ public class EconomyCommand {
                                                         EntityArgument.getPlayer(ctx, "player"),
                                                         IntegerArgumentType.getInteger(ctx, "amount")
                                                 )))))
+                        .then(Commands.literal("wallet").executes(ctx -> wallet(ctx.getSource())))
         ));
     }
 
@@ -63,14 +64,37 @@ public class EconomyCommand {
             return 0;
         }
 
-        target.getInventory().add(MilkyStar.create(amount));
+        for (var stack : MilkyStar.createAll(amount)) {
+            target.getInventory().add(stack);
+        }
         player.sendSystemMessage(Component.literal("Paid " + amount + " Milky Star(s) to " + target.getName().getString() + ".").withColor(0x55FF55));
         target.sendSystemMessage(Component.literal("Received " + amount + " Milky Star(s) from " + player.getName().getString() + ".").withColor(0x55FF55));
         return 1;
     }
 
+    private static int wallet(CommandSourceStack source) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            source.sendFailure(Component.literal("This command can only be run by a player."));
+            return 0;
+        }
+
+        // Check if player already has a wallet
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            if (MilkyStar.isWallet(player.getInventory().getItem(i))) {
+                player.sendSystemMessage(Component.literal("You already have a wallet!").withColor(0xFF5555));
+                return 0;
+            }
+        }
+
+        player.getInventory().add(MilkyStar.createJar(player.getName().getString()));
+        player.sendSystemMessage(Component.literal("You received a Milky Star Jar! Right-click to open it.").withColor(0x55FF55));
+        return 1;
+    }
+
     private static int give(CommandSourceStack source, ServerPlayer target, int amount) {
-        target.getInventory().add(MilkyStar.create(amount));
+        for (var stack : MilkyStar.createAll(amount)) {
+            target.getInventory().add(stack);
+        }
         source.sendSuccess(() -> Component.literal("Gave " + amount + " Milky Star(s) to " + target.getName().getString() + ".").withColor(0x55FF55), true);
         target.sendSystemMessage(Component.literal("Received " + amount + " Milky Star(s).").withColor(0x55FF55));
         return 1;

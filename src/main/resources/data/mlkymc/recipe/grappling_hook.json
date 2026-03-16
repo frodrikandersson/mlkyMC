@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "TC ",
+    "CL ",
+    " CP"
+  ],
+  "key": {
+    "T": "minecraft:tripwire_hook",
+    "C": "minecraft:chain",
+    "L": "minecraft:lead",
+    "P": "mlkymc:tempered_plate"
+  },
+  "result": {
+    "id": "mlkymc:grappling_hook",
+    "count": 1
+  }
+}
