@@ -1,0 +1,18 @@
+{
+  "replace": false,
+  "values": [
+    "mlkymc:warp_anchor",
+    "mlkymc:soul_forge",
+    "mlkymc:trophy_base",
+    "mlkymc:trophy_wither",
+    "mlkymc:trophy_dragon",
+    "mlkymc:trophy_elder_guardian",
+    "mlkymc:trophy_warden",
+    "mlkymc:trophy_blaze",
+    "mlkymc:trophy_ender",
+    "mlkymc:trophy_creeper",
+    "mlkymc:trophy_spider",
+    "mlkymc:trophy_phantom",
+    "mlkymc:trophy_witch"
+  ]
+}

@@ -32,6 +32,14 @@ public class ModBlocks {
                     .noOcclusion()
                     .lightLevel(state -> 5)));
 
+    // Trophy base pedestal shape
+    private static final net.minecraft.world.phys.shapes.VoxelShape TROPHY_BASE_SHAPE =
+            net.minecraft.world.phys.shapes.Shapes.or(
+                    Block.box(1, 0, 1, 15, 2, 15),   // base plate
+                    Block.box(3, 2, 3, 13, 6, 13),    // pillar
+                    Block.box(2, 6, 2, 14, 8, 14)     // top platform
+            );
+
     public static final DeferredBlock<Block> TROPHY_BASE = BLOCKS.register(
             "trophy_base",
             id -> new FacingBlock(BlockBehaviour.Properties.of()
@@ -39,7 +47,8 @@ public class ModBlocks {
                     .mapColor(MapColor.WOOD)
                     .strength(2.0f)
                     .sound(SoundType.WOOD)
-                    .noOcclusion()));
+                    .noOcclusion(),
+                    TROPHY_BASE_SHAPE));
 
     public static final DeferredBlock<Block> SCARECROW = BLOCKS.register(
             "scarecrow",
@@ -48,7 +57,9 @@ public class ModBlocks {
                     .mapColor(MapColor.COLOR_YELLOW)
                     .strength(1.0f)
                     .sound(SoundType.GRASS)
-                    .noOcclusion()));
+                    .noOcclusion()
+                    .lightLevel(state -> state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF)
+                            == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER ? 10 : 0)));
 
     public static final DeferredBlock<Block> SOUL_FORGE = BLOCKS.register(
             "soul_forge",

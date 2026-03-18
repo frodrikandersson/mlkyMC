@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "SSS",
+    "LML",
+    "SSS"
+  ],
+  "key": {
+    "S": "mlkymc:milky_star",
+    "L": "mlkymc:living_essence",
+    "M": "minecraft:white_wool"
+  },
+  "result": {
+    "id": "minecraft:sheep_spawn_egg",
+    "count": 1
+  }
+}

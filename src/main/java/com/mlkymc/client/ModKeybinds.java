@@ -40,11 +40,7 @@ public class ModKeybinds {
         if (mc.player == null || mc.screen != null) return;
 
         if (KEY_CLASS_MENU != null && KEY_CLASS_MENU.consumeClick()) {
-            if (ClientClassData.hasChosenClass()) {
-                mc.setScreen(new SkillTreeScreen());
-            } else {
-                mc.setScreen(new ClassSelectionScreen());
-            }
+            mc.setScreen(new ClassSelectionScreen());
         }
 
         if (KEY_MINIMAP != null && KEY_MINIMAP.consumeClick()) {

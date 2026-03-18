@@ -51,8 +51,14 @@ public class ActiveSkillHandler {
     private final Map<UUID, BlockPos> deathLocations = new HashMap<>();
     private final Map<UUID, Long> deathTimestamps = new HashMap<>();
 
+    private com.mlkymc.grave.GraveManager graveManager;
+
     public ActiveSkillHandler(ClassManager classManager) {
         this.classManager = classManager;
+    }
+
+    public void setGraveManager(com.mlkymc.grave.GraveManager graveManager) {
+        this.graveManager = graveManager;
     }
 
     private boolean isOnCooldown(Map<UUID, Long> cdMap, ServerPlayer player) {
@@ -154,71 +160,229 @@ public class ActiveSkillHandler {
         deathTimestamps.put(dead.getUUID(), dead.level().getGameTime());
     }
 
+    /**
+     * Cleric Resurrection: Right-click a grave block.
+     * Within 60s of death: costs 1 Milky Star.
+     * After 60s: costs 1 Totem of Resurrection.
+     * Resurrects the dead player (if they're a ghost/offline, gives items back).
+     */
+    @SubscribeEvent
+    public void onClericRightClickGrave(PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        if (graveManager == null) return;
+
+        ClassData data = classManager.getOrCreate(player);
+        if (data.getChosenClass() != ClassType.CLERIC) return;
+
+        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) return;
+
+        BlockPos pos = event.getPos();
+        String dim = level.dimension().identifier().toString();
+        com.mlkymc.grave.GraveData grave = graveManager.getGrave(dim, pos);
+        if (grave == null) return;
+
+        event.setCanceled(true);
+
+        // Check cooldown
+        if (isOnCooldown(resurrectionCooldown, player)) {
+            player.sendSystemMessage(Component.literal("Resurrection on cooldown! " +
+                    getCooldownRemaining(resurrectionCooldown, player) + "s").withColor(0xFF5555));
+            return;
+        }
+
+        long currentTime = level.getGameTime();
+        boolean withinWindow = grave.isWithinResurrectionWindow(currentTime);
+
+        if (withinWindow) {
+            // Cheap resurrection: costs 1 Milky Star
+            boolean hasStar = false;
+            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                if (player.getInventory().getItem(i).is(ModItems.MILKY_STAR.get())) {
+                    player.getInventory().getItem(i).shrink(1);
+                    hasStar = true;
+                    break;
+                }
+            }
+            if (!hasStar) {
+                player.sendSystemMessage(Component.literal("Need 1 Milky Star to resurrect within 60 seconds!").withColor(0xFF5555));
+                return;
+            }
+        } else {
+            // Expensive resurrection: costs 1 Totem of Resurrection
+            boolean hasTotem = false;
+            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                if (player.getInventory().getItem(i).is(ModItems.TOTEM_OF_RESURRECTION.get())) {
+                    player.getInventory().getItem(i).shrink(1);
+                    hasTotem = true;
+                    break;
+                }
+            }
+            if (!hasTotem) {
+                player.sendSystemMessage(Component.literal("Need a Totem of Resurrection! (60s window passed)").withColor(0xFF5555));
+                return;
+            }
+        }
+
+        // Find the dead player (might be online as ghost or respawned)
+        ServerPlayer deadPlayer = level.getServer().getPlayerList().getPlayer(grave.ownerUUID);
+
+        // Give items back (to the dead player if online, otherwise to the cleric)
+        ServerPlayer recipient = deadPlayer != null ? deadPlayer : player;
+        graveManager.claimGrave(recipient, grave, level);
+
+        if (deadPlayer != null) {
+            deadPlayer.sendSystemMessage(Component.literal("You were resurrected by " +
+                    player.getName().getString() + "!").withColor(0x55FF55));
+        }
+
+        player.sendSystemMessage(Component.literal("Resurrected " + grave.ownerName + "!" +
+                (withinWindow ? " (1 Milky Star)" : " (Totem consumed)")).withColor(0x55FF55));
+        level.playSound(null, pos, SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 1.0f);
+
+        // 10 minute cooldown (halved at Cleric Lv50)
+        int clericLevel = data.getLevel(ProfessionType.CLERIC);
+        int cdTicks = clericLevel >= 50 && data.getChosenClass() == ClassType.CLERIC ? 6000 : 12000;
+        resurrectionCooldown.put(player.getUUID(), level.getGameTime() + cdTicks);
+    }
+
     // =========================================================================
     // FARMHAND: Nature's Call + Animal Whisperer
     // =========================================================================
 
     private boolean handleFarmhandRC(ServerPlayer player, ClassData data, ItemStack held) {
-        if (held.is(ModItems.GROWTH_FERTILIZER.get())) {
-            if (isOnCooldown(naturesCallCooldown, player)) {
-                player.sendSystemMessage(Component.literal("Nature's Call on cooldown! " + getCooldownRemaining(naturesCallCooldown, player) + "s").withColor(0xFF5555));
-                return true;
-            }
+        // Nature's Call is now crouch-based (handled in tickNurtureFields)
+        return false;
+    }
 
-            int level = data.getLevel(ProfessionType.FARMHAND);
-            int radius = 3 + level / 10;
-            int grown = 0;
+    /**
+     * Nature's Call: While crouching, Farmhand class nurtures crops in 5-block radius.
+     * Crops grow ~10x faster. Called from server tick.
+     */
+    public void tickNurtureFields(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        // Run every 2 ticks for smooth growth
+        if (serverLevel.getGameTime() % 2 != 0) return;
 
-            if (player.level() instanceof ServerLevel serverLevel) {
-                BlockPos center = player.blockPosition().below();
-                for (int dx = -radius; dx <= radius; dx++) {
-                    for (int dz = -radius; dz <= radius; dz++) {
-                        for (int dy = -1; dy <= 1; dy++) {
-                            BlockPos pos = center.offset(dx, dy, dz);
-                            BlockState state = serverLevel.getBlockState(pos);
-                            if (state.getBlock() instanceof CropBlock crop && !crop.isMaxAge(state)) {
-                                serverLevel.setBlock(pos, crop.getStateForAge(Math.min(crop.getMaxAge(), crop.getAge(state) + 2)), 3);
-                                grown++;
-                            }
-                        }
+        for (var player : serverLevel.players()) {
+            if (!(player instanceof ServerPlayer sp)) continue;
+            if (!sp.isShiftKeyDown()) continue; // Must be crouching
+
+            ClassData data = classManager.getOrCreate(sp);
+            if (data.getChosenClass() != ClassType.FARMHAND) continue;
+
+            int radius = 5;
+            BlockPos center = sp.blockPosition();
+
+            // Give ~5 random crops in range a bonus tick each run
+            // At 2-tick intervals with 5 crops per run, this is roughly 10x normal growth
+            var random = serverLevel.getRandom();
+            for (int attempt = 0; attempt < 5; attempt++) {
+                int dx = random.nextInt(radius * 2 + 1) - radius;
+                int dz = random.nextInt(radius * 2 + 1) - radius;
+                for (int dy = -2; dy <= 2; dy++) {
+                    BlockPos pos = center.offset(dx, dy, dz);
+                    BlockState state = serverLevel.getBlockState(pos);
+                    if (state.getBlock() instanceof CropBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.StemBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.SugarCaneBlock) {
+                        state.randomTick(serverLevel, pos, random);
+                        break; // Only one Y level per column
                     }
                 }
             }
 
-            held.shrink(1);
-            player.sendSystemMessage(Component.literal("Nature's Call: Grew " + grown + " crops!").withColor(0x55FF55));
-            player.level().playSound(null, player.blockPosition(), SoundEvents.BONE_MEAL_USE, SoundSource.PLAYERS, 1.0f, 1.0f);
-            int cooldownTicks = Math.max(100, 600 - level * 8);
-            naturesCallCooldown.put(player.getUUID(), player.level().getGameTime() + cooldownTicks);
-            return true;
+            // Particles every 20 ticks to show the effect
+            if (serverLevel.getGameTime() % 20 == 0) {
+                serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER,
+                        sp.getX(), sp.getY() + 0.5, sp.getZ(), 8, radius * 0.5, 0.5, radius * 0.5, 0);
+            }
         }
-        return false;
     }
 
+    // Whisperer cooldown
+    private final Map<UUID, Long> whispererCooldown = new HashMap<>();
+
     @SubscribeEvent
-    public void onRightClickEntity(PlayerInteractEvent.EntityInteract event) {
+    public void onWhispererRightClickItem(PlayerInteractEvent.RightClickItem event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        if (!player.isShiftKeyDown()) return;
 
         ClassData data = classManager.getOrCreate(player);
         if (data.getChosenClass() != ClassType.FARMHAND) return;
 
-        // Animal Whisperer: shift+right-click animal for stats
-        if (player.isShiftKeyDown() && event.getTarget() instanceof Animal animal) {
-            int age = animal.getAge();
-            String ageStr = animal.isBaby() ? "Baby (" + (Math.abs(age) / 20) + "s to adult)" : (age > 0 ? "Breed CD: " + (age / 20) + "s" : "Ready to breed");
-            String health = String.format("HP: %.1f/%.1f", animal.getHealth(), animal.getMaxHealth());
-            player.sendSystemMessage(Component.literal(animal.getType().getDescription().getString() + " - " + ageStr + " | " + health).withColor(0xAAAA00));
-
-            // Lv20+: Charm hostile mobs
-            int farmLevel = data.getLevel(ProfessionType.FARMHAND);
-            if (farmLevel >= 20 && event.getTarget() instanceof Monster mob) {
-                mob.setTarget(null);
-                mob.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 1200, 0)); // 1min mark
-                player.sendSystemMessage(Component.literal("Charmed " + mob.getType().getDescription().getString() + " for 1 minute!").withColor(0x55FF55));
-            }
-
+        // Whisperer: Shift+RMB — AoE charm, 1min cooldown
+        if (isOnCooldown(whispererCooldown, player)) {
+            player.sendSystemMessage(Component.literal("Whisperer on cooldown! " +
+                    getCooldownRemaining(whispererCooldown, player) + "s").withColor(0xFF5555));
             event.setCanceled(true);
+            return;
+        }
+
+        if (!(player.level() instanceof ServerLevel serverLevel)) return;
+
+        double radius = 5.0;
+        int affected = 0;
+
+        // Hostile mobs: become passive for 10 seconds (clear target + slowness so they wander)
+        for (var mob : serverLevel.getEntitiesOfClass(Monster.class, player.getBoundingBox().inflate(radius))) {
+            mob.setTarget(null);
+            // Apply weakness so they deal no damage + slowness so they're docile
+            mob.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 200, 99, false, false, true)); // 10s
+            mob.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 200, 1, false, false, true)); // 10s
+            mob.addEffect(new MobEffectInstance(MobEffects.GLOWING, 200, 0, false, false, true)); // visual
+            affected++;
+        }
+
+        // Neutral/passive mobs: follow the player for 1 minute (use slow speed toward player via leash-like behavior)
+        // Simplified: apply speed + glowing so they're visible, and a custom tag for tick tracking
+        for (var animal : serverLevel.getEntitiesOfClass(Animal.class, player.getBoundingBox().inflate(radius))) {
+            animal.addEffect(new MobEffectInstance(MobEffects.SPEED, 1200, 0, false, false, true)); // 1min
+            animal.addEffect(new MobEffectInstance(MobEffects.GLOWING, 1200, 0, false, false, true));
+            animal.addTag("mlkymc_following_" + player.getUUID());
+            affected++;
+        }
+
+        if (affected > 0) {
+            player.sendSystemMessage(Component.literal("Whisperer: Calmed " + affected + " creatures!").withColor(0x55FF55));
+            player.level().playSound(null, player.blockPosition(), SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 1.5f, 0.8f);
+            whispererCooldown.put(player.getUUID(), player.level().getGameTime() + 1200); // 1 minute
+        } else {
+            player.sendSystemMessage(Component.literal("No creatures nearby.").withColor(0xAAAAAA));
+        }
+
+        event.setCanceled(true);
+    }
+
+    /**
+     * Tick handler: makes animals with the following tag walk toward their Farmhand.
+     */
+    public void tickAnimalFollowing(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        if (serverLevel.getGameTime() % 10 != 0) return; // Every 0.5s
+
+        for (var player : serverLevel.players()) {
+            if (!(player instanceof ServerPlayer sp)) continue;
+            String tag = "mlkymc_following_" + sp.getUUID();
+
+            for (var animal : serverLevel.getEntitiesOfClass(Animal.class, sp.getBoundingBox().inflate(15))) {
+                if (!animal.getTags().contains(tag)) continue;
+
+                // Check if effect expired
+                if (!animal.hasEffect(MobEffects.SPEED)) {
+                    animal.removeTag(tag);
+                    continue;
+                }
+
+                // Walk toward player
+                double dist = animal.distanceTo(sp);
+                if (dist > 3.0) {
+                    animal.getNavigation().moveTo(sp, 1.2);
+                }
+            }
         }
     }
 

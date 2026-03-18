@@ -14,11 +14,16 @@ import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Soul Forge — enhanced anvil. Opens anvil GUI.
@@ -26,6 +31,18 @@ import net.minecraft.world.phys.BlockHitResult;
  */
 public class SoulForgeBlock extends HorizontalDirectionalBlock {
     public static final MapCodec<SoulForgeBlock> CODEC = simpleCodec(SoulForgeBlock::new);
+
+    // Anvil-like shape: wide base, narrow pillar, wider top
+    private static final VoxelShape BASE = Block.box(2, 0, 2, 14, 4, 14);
+    private static final VoxelShape PILLAR = Block.box(4, 4, 3, 12, 5, 13);
+    private static final VoxelShape TOP = Block.box(3, 5, 1, 13, 10, 15);
+    private static final VoxelShape SHAPE_NS = Shapes.or(BASE, PILLAR, TOP);
+
+    // Rotated 90 degrees for east/west
+    private static final VoxelShape BASE_EW = Block.box(2, 0, 2, 14, 4, 14);
+    private static final VoxelShape PILLAR_EW = Block.box(3, 4, 4, 13, 5, 12);
+    private static final VoxelShape TOP_EW = Block.box(1, 5, 3, 15, 10, 13);
+    private static final VoxelShape SHAPE_EW = Shapes.or(BASE_EW, PILLAR_EW, TOP_EW);
 
     @Override
     protected MapCodec<? extends HorizontalDirectionalBlock> codec() {
@@ -35,6 +52,12 @@ public class SoulForgeBlock extends HorizontalDirectionalBlock {
     public SoulForgeBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH));
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        Direction facing = state.getValue(FACING);
+        return (facing == Direction.EAST || facing == Direction.WEST) ? SHAPE_EW : SHAPE_NS;
     }
 
     @Override

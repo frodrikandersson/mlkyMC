@@ -30,6 +30,11 @@ public class ClassLoginHandler {
                 + ":" + data.getLevel(ProfessionType.FARMHAND)
                 + ":" + data.getLevel(ProfessionType.MINECRAFTER)
                 + ":" + data.getLevel(ProfessionType.SMITH)
+                + ":" + data.getXp(ProfessionType.ADVENTURER)
+                + ":" + data.getXp(ProfessionType.CLERIC)
+                + ":" + data.getXp(ProfessionType.FARMHAND)
+                + ":" + data.getXp(ProfessionType.MINECRAFTER)
+                + ":" + data.getXp(ProfessionType.SMITH)
                 + "]";
         player.sendSystemMessage(Component.literal(syncTag).withColor(0x000000));
     }

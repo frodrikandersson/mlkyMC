@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "III",
+    "TET",
+    "III"
+  ],
+  "key": {
+    "I": "minecraft:iron_block",
+    "T": "mlkymc:tempered_plate",
+    "E": "minecraft:ender_pearl"
+  },
+  "result": {
+    "id": "minecraft:spawner",
+    "count": 1
+  }
+}

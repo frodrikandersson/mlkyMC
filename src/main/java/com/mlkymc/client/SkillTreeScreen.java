@@ -40,14 +40,14 @@ public class SkillTreeScreen extends Screen {
              "EXP debuff -10%", "25% save lapis",
              "No EXP debuff", "Enchant max +1"},
             {"Debuff -40%", "Auto-replant",
-             "Debuff -30%", "Animals +25% grow",
-             "Debuff -20%", "2x shear/seed/tick",
-             "Debuff -10%", "Rare fish drops",
+             "Debuff -30%", "Breed +25%, fish+1*",
+             "Debuff -20%", "2x shear/seed, 2x tick",
+             "Debuff -10%", "Rare fish, fish+2*",
              "No debuff", "4x crop tick"},
-            {"Debuff -40%", "Haste I mining",
+            {"Debuff -40%", "Haste I, +1 reach",
              "Debuff -30%", "XP from stone",
              "Debuff -20%", "Stars in ore",
-             "Debuff -10%", "Craft +1 output",
+             "Debuff -10%", "Craft +1, +2 reach*",
              "No debuff", "More stars"},
             {"Debuff -40%", "25% save fuel",
              "Debuff -30%", "Anvil +10% dur",
@@ -58,11 +58,11 @@ public class SkillTreeScreen extends Screen {
 
     // Combined active + effects info per class for bottom panel
     private static final String[][] CLASS_DETAILS = {
-            {"Active: Weapon Dash (RC+sword)", "Active: Wind-up (sprint+hit)", "2x EXP, 2x mob drops", "Weapon dur+, Minimap (M)"},
-            {"Active: Heal Pulse (RC+star)", "Active: Resurrect (RC grave)", "2x EXP, Cheaper enchant", "Potions +1, Save levels"},
-            {"Active: Nature's Call (RC+fert)", "Active: Whisperer (Shift+RC)", "2x EXP, Faster crops", "Twin breed, Fish luck+1"},
-            {"Active: Vein Mine (Shift+mine)", "Active: Timber (Shift+chop)", "Active: Auto-Smelt (Shift+RC)", "2x EXP, Fortune+1, 2x dur"},
-            {"Active: Forge Heat (Shift+RC)", "Active: Repair (RC+iron)", "Active: Tempered Body (RC fire)", "2x EXP, Anvil 50%, Armor+"},
+            {"Active: Weapon Dash (RMB+sword)", "Active: Wind-up (sprint+hit)", "2x EXP, 2x mob drops", "Weapon dur+, Minimap (M)"},
+            {"Active: Heal Pulse (RMB+star)", "Active: Resurrect (RMBgrave)", "2x EXP, Cheaper enchant", "Potions +1, Save levels"},
+            {"Active: Nature's Call (RMB+fert)", "Active: Whisperer (Shift+RMB)", "2x EXP, Faster crops", "Twin breed, Fish luck+1"},
+            {"Active: Vein Mine (Shift+mine)", "Active: Timber (Shift+chop)", "Active: Auto-Smelt (Shift+RMB)", "2x EXP, Fortune+1, 2x dur"},
+            {"Active: Forge Heat (Shift+RMB)", "Active: Repair (RMB+iron)", "Active: Tempered Body (RMBfire)", "2x EXP, Anvil 50%, Armor+"},
     };
 
     private static final int GUI_W = 256;
@@ -70,6 +70,7 @@ public class SkillTreeScreen extends Screen {
     private int guiLeft, guiTop;
     private int selectedTab = 0;
     private int scrollOffset = 0;
+    private int descScrollOffset = 0;
 
     public SkillTreeScreen() {
         super(Component.literal("Skill Tree"));
@@ -184,22 +185,33 @@ public class SkillTreeScreen extends Screen {
             g.enableScissor(guiLeft + 10, descY, guiLeft + GUI_W - 10, descBottom);
 
             String[] details = CLASS_DETAILS[selectedTab];
-            int lineY = descY + 2;
 
+            // Build all lines for the description
+            java.util.List<String[]> descLines = new java.util.ArrayList<>(); // [text, colorHex]
             if (isChosen) {
-                drawText(g, "Skills & Effects:", guiLeft + 14, lineY, 0x55FFFF);
-                lineY += 9;
-                for (String d : details) {
-                    drawText(g, " " + d, guiLeft + 14, lineY, 0x55FF55);
-                    lineY += 9;
-                }
+                descLines.add(new String[]{"Skills & Effects:", "55FFFF"});
+                for (String d : details) descLines.add(new String[]{" " + d, "55FF55"});
             } else {
-                drawText(g, "Choose this class for:", guiLeft + 14, lineY, 0x778899);
+                descLines.add(new String[]{"Choose this class for:", "778899"});
+                for (String d : details) descLines.add(new String[]{" " + d, "556677"});
+            }
+
+            int descVisibleLines = (descBottom - descY - 2) / 9;
+            int descMaxScroll = Math.max(0, descLines.size() - descVisibleLines);
+            descScrollOffset = Math.min(descScrollOffset, descMaxScroll);
+
+            int lineY = descY + 2;
+            for (int i = descScrollOffset; i < descLines.size(); i++) {
+                if (lineY + 9 > descBottom) break;
+                String[] line = descLines.get(i);
+                int col = Integer.parseInt(line[1], 16);
+                drawText(g, line[0], guiLeft + 14, lineY, col);
                 lineY += 9;
-                for (String d : details) {
-                    drawText(g, " " + d, guiLeft + 14, lineY, 0x556677);
-                    lineY += 9;
-                }
+            }
+
+            // Scroll indicator if there's more content
+            if (descMaxScroll > 0) {
+                drawText(g, descScrollOffset < descMaxScroll ? "..." : "", guiLeft + GUI_W - 22, descBottom - 9, 0x556677);
             }
 
             g.disableScissor();
@@ -238,6 +250,13 @@ public class SkillTreeScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (selectedTab >= 0) {
+            int descY = guiTop + 206;
+            // If mouse is in the description panel area, scroll that
+            if (mouseY >= descY) {
+                descScrollOffset = Math.max(0, descScrollOffset - (int) scrollY);
+                return true;
+            }
+            // Otherwise scroll the passives list
             int maxLines = (200 - 80) / 12;
             String[] passives = PASSIVES[selectedTab];
             int maxScroll = Math.max(0, passives.length - maxLines);

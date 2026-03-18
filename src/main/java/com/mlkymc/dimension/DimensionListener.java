@@ -44,31 +44,48 @@ public class DimensionListener {
         }
     }
 
+    // --- Wayfinder Compass: structure locator only ---
     @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
+    public void onRightClickItemWayfinder(PlayerInteractEvent.RightClickItem event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-
         var heldItem = player.getItemInHand(event.getHand());
         if (!heldItem.is(ModItems.WAYFINDER_COMPASS.get())) return;
-
         event.setCanceled(true);
-
         if (event.getHand() != InteractionHand.MAIN_HAND) return;
-        showDimensionStatus(player);
         locateNearestStructure(player);
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+    public void onRightClickBlockWayfinder(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-
         var heldItem = player.getItemInHand(event.getHand());
         if (!heldItem.is(ModItems.WAYFINDER_COMPASS.get())) return;
-
         event.setCanceled(true);
         event.setUseBlock(net.minecraft.util.TriState.FALSE);
         event.setUseItem(net.minecraft.util.TriState.FALSE);
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        locateNearestStructure(player);
+    }
 
+    // --- Dimension Compass: dimension status only ---
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onRightClickItemDimension(PlayerInteractEvent.RightClickItem event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        var heldItem = player.getItemInHand(event.getHand());
+        if (!heldItem.is(ModItems.DIMENSION_COMPASS.get())) return;
+        event.setCanceled(true);
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        showDimensionStatus(player);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onRightClickBlockDimension(PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        var heldItem = player.getItemInHand(event.getHand());
+        if (!heldItem.is(ModItems.DIMENSION_COMPASS.get())) return;
+        event.setCanceled(true);
+        event.setUseBlock(net.minecraft.util.TriState.FALSE);
+        event.setUseItem(net.minecraft.util.TriState.FALSE);
         if (event.getHand() != InteractionHand.MAIN_HAND) return;
         showDimensionStatus(player);
     }

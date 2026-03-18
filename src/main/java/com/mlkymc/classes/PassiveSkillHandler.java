@@ -52,6 +52,8 @@ public class PassiveSkillHandler {
             net.minecraft.resources.Identifier.parse("mlkymc:minecrafter_haste");
     private static final net.minecraft.resources.Identifier SMITH_ARMOR_ID =
             net.minecraft.resources.Identifier.parse("mlkymc:smith_resistance");
+    private static final net.minecraft.resources.Identifier REACH_MODIFIER_ID =
+            net.minecraft.resources.Identifier.parse("mlkymc:minecrafter_reach");
 
     public PassiveSkillHandler(ClassManager classManager) {
         this.classManager = classManager;
@@ -165,6 +167,26 @@ public class PassiveSkillHandler {
                 if (hasteBonus > 0) {
                     breakSpeedAttr.addPermanentModifier(new AttributeModifier(
                             HASTE_MODIFIER_ID, hasteBonus, AttributeModifier.Operation.ADD_VALUE));
+                }
+            }
+        }
+
+        // --- Block interaction reach (Lv10: +1, Lv40: +2 if exclusive) ---
+        var reachAttr = player.getAttribute(Attributes.BLOCK_INTERACTION_RANGE);
+        if (reachAttr != null) {
+            var existingReach = reachAttr.getModifier(REACH_MODIFIER_ID);
+            double reachBonus = 0;
+            if (level >= 40 && data.hasExclusiveSkills(ProfessionType.MINECRAFTER)) {
+                reachBonus = 2.0;
+            } else if (level >= 10) {
+                reachBonus = 1.0;
+            }
+            double currentReach = existingReach != null ? existingReach.amount() : 0;
+            if (currentReach != reachBonus) {
+                reachAttr.removeModifier(REACH_MODIFIER_ID);
+                if (reachBonus > 0) {
+                    reachAttr.addPermanentModifier(new AttributeModifier(
+                            REACH_MODIFIER_ID, reachBonus, AttributeModifier.Operation.ADD_VALUE));
                 }
             }
         }
@@ -497,36 +519,53 @@ public class PassiveSkillHandler {
     // =========================================================================
     // FARMHAND: Animal growth speed (Lv20 - 25% faster)
     // Breeding cooldown (Lv20 - 25% lower)
-    // Done via tick handler checking nearby baby animals
+    // Only affects animals that a Farmhand Lv20+ player bred (tagged)
     // =========================================================================
+
+    private static final String FARMHAND_BRED_TAG = "mlkymc_farmhand_bred";
+
+    /**
+     * Tag baby animals when a Farmhand breeds them.
+     */
+    @SubscribeEvent
+    public void onAnimalBred(net.neoforged.neoforge.event.entity.living.BabyEntitySpawnEvent event) {
+        if (event.getCausedByPlayer() == null) return;
+        if (!(event.getCausedByPlayer() instanceof ServerPlayer player)) return;
+
+        int farmLevel = classManager.getOrCreate(player).getLevel(ProfessionType.FARMHAND);
+        if (farmLevel < 20) return;
+
+        // Tag the baby AND the parents (for breeding cooldown reduction)
+        var child = event.getChild();
+        if (child != null) {
+            child.addTag(FARMHAND_BRED_TAG);
+        }
+        if (event.getParentA() != null) event.getParentA().addTag(FARMHAND_BRED_TAG);
+        if (event.getParentB() != null) event.getParentB().addTag(FARMHAND_BRED_TAG);
+    }
 
     @SubscribeEvent
     public void onBabyAnimalTick(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
         if (!(event.getLevel() instanceof ServerLevel serverLevel)) return;
         if (serverLevel.getGameTime() % 100 != 0) return; // Every 5 seconds
 
-        // Find all online Farmhand Lv20+ players and accelerate nearby baby growth
+        // Only process tagged animals near online players (ones bred by a Farmhand)
         for (ServerPlayer player : serverLevel.players()) {
-            int farmLevel = classManager.getOrCreate(player).getLevel(ProfessionType.FARMHAND);
-            if (farmLevel < 20) continue;
-
-            // Accelerate baby animals within 16 blocks
-            var nearbyAnimals = serverLevel.getEntitiesOfClass(
+            for (net.minecraft.world.entity.animal.Animal animal : serverLevel.getEntitiesOfClass(
                     net.minecraft.world.entity.animal.Animal.class,
-                    player.getBoundingBox().inflate(16));
+                    player.getBoundingBox().inflate(32),
+                    a -> a.getTags().contains(FARMHAND_BRED_TAG))) {
 
-            for (var animal : nearbyAnimals) {
                 // Speed up baby growth by 25%
                 if (animal.isBaby()) {
                     int age = animal.getAge();
                     if (age < 0) {
-                        animal.setAge(age + (int)(Math.abs(age) * 0.05)); // 5% per 5 seconds ≈ 25% faster over time
+                        animal.setAge(age + (int)(Math.abs(age) * 0.05));
                     }
                 }
-                // Lv20: Reduce breeding cooldown by 25%
-                if (farmLevel >= 20 && animal.getAge() > 0) {
-                    int loveCD = animal.getAge();
-                    animal.setAge((int)(loveCD * 0.95)); // Reduce by 5% per check
+                // Reduce breeding cooldown by 25%
+                if (animal.getAge() > 0) {
+                    animal.setAge((int)(animal.getAge() * 0.95));
                 }
             }
         }
@@ -570,32 +609,215 @@ public class PassiveSkillHandler {
     }
 
     // =========================================================================
-    // FARMHAND: Better fishing (Lv40) — handled via ItemFishedEvent
+    // FARMHAND: Fishing bonuses
+    // Lv20 exclusive: +1 items per catch (2 total)
+    // Lv40: rare items + exclusive: +1 more (3 total)
     // =========================================================================
 
     @SubscribeEvent
     public void onFishCaught(net.neoforged.neoforge.event.entity.player.ItemFishedEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-        int farmLevel = classManager.getOrCreate(player).getLevel(ProfessionType.FARMHAND);
+        ClassData data = classManager.getOrCreate(player);
+        int farmLevel = data.getLevel(ProfessionType.FARMHAND);
+        boolean isExclusive = data.hasExclusiveSkills(ProfessionType.FARMHAND);
 
-        // Lv40: Chance for bonus rare drops
+        // Lv20 exclusive: +1 extra item from loot pool
+        if (isExclusive && farmLevel >= 20) {
+            int extraRolls = farmLevel >= 40 ? 2 : 1; // Lv40: 3 total (1 base + 2 extra)
+            for (int i = 0; i < extraRolls; i++) {
+                // Duplicate a random item from the existing drops
+                var drops = event.getDrops();
+                if (!drops.isEmpty()) {
+                    ItemStack extraDrop = drops.get(ThreadLocalRandom.current().nextInt(drops.size())).copy();
+                    giveItem(player, extraDrop);
+                }
+            }
+        }
+
+        // Lv40: Chance for bonus rare items
         if (farmLevel >= 40 && ThreadLocalRandom.current().nextDouble() < 0.15) {
-            // Add a random rare item
-            ItemStack bonus;
-            int roll = ThreadLocalRandom.current().nextInt(5);
-            bonus = switch (roll) {
+            ItemStack bonus = switch (ThreadLocalRandom.current().nextInt(5)) {
                 case 0 -> new ItemStack(net.minecraft.world.item.Items.SADDLE);
                 case 1 -> new ItemStack(net.minecraft.world.item.Items.NAME_TAG);
                 case 2 -> new ItemStack(net.minecraft.world.item.Items.NAUTILUS_SHELL);
-                case 3 -> new ItemStack(net.minecraft.world.item.Items.BOW);
+                case 3 -> new ItemStack(net.minecraft.world.item.Items.HEART_OF_THE_SEA);
                 default -> new ItemStack(net.minecraft.world.item.Items.ENCHANTED_BOOK);
             };
-            if (!player.getInventory().add(bonus)) {
-                player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
-                        player.level(), player.getX(), player.getY(), player.getZ(), bonus));
+            giveItem(player, bonus);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Rare catch!").withColor(0x55FFFF));
+        }
+    }
+
+    // =========================================================================
+    // FARMHAND Lv30 exclusive: Lava fishing
+    // Keeps fishing hooks alive in lava and generates custom loot on retrieve.
+    // =========================================================================
+
+    // Track hooks that are bobbing in lava
+    private final java.util.Set<Integer> lavaHookIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    // Track how long a hook has been bobbing in lava (entity ID -> tick count in lava)
+    private final java.util.Map<Integer, Integer> lavaBobbingTicks = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Called from level tick. Keeps fishing hooks alive in lava for eligible Farmhand players.
+     */
+    public void tickLavaFishing(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof ServerLevel serverLevel)) return;
+
+        for (ServerPlayer player : serverLevel.players()) {
+            if (player.fishing == null) continue;
+
+            ClassData data = classManager.getOrCreate(player);
+            if (!data.hasExclusiveSkills(ProfessionType.FARMHAND)) continue;
+            if (data.getLevel(ProfessionType.FARMHAND) < 30) continue;
+
+            var hook = player.fishing;
+            int hookId = hook.getId();
+
+            // Keep the hook alive in lava — extinguish fire, prevent burning
+            if (hook.isInLava() || hook.isOnFire()) {
+                hook.clearFire();
+                hook.setRemainingFireTicks(0);
+
+                // Track lava bobbing time
+                int ticks = lavaBobbingTicks.getOrDefault(hookId, 0) + 1;
+                lavaBobbingTicks.put(hookId, ticks);
+                lavaHookIds.add(hookId);
+
+                // After bobbing ~3-8 seconds in lava, simulate a bite
+                int biteTime = 60 + ThreadLocalRandom.current().nextInt(100); // 3-8 seconds
+                if (ticks >= biteTime) {
+                    // Generate lava loot and give to player
+                    generateLavaLoot(player, data.getLevel(ProfessionType.FARMHAND));
+                    lavaBobbingTicks.put(hookId, 0); // Reset timer for next catch
+
+                    // Sound + particles
+                    serverLevel.playSound(null, hook.blockPosition(),
+                            net.minecraft.sounds.SoundEvents.FISHING_BOBBER_SPLASH,
+                            net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 0.5f);
+                    serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA,
+                            hook.getX(), hook.getY(), hook.getZ(), 5, 0.3, 0.2, 0.3, 0);
+
+                    // Give fishing XP
+                    classManager.addXp(player, ProfessionType.FARMHAND, 15);
+                }
+            } else {
+                // Not in lava anymore — clean up
+                if (lavaHookIds.remove(hookId)) {
+                    lavaBobbingTicks.remove(hookId);
+                }
             }
-            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Farmhand Lv40: Rare catch!").withColor(0x55FFFF));
+        }
+
+        // Clean up stale entries
+        lavaHookIds.removeIf(id -> serverLevel.getEntity(id) == null);
+        lavaBobbingTicks.keySet().removeIf(id -> !lavaHookIds.contains(id));
+    }
+
+    private void generateLavaLoot(ServerPlayer player, int farmLevel) {
+        // Roll loot table — weighted random
+        double roll = ThreadLocalRandom.current().nextDouble();
+        ItemStack loot;
+
+        if (roll < 0.001) {
+            // Netherite scrap — 1/1000
+            loot = new ItemStack(net.minecraft.world.item.Items.NETHERITE_SCRAP);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Incredible catch! Netherite Scrap!").withColor(0xFF55FF));
+        } else if (roll < 0.011) {
+            // Blaze rod — 1%
+            loot = new ItemStack(net.minecraft.world.item.Items.BLAZE_ROD);
+        } else if (roll < 0.061) {
+            // Nether wart — 5%
+            loot = new ItemStack(net.minecraft.world.item.Items.NETHER_WART, 1 + ThreadLocalRandom.current().nextInt(3));
+        } else if (roll < 0.111) {
+            // Ominous Bottle — 5% (level scales with farmhand level)
+            int ominousLevel = Math.min(4, farmLevel / 10);
+            var ominous = new ItemStack(net.minecraft.world.item.Items.OMINOUS_BOTTLE);
+            // Set the ominous level via amplifier component
+            var tag = new net.minecraft.nbt.CompoundTag();
+            tag.putInt("ominous_bottle_amplifier", ominousLevel);
+            ominous.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                    net.minecraft.world.item.component.CustomData.of(tag));
+            loot = ominous;
+        } else if (roll < 0.311) {
+            // Gold nugget — 20%
+            loot = new ItemStack(net.minecraft.world.item.Items.GOLD_NUGGET, 2 + ThreadLocalRandom.current().nextInt(5));
+        } else if (roll < 0.331) {
+            // Gold ingot — 2%
+            loot = new ItemStack(net.minecraft.world.item.Items.GOLD_INGOT);
+        } else if (roll < 0.531) {
+            // Nether quartz — 20%
+            loot = new ItemStack(net.minecraft.world.item.Items.QUARTZ, 1 + ThreadLocalRandom.current().nextInt(4));
+        } else if (roll < 0.551) {
+            // Armor trims — 2% (Sentry, Wild, Snout, Rib)
+            var trims = new net.minecraft.world.item.Item[]{
+                    net.minecraft.world.item.Items.SENTRY_ARMOR_TRIM_SMITHING_TEMPLATE,
+                    net.minecraft.world.item.Items.WILD_ARMOR_TRIM_SMITHING_TEMPLATE,
+                    net.minecraft.world.item.Items.SNOUT_ARMOR_TRIM_SMITHING_TEMPLATE,
+                    net.minecraft.world.item.Items.RIB_ARMOR_TRIM_SMITHING_TEMPLATE,
+            };
+            loot = new ItemStack(trims[ThreadLocalRandom.current().nextInt(trims.length)]);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Rare catch! Armor Trim!").withColor(0xFFAA00));
+        } else if (roll < 0.556) {
+            // Camera from Camerapture mod — 0.5% (try to find it, fallback to spyglass)
+            var cameraOpt = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
+                    net.minecraft.resources.Identifier.parse("camerapture:camera"));
+            if (cameraOpt.isPresent()) {
+                loot = new ItemStack(cameraOpt.get());
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Incredible catch! Camera!").withColor(0xFF55FF));
+            } else {
+                loot = new ItemStack(net.minecraft.world.item.Items.SPYGLASS);
+            }
+        } else if (roll < 0.576) {
+            // Bell — 2%
+            loot = new ItemStack(net.minecraft.world.item.Items.BELL);
+        } else {
+            // Magma cream — filler (remaining ~42%)
+            loot = new ItemStack(net.minecraft.world.item.Items.MAGMA_CREAM, 1 + ThreadLocalRandom.current().nextInt(3));
+        }
+
+        giveItem(player, loot);
+
+        // Farmhand Lv20/40 exclusive fishing bonuses apply here too
+        ClassData data = classManager.getOrCreate(player);
+        boolean isExclusive = data.hasExclusiveSkills(ProfessionType.FARMHAND);
+        if (isExclusive && farmLevel >= 20) {
+            int extraRolls = farmLevel >= 40 ? 2 : 1;
+            for (int i = 0; i < extraRolls; i++) {
+                // Re-roll the loot table for extra drops
+                generateLavaLootSingle(player, farmLevel);
+            }
+        }
+    }
+
+    /**
+     * Single loot roll for extra fishing bonus — avoids recursion with the bonus check.
+     */
+    private void generateLavaLootSingle(ServerPlayer player, int farmLevel) {
+        double roll = ThreadLocalRandom.current().nextDouble();
+        ItemStack loot;
+        if (roll < 0.001) {
+            loot = new ItemStack(net.minecraft.world.item.Items.NETHERITE_SCRAP);
+        } else if (roll < 0.011) {
+            loot = new ItemStack(net.minecraft.world.item.Items.BLAZE_ROD);
+        } else if (roll < 0.061) {
+            loot = new ItemStack(net.minecraft.world.item.Items.NETHER_WART, 1 + ThreadLocalRandom.current().nextInt(3));
+        } else if (roll < 0.311) {
+            loot = new ItemStack(net.minecraft.world.item.Items.GOLD_NUGGET, 2 + ThreadLocalRandom.current().nextInt(5));
+        } else if (roll < 0.531) {
+            loot = new ItemStack(net.minecraft.world.item.Items.QUARTZ, 1 + ThreadLocalRandom.current().nextInt(4));
+        } else {
+            loot = new ItemStack(net.minecraft.world.item.Items.MAGMA_CREAM);
+        }
+        giveItem(player, loot);
+    }
+
+    private void giveItem(ServerPlayer player, ItemStack stack) {
+        if (!player.getInventory().add(stack)) {
+            player.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
+                    player.level(), player.getX(), player.getY(), player.getZ(), stack));
         }
     }
 

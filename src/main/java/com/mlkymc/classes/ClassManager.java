@@ -25,6 +25,7 @@ public class ClassManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private final Path dataFile;
     private final Map<UUID, ClassData> playerData = new HashMap<>();
+    private final Map<UUID, Long> lastSyncTick = new HashMap<>();
 
     public ClassManager(Path configDir) {
         this.dataFile = configDir.resolve("class_data.json");
@@ -85,6 +86,14 @@ public class ClassManager {
         int oldLevel = data.getLevel(profession);
         int levelsGained = data.addXp(profession, amount);
 
+        // Sync XP to client (throttled to avoid spam — max once per second)
+        long now = player.level().getGameTime();
+        Long lastSync = lastSyncTick.get(player.getUUID());
+        if (lastSync == null || now - lastSync >= 20 || levelsGained > 0) {
+            sendLevelSync(player);
+            lastSyncTick.put(player.getUUID(), now);
+        }
+
         if (levelsGained > 0) {
             int newLevel = data.getLevel(profession);
             player.sendSystemMessage(Component.literal(profession.getDisplayName() + " leveled up! Level " + newLevel)
@@ -104,8 +113,6 @@ public class ClassManager {
                 }
             }
 
-            // Sync levels to client
-            sendLevelSync(player);
             save();
         }
     }
@@ -121,6 +128,11 @@ public class ClassManager {
                 + ":" + data.getLevel(ProfessionType.FARMHAND)
                 + ":" + data.getLevel(ProfessionType.MINECRAFTER)
                 + ":" + data.getLevel(ProfessionType.SMITH)
+                + ":" + data.getXp(ProfessionType.ADVENTURER)
+                + ":" + data.getXp(ProfessionType.CLERIC)
+                + ":" + data.getXp(ProfessionType.FARMHAND)
+                + ":" + data.getXp(ProfessionType.MINECRAFTER)
+                + ":" + data.getXp(ProfessionType.SMITH)
                 + "]";
         player.sendSystemMessage(Component.literal(syncTag).withColor(0x000000));
     }

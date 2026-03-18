@@ -96,7 +96,7 @@ public class SellMenu extends AbstractContainerMenu {
         }
 
         // Price display
-        ItemStack priceDisplay = new ItemStack(Items.NETHER_STAR, Math.min(price, 64));
+        ItemStack priceDisplay = new ItemStack(com.mlkymc.registry.ModItems.MILKY_STAR.get(), Math.min(price, 64));
         priceDisplay.set(DataComponents.CUSTOM_NAME,
                 Component.literal("Price: " + price + " Milky Stars").withColor(0xFFD700));
         priceDisplay.set(DataComponents.LORE, new ItemLore(List.of(

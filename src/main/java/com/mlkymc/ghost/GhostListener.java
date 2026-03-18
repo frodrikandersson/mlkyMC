@@ -2,14 +2,22 @@ package com.mlkymc.ghost;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
+import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
+import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
@@ -37,6 +45,24 @@ public class GhostListener {
         }
 
         event.setCanceled(true);
+
+        // Create grave BEFORE becoming a ghost (captures inventory)
+        if (player.level() instanceof ServerLevel level) {
+            try {
+                com.mlkymc.grave.GraveManager gm = com.mlkymc.MlkyMC.getGraveManager();
+                if (gm != null) {
+                    com.mlkymc.grave.GraveData grave = gm.createGrave(player, level);
+                    if (grave != null) {
+                        player.sendSystemMessage(Component.literal("Your items are in a grave at " +
+                                grave.pos.getX() + ", " + grave.pos.getY() + ", " + grave.pos.getZ())
+                                .withColor(0xFFAA00));
+                    }
+                }
+            } catch (Exception e) {
+                com.mlkymc.MlkyMC.LOGGER.error("Failed to create grave", e);
+            }
+        }
+
         ghostManager.makeGhost(player);
 
         // Broadcast death message
@@ -74,6 +100,13 @@ public class GhostListener {
     public void onPlayerInteractBlock(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (ghostManager.isGhost(player.getUUID())) {
+            // Allow doors, trapdoors, and fence gates
+            BlockState state = event.getLevel().getBlockState(event.getPos());
+            if (state.getBlock() instanceof DoorBlock
+                    || state.getBlock() instanceof TrapDoorBlock
+                    || state.getBlock() instanceof FenceGateBlock) {
+                return; // Allow interaction
+            }
             event.setCanceled(true);
         }
     }
@@ -111,18 +144,38 @@ public class GhostListener {
         }
     }
 
-    @SubscribeEvent
-    public void onDamage(LivingDamageEvent.Pre event) {
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onInvulnerabilityCheck(EntityInvulnerabilityCheckEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (ghostManager.isGhost(player.getUUID())) {
-            event.setNewDamage(0);
+            event.setInvulnerable(true);
         }
+    }
 
-        // Also prevent ghosts from dealing damage
+    @SubscribeEvent
+    public void onDamage(LivingDamageEvent.Pre event) {
+        // Prevent ghosts from dealing damage to others
         DamageSource source = event.getSource();
         if (source.getEntity() instanceof ServerPlayer attacker) {
             if (ghostManager.isGhost(attacker.getUUID())) {
                 event.setNewDamage(0);
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onAttackEntity(AttackEntityEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (ghostManager.isGhost(player.getUUID())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onMobTarget(LivingChangeTargetEvent event) {
+        if (event.getNewAboutToBeSetTarget() instanceof ServerPlayer target) {
+            if (ghostManager.isGhost(target.getUUID())) {
+                event.setCanceled(true);
             }
         }
     }
@@ -147,6 +200,11 @@ public class GhostListener {
     public void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!ghostManager.isGhost(player.getUUID())) return;
+
+        // Ghosts can breathe underwater — reset air supply
+        if (player.getAirSupply() < player.getMaxAirSupply()) {
+            player.setAirSupply(player.getMaxAirSupply());
+        }
 
         // Spider climb: walls act like ladders for ghosts
         if (isNextToWall(player)) {
@@ -173,6 +231,13 @@ public class GhostListener {
 
     private boolean isNextToWall(ServerPlayer player) {
         Level level = player.level();
+
+        // Don't climb in water or lava
+        if (player.isInWater() || player.isInLava() || player.isUnderWater()) return false;
+
+        // Also check if player is touching water at all
+        if (level.getFluidState(player.blockPosition()).isSource()) return false;
+
         // Check blocks slightly outside the player's hitbox
         AABB playerBox = player.getBoundingBox();
         AABB checkBox = playerBox.inflate(0.05, 0, 0.05);
@@ -189,7 +254,13 @@ public class GhostListener {
             for (int z = minZ; z <= maxZ; z++) {
                 for (int y = minY; y <= maxY; y++) {
                     pos.set(x, y, z);
-                    if (!level.getBlockState(pos).isAir() && !playerBox.intersects(x, y, z, x + 1, y + 1, z + 1)) {
+                    var state = level.getBlockState(pos);
+                    var shape = state.getCollisionShape(level, pos);
+                    // Only climb on blocks with a substantial collision shape
+                    // (filters out air, grass, flowers, water, signs, etc.)
+                    if (!shape.isEmpty()
+                            && shape.bounds().getSize() > 0.5 // At least half a block in size
+                            && !playerBox.intersects(x, y, z, x + 1, y + 1, z + 1)) {
                         return true;
                     }
                 }

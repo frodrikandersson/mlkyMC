@@ -347,17 +347,13 @@ public class MilkyStar {
     // ---- Dimension Compass ----
 
     public static ItemStack createDimensionCompass() {
-        ItemStack stack = new ItemStack(Items.COMPASS);
-        stack.set(DataComponents.CUSTOM_NAME, Component.literal("Dimension Compass")
-                .setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xAA00FF)).withItalic(false)));
-        net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
-        tag.putBoolean(DIMENSION_COMPASS_KEY, true);
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-        return stack;
+        return new ItemStack(ModItems.DIMENSION_COMPASS.get());
     }
 
     public static boolean isDimensionCompass(ItemStack stack) {
-        if (stack.isEmpty() || !stack.is(Items.COMPASS)) return false;
+        if (stack.isEmpty()) return false;
+        if (stack.is(ModItems.DIMENSION_COMPASS.get())) return true;
+        // Legacy NBT check for old compasses
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         if (customData == null) return false;
         return customData.copyTag().getBooleanOr(DIMENSION_COMPASS_KEY, false);

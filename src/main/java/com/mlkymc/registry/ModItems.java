@@ -50,7 +50,12 @@ public class ModItems {
             ITEMS.registerSimpleItem("warp_stone", new Item.Properties().stacksTo(1));
 
     public static final DeferredItem<Item> GRAPPLING_HOOK =
-            ITEMS.registerSimpleItem("grappling_hook", new Item.Properties().stacksTo(1));
+            ITEMS.registerItem("grappling_hook", GrapplingHookItem::new,
+                    () -> new Item.Properties().stacksTo(1).durability(384).enchantable(14));
+
+    // Grappling Hook ammo — consumed on use (like arrows for a bow)
+    public static final DeferredItem<Item> GRAPPLING_HOOK_AMMO =
+            ITEMS.registerSimpleItem("grappling_hook_ammo", new Item.Properties().stacksTo(64));
 
     // --- Cleric Items ---
     public static final DeferredItem<Item> TOTEM_OF_RESURRECTION =
@@ -71,10 +76,18 @@ public class ModItems {
 
     // --- MineCrafter Items ---
     public static final DeferredItem<Item> REINFORCED_PICKAXE =
-            ITEMS.registerSimpleItem("reinforced_pickaxe", new Item.Properties().stacksTo(1).durability(4096));
+            ITEMS.registerItem("reinforced_pickaxe", Item::new,
+                    () -> net.minecraft.world.item.ToolMaterial.NETHERITE.applyToolProperties(
+                            new Item.Properties(),
+                            net.minecraft.tags.BlockTags.MINEABLE_WITH_PICKAXE,
+                            1.0f, -2.8f, 0.0f));
 
     public static final DeferredItem<Item> REINFORCED_AXE =
-            ITEMS.registerSimpleItem("reinforced_axe", new Item.Properties().stacksTo(1).durability(4096));
+            ITEMS.registerItem("reinforced_axe", Item::new,
+                    () -> net.minecraft.world.item.ToolMaterial.NETHERITE.applyToolProperties(
+                            new Item.Properties(),
+                            net.minecraft.tags.BlockTags.MINEABLE_WITH_AXE,
+                            5.0f, -3.0f, 0.0f));
 
     public static final DeferredItem<Item> BUILDERS_WAND =
             ITEMS.registerSimpleItem("builders_wand", new Item.Properties().stacksTo(1).durability(256));
@@ -95,4 +108,8 @@ public class ModItems {
 
     public static final DeferredItem<Item> MARKET_CATALOG =
             ITEMS.registerSimpleItem("market_catalog", new Item.Properties().stacksTo(1));
+
+    // --- Utility Items ---
+    public static final DeferredItem<Item> DIMENSION_COMPASS =
+            ITEMS.registerSimpleItem("dimension_compass", new Item.Properties().stacksTo(1));
 }

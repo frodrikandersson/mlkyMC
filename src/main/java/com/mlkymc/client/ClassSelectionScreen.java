@@ -1,6 +1,7 @@
 package com.mlkymc.client;
 
 import com.mlkymc.classes.ClassType;
+import com.mlkymc.classes.ProfessionType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -8,6 +9,11 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
+/**
+ * Combined class selection + skill overview screen.
+ * New players: shows class info + Confirm button to choose.
+ * Existing players: shows class info + skill levels (no Confirm).
+ */
 public class ClassSelectionScreen extends Screen {
     private static final Identifier BACKGROUND =
             Identifier.parse("mlkymc:textures/gui/class_selection_gui.png");
@@ -25,193 +31,358 @@ public class ClassSelectionScreen extends Screen {
             ClassType.MINECRAFTER, ClassType.SMITH
     };
 
-    // Each line: {text, color_hex} — no formatting codes, just plain text + color
-    private static final String[][][] CLASS_INFO = {
+    private static final ProfessionType[] PROFS = ProfessionType.values();
+
+    // ---- Per-class: "Applied to everyone" ----
+    // Max 25 chars per line. Use "" for blank lines.
+    private static final String[][][] EVERYONE_INFO = {
             { // Adventurer
-                    {"-- ACTIVE (class only) --", "B4C8DC"},
-                    {"Weapon Dash: Hold RC", "AABBCC"},
-                    {" to dash forward", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- EFFECTS (class only) --", "B4C8DC"},
-                    {"2x EXP Adventurer", "AABBCC"},
-                    {"Weapon durability+", "AABBCC"},
-                    {"2x hostile mob drops", "AABBCC"},
-                    {"Minimap HUD overlay", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- DEBUFF (all players) --", "CC8888"},
-                    {"Mob drops -50%", "CC8888"},
-                    {"", "AABBCC"},
-                    {"-- PASSIVES (all players) --", "B4C8DC"},
-                    {"5:  -40%, +2 hp", "99AABB"},
-                    {"10: Auto-step, +4 hp", "99AABB"},
-                    {"15: -30%, +6 hp", "99AABB"},
-                    {"20: Jump 1.5, +8 hp", "99AABB"},
-                    {" *Class only* Mob map", "88CC88"},
-                    {"25: -20%, +10 hp", "99AABB"},
-                    {"30: Wind-up dmg, +12 hp", "99AABB"},
-                    {"35: -10%, +14 hp", "99AABB"},
-                    {"40: -50% fall, +16 hp", "99AABB"},
-                    {"45: 0%, +18 hp", "99AABB"},
-                    {"50: Speed+, +20 hp", "99AABB"},
-                    {" *Class only* Player map", "88CC88"},
-                    {"", "AABBCC"},
-                    {"-- CRAFTS (class only) --", "B4C8DC"},
-                    {"Compass, Warp Anchor", "AABBCC"},
-                    {"Trophies, Grapple", "AABBCC"},
-                    {"Waystone Shard", "AABBCC"},
+                    {"DEBUFF:", "CC8888"},
+                    {"Hostile mob drop-rate", "CC8888"},
+                    {"and drop-chance -50%", "CC8888"},
+                    {"", ""},
+                    {"Lv5:  Debuff -40%", "99AABB"},
+                    {"  Gain +2 max health", "778899"},
+                    {"Lv10: Auto-step 1 block", "99AABB"},
+                    {"  Gain +4 max health", "778899"},
+                    {"Lv15: Debuff -30%", "99AABB"},
+                    {"  Gain +6 max health", "778899"},
+                    {"Lv20: Jump 1.5 blocks", "99AABB"},
+                    {"  Gain +8 max health", "778899"},
+                    {"Lv25: Debuff -20%", "99AABB"},
+                    {"  Gain +10 max health", "778899"},
+                    {"Lv30: Wind-up damage", "99AABB"},
+                    {"  Sprint 10 blocks for", "778899"},
+                    {"  +5 bonus melee dmg", "778899"},
+                    {"  Gain +12 max health", "778899"},
+                    {"Lv35: Debuff -10%", "99AABB"},
+                    {"  Gain +14 max health", "778899"},
+                    {"Lv40: -50% fall damage", "99AABB"},
+                    {"  Gain +16 max health", "778899"},
+                    {"Lv45: Debuff removed", "99AABB"},
+                    {"  Gain +18 max health", "778899"},
+                    {"Lv50: Movement speed+", "99AABB"},
+                    {"  Gain +20 max health", "778899"},
             },
             { // Cleric
-                    {"-- ACTIVE (class only) --", "B4C8DC"},
-                    {"Healing Pulse: RC", "AABBCC"},
-                    {" heals nearby, costs", "AABBCC"},
-                    {" EXP + 1 Milky Star", "AABBCC"},
-                    {"Resurrection: RC at", "AABBCC"},
-                    {" death spot, 10min CD", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- EFFECTS (class only) --", "B4C8DC"},
-                    {"2x EXP Cleric", "AABBCC"},
-                    {"Cheaper enchanting", "AABBCC"},
-                    {"Potions stronger +1", "AABBCC"},
-                    {"Save enchant levels", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- DEBUFF (all players) --", "CC8888"},
+                    {"DEBUFF:", "CC8888"},
                     {"EXP gain -50%", "CC8888"},
-                    {"", "AABBCC"},
-                    {"-- PASSIVES (all players) --", "B4C8DC"},
-                    {"5:  -40%", "99AABB"},
-                    {"10: Heal radius+", "99AABB"},
-                    {"15: -30%", "99AABB"},
-                    {"20: Potions +25% dur", "99AABB"},
-                    {"25: -20%", "99AABB"},
-                    {"30: Potion share", "99AABB"},
-                    {"35: -10%", "99AABB"},
-                    {"40: 25% save lapis", "99AABB"},
-                    {"45: 0%", "99AABB"},
-                    {"50: Enchant max +1", "99AABB"},
-                    {" *Class only* Res CD/2", "88CC88"},
+                    {"", ""},
+                    {"Lv5:  EXP debuff -40%", "99AABB"},
+                    {"Lv10: Healing Pulse", "99AABB"},
+                    {"  radius increased", "778899"},
+                    {"Lv15: EXP debuff -30%", "99AABB"},
+                    {"Lv20: Potions you brew", "99AABB"},
+                    {"  last 25% longer", "778899"},
+                    {"Lv25: EXP debuff -20%", "99AABB"},
+                    {"Lv30: Potions you drink", "99AABB"},
+                    {"  give weaker version", "778899"},
+                    {"  to nearby allies", "778899"},
+                    {"Lv35: EXP debuff -10%", "99AABB"},
+                    {"Lv40: 25% chance to not", "99AABB"},
+                    {"  consume lapis when", "778899"},
+                    {"  enchanting", "778899"},
+                    {"Lv45: EXP debuff removed", "99AABB"},
+                    {"Lv50: Enchanting can go", "99AABB"},
+                    {"  +1 above max level", "778899"},
+                    {"  (e.g. Sharpness VI)", "778899"},
             },
             { // Farmhand
-                    {"-- ACTIVE (class only) --", "B4C8DC"},
-                    {"Nature's Call: AoE", "AABBCC"},
-                    {" bone meal crops", "AABBCC"},
-                    {"Animal Whisperer:", "AABBCC"},
-                    {" see/charm mobs", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- EFFECTS (class only) --", "B4C8DC"},
-                    {"2x EXP Farmhand", "AABBCC"},
-                    {"Faster crop growth", "AABBCC"},
-                    {"Twin breeding chance", "AABBCC"},
-                    {"Fish luck/lure +1", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- DEBUFF (all players) --", "CC8888"},
-                    {"Farm/fish drops -50%", "CC8888"},
-                    {"", "AABBCC"},
-                    {"-- PASSIVES (all players) --", "B4C8DC"},
-                    {"5:  -40%", "99AABB"},
-                    {"10: Auto-replant", "99AABB"},
-                    {"15: -30%", "99AABB"},
-                    {"20: Animals +25% grow", "99AABB"},
-                    {"25: -20%", "99AABB"},
-                    {"30: 2x shear/seed/tick", "99AABB"},
-                    {"35: -10%", "99AABB"},
-                    {" *Class only* Food buff", "88CC88"},
-                    {"40: Rare fish drops", "99AABB"},
-                    {"45: 0%", "99AABB"},
-                    {"50: 4x crop tick", "99AABB"},
-                    {" *Class only* Food all", "88CC88"},
+                    {"DEBUFF:", "CC8888"},
+                    {"Neutral mob, fishing &", "CC8888"},
+                    {"farming drops -50%", "CC8888"},
+                    {"", ""},
+                    {"Lv5:  Debuff -40%", "99AABB"},
+                    {"Lv10: Auto-replant", "99AABB"},
+                    {"  Right-click harvest", "778899"},
+                    {"  replants the crop", "778899"},
+                    {"Lv15: Debuff -30%", "99AABB"},
+                    {"Lv20: Animals you breed", "99AABB"},
+                    {"  grow 25% faster &", "778899"},
+                    {"  breed CD -25%", "778899"},
+                    {"Lv25: Debuff -20%", "99AABB"},
+                    {"Lv30: 2x shearing &", "99AABB"},
+                    {"  seeds. Crops 2x tick", "778899"},
+                    {"Lv35: Debuff -10%", "99AABB"},
+                    {"Lv40: Rare fishing", "99AABB"},
+                    {"  drops (Saddle, Name", "778899"},
+                    {"  Tag, Heart of Sea)", "778899"},
+                    {"Lv45: Debuff removed", "99AABB"},
+                    {"Lv50: Crops in chunk", "99AABB"},
+                    {"  grow at 4x speed", "778899"},
             },
             { // MineCrafter
-                    {"-- ACTIVE (class only) --", "B4C8DC"},
-                    {"Vein Mine: Shift+mine", "AABBCC"},
-                    {" connected ore", "AABBCC"},
-                    {"Timber: Shift+chop", "AABBCC"},
-                    {"Auto-Smelt: Toggle", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- EFFECTS (class only) --", "B4C8DC"},
-                    {"2x EXP MineCrafter", "AABBCC"},
-                    {"Return ingredients", "AABBCC"},
-                    {"Fortune +1 built-in", "AABBCC"},
-                    {"2x pick/axe durabil.", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- DEBUFF (all players) --", "CC8888"},
-                    {"Mine/wood drops -50%", "CC8888"},
-                    {"", "AABBCC"},
-                    {"-- PASSIVES (all players) --", "B4C8DC"},
-                    {"5:  -40%", "99AABB"},
-                    {"10: Haste I mining", "99AABB"},
-                    {"15: -30%", "99AABB"},
-                    {"20: XP from stone", "99AABB"},
-                    {" *Class only* +Haste+Fort", "88CC88"},
-                    {"25: -20%", "99AABB"},
-                    {"30: Stars in ore", "99AABB"},
-                    {" *Class only* 2x craft", "88CC88"},
-                    {"35: -10%", "99AABB"},
-                    {"40: Craft +1 output", "99AABB"},
-                    {" *Class only* +Haste+Fort", "88CC88"},
-                    {"45: 0%", "99AABB"},
-                    {"50: More stars", "99AABB"},
-                    {" *Class only* VeinMine 2x", "88CC88"},
+                    {"DEBUFF:", "CC8888"},
+                    {"Mining & woodcutting", "CC8888"},
+                    {"drop-chance -50%", "CC8888"},
+                    {"", ""},
+                    {"Lv5:  Debuff -40%", "99AABB"},
+                    {"Lv10: Haste I while", "99AABB"},
+                    {"  mining stone.", "778899"},
+                    {"  +1 block reach", "778899"},
+                    {"Lv15: Debuff -30%", "99AABB"},
+                    {"Lv20: Chance to get XP", "99AABB"},
+                    {"  from mining stone", "778899"},
+                    {"  (not player-placed)", "778899"},
+                    {"Lv25: Debuff -20%", "99AABB"},
+                    {"Lv30: Rare chance to", "99AABB"},
+                    {"  find Milky Stars", "778899"},
+                    {"  embedded in ore", "778899"},
+                    {"Lv35: Debuff -10%", "99AABB"},
+                    {"Lv40: Crafting produces", "99AABB"},
+                    {"  +1 output (stacks)", "778899"},
+                    {"Lv45: Debuff removed", "99AABB"},
+                    {"Lv50: More Milky Stars", "99AABB"},
+                    {"  from mining ore", "778899"},
             },
             { // Smith
-                    {"-- ACTIVE (class only) --", "B4C8DC"},
-                    {"Forge Heat: Shift+RC", "AABBCC"},
-                    {" furnace = lava fuel", "AABBCC"},
-                    {"Emergency Repair: RC", "AABBCC"},
-                    {" 25% dur, costs iron", "AABBCC"},
-                    {"Tempered Body: Fire", "AABBCC"},
-                    {" resist, extinguish", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- EFFECTS (class only) --", "B4C8DC"},
-                    {"2x EXP Smith", "AABBCC"},
-                    {"Anvil 50% cheaper", "AABBCC"},
-                    {"Faster smelting", "AABBCC"},
-                    {"Less armor dur loss", "AABBCC"},
-                    {"", "AABBCC"},
-                    {"-- DEBUFF (all players) --", "CC8888"},
-                    {"Smelt speed -50%", "CC8888"},
-                    {"", "AABBCC"},
-                    {"-- PASSIVES (all players) --", "B4C8DC"},
-                    {"5:  -40%", "99AABB"},
-                    {"10: 25% save fuel", "99AABB"},
-                    {" *Class only* Unbreak aura", "88CC88"},
-                    {"15: -30%", "99AABB"},
-                    {"20: Anvil +10% dur", "99AABB"},
-                    {"25: -20%", "99AABB"},
-                    {"30: +1 Resistance", "99AABB"},
-                    {" *Class only* Anvil safe", "88CC88"},
-                    {"35: -10%", "99AABB"},
-                    {"40: Cap 40->55 lvl", "99AABB"},
-                    {" *Class only* +Haste+Fort", "88CC88"},
-                    {"45: 0%", "99AABB"},
-                    {"50: +1 Res, water+", "99AABB"},
-                    {" *Class only* Merge ench", "88CC88"},
+                    {"DEBUFF:", "CC8888"},
+                    {"Smelting speed -50%", "CC8888"},
+                    {"", ""},
+                    {"Lv5:  Debuff -40%", "99AABB"},
+                    {"Lv10: 25% chance to not", "99AABB"},
+                    {"  consume fuel when", "778899"},
+                    {"  smelting", "778899"},
+                    {"Lv15: Debuff -30%", "99AABB"},
+                    {"Lv20: Items repaired on", "99AABB"},
+                    {"  anvil gain +10% bonus", "778899"},
+                    {"  durability above max", "778899"},
+                    {"Lv25: Debuff -20%", "99AABB"},
+                    {"Lv30: Permanent +1", "99AABB"},
+                    {"  Resistance effect", "778899"},
+                    {"Lv35: Debuff -10%", "99AABB"},
+                    {"Lv40: Too Expensive cap", "99AABB"},
+                    {"  raised from 40 to 55", "778899"},
+                    {"Lv45: Debuff removed", "99AABB"},
+                    {"Lv50: +1 Resistance", "99AABB"},
+                    {"  (stacks with Lv30)", "778899"},
+                    {"  Breathe underwater", "778899"},
+                    {"  longer", "778899"},
             },
     };
 
-    private int guiLeft, guiTop;
-    private static final int GUI_W = 256;
+    // ---- Per-class: "Exclusive" ----
+    private static final String[][][] EXCLUSIVE_INFO = {
+            { // Adventurer
+                    {"ACTIVE SKILLS:", "55FFFF"},
+                    {"Weapon Dash:", "AABBCC"},
+                    {"  Hold RMB with sword", "778899"},
+                    {"  to dash forward.", "778899"},
+                    {"  Distance scales with", "778899"},
+                    {"  hold duration.", "778899"},
+                    {"Wind-up Damage:", "AABBCC"},
+                    {"  Sprint 10 blocks to", "778899"},
+                    {"  charge +5 bonus dmg.", "778899"},
+                    {"  Lasts 10s, resets on", "778899"},
+                    {"  hit.", "778899"},
+                    {"", ""},
+                    {"SPECIAL EFFECTS:", "55FF55"},
+                    {"  2x EXP gain", "88CC88"},
+                    {"  Weapon durability+", "88CC88"},
+                    {"  2x hostile mob drops", "88CC88"},
+                    {"  Minimap HUD (M key)", "88CC88"},
+                    {"", ""},
+                    {"EXCLUSIVE PASSIVES:", "FFAA00"},
+                    {"  Lv20: Mobs shown on", "CCAA55"},
+                    {"    minimap", "CCAA55"},
+                    {"  Lv50: Non-crouched", "CCAA55"},
+                    {"    players on minimap", "CCAA55"},
+                    {"    (stand still 10s)", "CCAA55"},
+                    {"", ""},
+                    {"CRAFTABLE ITEMS:", "B4C8DC"},
+                    {"  Wayfinder Compass", "99AABB"},
+                    {"  Warp Anchor + Stone", "99AABB"},
+                    {"  Trophy Base", "99AABB"},
+                    {"  10 Mob Trophies", "99AABB"},
+                    {"  Grappling Hook", "99AABB"},
+                    {"  Waystone Shard", "99AABB"},
+            },
+            { // Cleric
+                    {"ACTIVE SKILLS:", "55FFFF"},
+                    {"Healing Pulse:", "AABBCC"},
+                    {"  RMB with Milky Star", "778899"},
+                    {"  to heal nearby players", "778899"},
+                    {"  Costs EXP + 1 star.", "778899"},
+                    {"  Scales with level.", "778899"},
+                    {"Resurrection:", "AABBCC"},
+                    {"  RMB at player grave.", "778899"},
+                    {"  Within 60s: 1 star.", "778899"},
+                    {"  After 60s: 1 totem.", "778899"},
+                    {"  10min cooldown.", "778899"},
+                    {"", ""},
+                    {"SPECIAL EFFECTS:", "55FF55"},
+                    {"  2x EXP gain", "88CC88"},
+                    {"  Cheaper enchanting", "88CC88"},
+                    {"  Potions stronger +1", "88CC88"},
+                    {"  Chance to save levels", "88CC88"},
+                    {"", ""},
+                    {"EXCLUSIVE PASSIVES:", "FFAA00"},
+                    {"  Lv50: Resurrection", "CCAA55"},
+                    {"    cooldown halved", "CCAA55"},
+                    {"", ""},
+                    {"CRAFTABLE ITEMS:", "B4C8DC"},
+                    {"  Totem of Resurrection", "99AABB"},
+                    {"  Holy Water", "99AABB"},
+                    {"  Enchanted Golden Apple", "99AABB"},
+                    {"  Blessing Scroll", "99AABB"},
+                    {"  Bottle o' Enchanting", "99AABB"},
+                    {"  Blessed Ember", "99AABB"},
+            },
+            { // Farmhand
+                    {"ACTIVE SKILLS:", "55FFFF"},
+                    {"Nature's Call:", "AABBCC"},
+                    {"  Crouch to nurture", "778899"},
+                    {"  crops in 5-block", "778899"},
+                    {"  radius. ~10x growth.", "778899"},
+                    {"Whisperer:", "AABBCC"},
+                    {"  Shift+RMB. Charms", "778899"},
+                    {"  hostile mobs to fight", "778899"},
+                    {"  for you (10s). Neutral", "778899"},
+                    {"  mobs follow (1min).", "778899"},
+                    {"  1min cooldown.", "778899"},
+                    {"", ""},
+                    {"SPECIAL EFFECTS:", "55FF55"},
+                    {"  2x EXP gain", "88CC88"},
+                    {"  Passive crop growth", "88CC88"},
+                    {"  Twin breeding chance", "88CC88"},
+                    {"  Fish luck/lure +1", "88CC88"},
+                    {"", ""},
+                    {"EXCLUSIVE PASSIVES:", "FFAA00"},
+                    {"  Lv20: +1 item per", "CCAA55"},
+                    {"    fish catch (2 total)", "CCAA55"},
+                    {"  Lv30: Lava fishing!", "CCAA55"},
+                    {"    Custom nether loot", "CCAA55"},
+                    {"  Lv35: Food gives", "CCAA55"},
+                    {"    Regen, Speed, Luck", "CCAA55"},
+                    {"  Lv40: +2 items per", "CCAA55"},
+                    {"    fish catch (3 total)", "CCAA55"},
+                    {"  Lv50: Crafted food", "CCAA55"},
+                    {"    gives full buffs", "CCAA55"},
+                    {"    to any player", "CCAA55"},
+                    {"", ""},
+                    {"CRAFTABLE ITEMS:", "B4C8DC"},
+                    {"  Growth Fertilizer", "99AABB"},
+                    {"  Animal Feed", "99AABB"},
+                    {"  Scarecrow", "99AABB"},
+                    {"  Living Essence", "99AABB"},
+                    {"  Spawn Eggs (all mob", "99AABB"},
+                    {"    types for spawners)", "99AABB"},
+            },
+            { // MineCrafter
+                    {"ACTIVE SKILLS:", "55FFFF"},
+                    {"Vein Mine:", "AABBCC"},
+                    {"  Shift+mine ore to", "778899"},
+                    {"  break all connected", "778899"},
+                    {"  ore (8-18 blocks).", "778899"},
+                    {"Timber:", "AABBCC"},
+                    {"  Shift+chop log to", "778899"},
+                    {"  fell the whole tree.", "778899"},
+                    {"Auto-Smelt:", "AABBCC"},
+                    {"  Toggle. Ore drops", "778899"},
+                    {"  come out smelted.", "778899"},
+                    {"", ""},
+                    {"SPECIAL EFFECTS:", "55FF55"},
+                    {"  2x EXP gain", "88CC88"},
+                    {"  Ingredient return", "88CC88"},
+                    {"  Fortune +1 built-in", "88CC88"},
+                    {"  2x pick/axe durabil.", "88CC88"},
+                    {"", ""},
+                    {"EXCLUSIVE PASSIVES:", "FFAA00"},
+                    {"  Lv20: +1 Haste and", "CCAA55"},
+                    {"    +1 Fortune on top", "CCAA55"},
+                    {"  Lv30: Crafting always", "CCAA55"},
+                    {"    produces 2x output", "CCAA55"},
+                    {"  Lv40: Another +1", "CCAA55"},
+                    {"    Haste/Fortune.", "CCAA55"},
+                    {"    +2 block reach.", "CCAA55"},
+                    {"  Lv50: Vein Mine", "CCAA55"},
+                    {"    limit doubled", "CCAA55"},
+                    {"", ""},
+                    {"CRAFTABLE ITEMS:", "B4C8DC"},
+                    {"  Reinforced Pickaxe", "99AABB"},
+                    {"  Reinforced Axe", "99AABB"},
+                    {"  Builder's Wand", "99AABB"},
+                    {"  Ender Chest Backpack", "99AABB"},
+                    {"  Lodestone", "99AABB"},
+                    {"  Resonant Core", "99AABB"},
+            },
+            { // Smith
+                    {"ACTIVE SKILLS:", "55FFFF"},
+                    {"Forge Heat:", "AABBCC"},
+                    {"  Shift+RMB furnace", "778899"},
+                    {"  to create lava in", "778899"},
+                    {"  empty fuel slots.", "778899"},
+                    {"Emergency Repair:", "AABBCC"},
+                    {"  RMB to restore 25%", "778899"},
+                    {"  durability. Costs", "778899"},
+                    {"  iron. 10s cooldown.", "778899"},
+                    {"Tempered Body:", "AABBCC"},
+                    {"  Fire resistance", "778899"},
+                    {"  (half dmg). Activate", "778899"},
+                    {"  to extinguish fire.", "778899"},
+                    {"", ""},
+                    {"SPECIAL EFFECTS:", "55FF55"},
+                    {"  2x EXP gain", "88CC88"},
+                    {"  Anvil 50% cheaper", "88CC88"},
+                    {"  Faster smelting", "88CC88"},
+                    {"  Less armor dur loss", "88CC88"},
+                    {"", ""},
+                    {"EXCLUSIVE PASSIVES:", "FFAA00"},
+                    {"  Lv10: Unbreakable", "CCAA55"},
+                    {"    aura. Nearby players", "CCAA55"},
+                    {"    10% gain durability", "CCAA55"},
+                    {"  Lv30: Anvil never", "CCAA55"},
+                    {"    breaks", "CCAA55"},
+                    {"  Lv40: +1 Haste and", "CCAA55"},
+                    {"    +1 Fortune", "CCAA55"},
+                    {"  Lv50: Can combine", "CCAA55"},
+                    {"    conflicting enchants", "CCAA55"},
+                    {"    (e.g. Smite+Sharp)", "CCAA55"},
+                    {"    at 3x level cost", "CCAA55"},
+                    {"", ""},
+                    {"CRAFTABLE ITEMS:", "B4C8DC"},
+                    {"  Netherite Template", "99AABB"},
+                    {"  Whetstone", "99AABB"},
+                    {"  Armor Plating", "99AABB"},
+                    {"  Soul Forge", "99AABB"},
+                    {"  Tempered Plate", "99AABB"},
+                    {"  Mob Spawner Block", "99AABB"},
+                    {"    (needs Farmhand eggs", "99AABB"},
+                    {"    to set mob type)", "99AABB"},
+            },
+    };
+
+    // GUI dimensions match the 320x256 PNG
+    private static final int GUI_W = 320;
     private static final int GUI_H = 256;
 
-    // Layout constants matching the texture
-    private static final int SLOT_X = 12;
-    private static final int SLOT_W = 64;
-    private static final int SLOT_H = 35;
-    private static final int SLOT_GAP = 2;
-    private static final int SLOTS_Y = 38;
-    private static final int ICON_SIZE = 10;
+    // Layout positions (measured from PNG)
+    private static final int CLASS_SLOT_Y = 5;       // Top of slot area
+    private static final int CLASS_SLOT_H = 38;      // Slot height (y=5 to y=43)
+    private static final int CLASS_SLOT_W = 60;      // Each slot width
+    private static final int CLASS_SLOT_GAP = 2;     // Gap between slots
+    private static final int CLASS_SLOTS_X = 3;      // First slot x
 
-    private static final int INFO_X = 86;
-    private static final int INFO_W = 155;
-    private static final int INFO_Y = 38;
-    private static final int INFO_BOTTOM = 224;
+    private static final int INFO_BAR_Y = 46;        // Middle info/header bar
+    private static final int INFO_BAR_H = 14;        // Header bar height
 
-    private int selectedClass = -1;
-    private int scrollOffset = 0;
-    private boolean draggingScrollbar = false;
+    private static final int PANEL_Y = 62;           // Content panels start
+    private static final int PANEL_BOTTOM = GUI_H - 6;
+    private static final int LEFT_PANEL_X = 5;
+    private static final int LEFT_PANEL_W = 152;     // x=5 to x=157
+    private static final int RIGHT_PANEL_X = 163;
+    private static final int RIGHT_PANEL_W = 152;    // x=163 to x=315
+
+    private int guiLeft, guiTop;
+    private int selectedClass = 0;
+    private int leftScrollOffset = 0;
+    private int rightScrollOffset = 0;
     private Button confirmButton;
+    private boolean hasClass;
+    private boolean confirmPending = false; // True after first click, waiting for "Certain?" confirmation
 
     public ClassSelectionScreen() {
-        super(Component.literal("Choose Your Class"));
+        super(Component.literal("Class Selection"));
     }
 
     @Override
@@ -219,134 +390,168 @@ public class ClassSelectionScreen extends Screen {
         guiLeft = (this.width - GUI_W) / 2;
         guiTop = (this.height - GUI_H) / 2;
 
-        confirmButton = Button.builder(Component.literal("Confirm"), btn -> onConfirm())
-                .bounds(guiLeft + 176, guiTop + 229, 66, 16)
-                .build();
-        confirmButton.active = false;
-        addRenderableWidget(confirmButton);
+        hasClass = ClientClassData.getChosenClass() != ClassType.NONE;
+
+        // Confirm button — only visible when player hasn't chosen a class
+        if (!hasClass) {
+            int btnX = guiLeft + CLASS_SLOTS_X + selectedClass * (CLASS_SLOT_W + CLASS_SLOT_GAP);
+            confirmButton = Button.builder(Component.literal("Confirm"), btn -> onConfirmClick())
+                    .bounds(btnX + 3, guiTop + CLASS_SLOT_Y + CLASS_SLOT_H - 19, CLASS_SLOT_W, 20)
+                    .build();
+            addRenderableWidget(confirmButton);
+        }
+
+        // Default to player's chosen class tab if they have one
+        if (hasClass) {
+            for (int i = 0; i < CLASSES.length; i++) {
+                if (CLASSES[i] == ClientClassData.getChosenClass()) {
+                    selectedClass = i;
+                    break;
+                }
+            }
+        }
     }
+
+    // Scrollbar groove positions (from PNG)
+    private static final int LEFT_SB_X = 152;   // x=152-155
+    private static final int RIGHT_SB_X = 309;  // x=309-312
+    private static final int SB_WIDTH = 4;
+    private static final int SB_TOP = 65;
+    private static final int SB_BOTTOM = 245;
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // Background texture
+        // Background
         g.blit(RenderPipelines.GUI_TEXTURED, BACKGROUND,
                 guiLeft, guiTop, 0, 0, GUI_W, GUI_H, GUI_W, GUI_H, GUI_W, GUI_H);
 
-        // Title bar text
-        g.drawCenteredString(this.font, Component.literal("Choose Your Class").withColor(0xE0F0FA),
-                guiLeft + GUI_W / 2, guiTop + 13, 0xFFFFFF);
-        g.drawCenteredString(this.font, Component.literal("This choice is permanent!").withColor(0xFF5555),
-                guiLeft + GUI_W / 2, guiTop + 23, 0xFF5555);
-
-        // --- Left panel: 5 class slots ---
+        // --- Top row: 5 class slots ---
         for (int i = 0; i < 5; i++) {
-            int sy = guiTop + SLOTS_Y + i * (SLOT_H + SLOT_GAP);
-            int sx = guiLeft + SLOT_X;
-            ClassType ct = CLASSES[i];
+            int sx = guiLeft + CLASS_SLOTS_X + i * (CLASS_SLOT_W + CLASS_SLOT_GAP);
+            int sy = guiTop + CLASS_SLOT_Y;
 
-            // Selection/hover highlight
+            // Selection highlight: Top +1px, Left +1px, Bottom +2px, Right +4px from previous
             if (i == selectedClass) {
-                g.fill(sx + 1, sy + 1, sx + SLOT_W - 1, sy + SLOT_H - 1, 0x40FFFFFF);
-            } else if (mouseX >= sx && mouseX <= sx + SLOT_W && mouseY >= sy && mouseY <= sy + SLOT_H) {
-                g.fill(sx + 1, sy + 1, sx + SLOT_W - 1, sy + SLOT_H - 1, 0x20FFFFFF);
+                g.fill(sx + 3, sy + 1, sx + CLASS_SLOT_W + 3, sy + CLASS_SLOT_H + 1, 0x30FFFFFF);
+            } else if (mouseX >= sx && mouseX <= sx + CLASS_SLOT_W && mouseY >= sy && mouseY <= sy + CLASS_SLOT_H) {
+                g.fill(sx + 3, sy + 1, sx + CLASS_SLOT_W + 3, sy + CLASS_SLOT_H + 1, 0x15FFFFFF);
             }
 
-            // Icon — positioned inside the circle dot, small
-            int iconX = sx + 10;
-            int iconY = sy + (SLOT_H - ICON_SIZE) / 2 - 1;
+            // Class icon: moved 4px right, 3px down from previous
+            int iconSize = 8;
             g.blit(RenderPipelines.GUI_TEXTURED, CLASS_ICONS[i],
-                    iconX, iconY, 0, 0, ICON_SIZE, ICON_SIZE, 32, 32, 32, 32);
+                    sx + 9, sy + 7, 0, 0, iconSize, iconSize, 32, 32, 32, 32);
 
-            // Class name to the right of the circle
-            g.drawString(this.font, Component.literal(ct.getDisplayName()).withColor(ct.getColor()),
-                    sx + 22, sy + (SLOT_H - 8) / 2, 0xFFFFFF, true);
+            // Level "0/50": 4px more to the right
+            int level = ClientClassData.getLevel(PROFS[i]);
+            drawText(g, level + " / 50", sx + 26, sy + 4, 0xCCDDEE);
+
+            // XP: moved 1px to the right
+            int xp = ClientClassData.getXp(PROFS[i]);
+            int xpNeeded = ClientClassData.getXpForNextLevel(level);
+            String xpText = xp + " / " + (xpNeeded > 0 ? xpNeeded : "MAX");
+            drawText(g, xpText, sx + 5, sy + 19, 0x778899);
+            drawText(g, "XP", sx + 5, sy + 28, 0x556677);
         }
 
-        // --- Right panel: class info ---
-        // Scrollbar track position (matching the groove in the PNG)
-        int scrollTrackX = guiLeft + 241;
-        int scrollTrackW = 5;
-        int scrollTrackTop = guiTop + 38;
-        int scrollTrackBottom = guiTop + 218;
-        int scrollTrackH = scrollTrackBottom - scrollTrackTop;
+        // Fix #3: Panel titles moved down 3px (infoY + 6 instead of +3)
+        int infoY = guiTop + INFO_BAR_Y;
+        drawText(g, "Applied to everyone", guiLeft + LEFT_PANEL_X + 4, infoY + 6, 0xE0F0FA);
+        drawText(g, CLASSES[selectedClass].getDisplayName() + " Exclusive",
+                guiLeft + RIGHT_PANEL_X + 4, infoY + 6, CLASSES[selectedClass].getColor());
 
-        // Info text area (clipped to panel)
-        int infoX = guiLeft + INFO_X;
-        int infoY = guiTop + INFO_Y + 2;
-        int infoRight = scrollTrackX - 2;
-        int infoBottom = guiTop + INFO_BOTTOM;
-        int maxLines = (infoBottom - infoY - 14) / 10;
+        // --- Left panel content ---
+        int lpx = guiLeft + LEFT_PANEL_X;
+        int lpy = guiTop + PANEL_Y;
+        int lpb = guiTop + PANEL_BOTTOM;
 
-        if (selectedClass >= 0) {
-            ClassType ct = CLASSES[selectedClass];
+        g.enableScissor(lpx + 2, lpy, lpx + LEFT_PANEL_W - 8, lpb);
 
-            // Enable scissor to clip text inside the right panel
-            g.enableScissor(infoX, infoY, infoRight, infoBottom);
+        int ly = lpy + 2 - leftScrollOffset * 9;
 
-            // Header
-            g.drawString(this.font, Component.literal(ct.getDisplayName()).withColor(ct.getColor()),
-                    infoX, infoY, 0xFFFFFF, true);
-            g.drawString(this.font, Component.literal(ct.getDescription()).withColor(0x8098AA),
-                    infoX, infoY + 11, 0x8098AA, false);
-
-            // Scrollable info lines
-            String[][] lines = CLASS_INFO[selectedClass];
-            int contentY = infoY + 24;
-
-            for (int i = scrollOffset; i < lines.length && i < scrollOffset + maxLines; i++) {
-                int color = Integer.parseInt(lines[i][1], 16) | 0xFF000000;
-                g.drawString(this.font, Component.literal(lines[i][0]).withColor(color),
-                        infoX, contentY, color, false);
-                contentY += 10;
-            }
-
-            g.disableScissor();
-
-            // Scrollbar thumb
-            if (lines.length > maxLines) {
-                int thumbH = Math.max(10, scrollTrackH * maxLines / lines.length);
-                int maxScroll = Math.max(1, lines.length - maxLines);
-                int thumbY = scrollTrackTop + (scrollTrackH - thumbH) * scrollOffset / maxScroll;
-                g.fill(scrollTrackX, thumbY, scrollTrackX + scrollTrackW, thumbY + thumbH, 0x90AAAAAA);
-            }
-        } else {
-            // No class selected — instructions
-            g.drawCenteredString(this.font, Component.literal("Select a class on the left").withColor(0x778899),
-                    guiLeft + INFO_X + INFO_W / 2, guiTop + 80, 0x778899);
-            g.drawCenteredString(this.font, Component.literal("to view its details.").withColor(0x778899),
-                    guiLeft + INFO_X + INFO_W / 2, guiTop + 94, 0x778899);
-
-            g.drawCenteredString(this.font, Component.literal("You can only choose ONCE.").withColor(0xFF5555),
-                    guiLeft + INFO_X + INFO_W / 2, guiTop + 120, 0xFF5555);
-
-            g.drawCenteredString(this.font, Component.literal("All players level all professions,").withColor(0x778899),
-                    guiLeft + INFO_X + INFO_W / 2, guiTop + 145, 0x778899);
-            g.drawCenteredString(this.font, Component.literal("but only your chosen class gets").withColor(0x778899),
-                    guiLeft + INFO_X + INFO_W / 2, guiTop + 157, 0x778899);
-            g.drawCenteredString(this.font, Component.literal("Active Skills & Special Effects.").withColor(0x778899),
-                    guiLeft + INFO_X + INFO_W / 2, guiTop + 169, 0x778899);
-
-            g.drawCenteredString(this.font, Component.literal("Ask an admin to reset if needed.").withColor(0x556677),
-                    guiLeft + INFO_X + INFO_W / 2, guiTop + 195, 0x556677);
+        if (!hasClass) {
+            drawText(g, "Choose carefully!", lpx + 4, ly, 0xFFAA00);
+            ly += 10;
+            drawText(g, "You'll have to reset", lpx + 4, ly, 0xFF5555);
+            ly += 9;
+            drawText(g, "your levels to change", lpx + 4, ly, 0xFF5555);
+            ly += 9;
+            drawText(g, "class.", lpx + 4, ly, 0xFF5555);
+            ly += 14;
         }
 
-        // Bottom bar
-        g.drawString(this.font, Component.literal("This cannot").withColor(0xFF5555),
-                guiLeft + 14, guiTop + 231, 0xFF5555, true);
-        g.drawString(this.font, Component.literal("be undone!").withColor(0xCC4444),
-                guiLeft + 14, guiTop + 241, 0xCC4444, true);
+        String[][] everyoneLines = EVERYONE_INFO[selectedClass];
+        for (String[] line : everyoneLines) {
+            if (!line[0].isEmpty() && ly < lpb && ly > lpy - 9) {
+                int color = Integer.parseInt(line[1], 16);
+                drawText(g, line[0], lpx + 4, ly, color);
+            }
+            ly += 9;
+        }
+        g.disableScissor();
+
+        // --- Right panel content ---
+        int rpx = guiLeft + RIGHT_PANEL_X;
+        int rpy = guiTop + PANEL_Y;
+        int rpb = guiTop + PANEL_BOTTOM;
+
+        g.enableScissor(rpx + 2, rpy, rpx + RIGHT_PANEL_W - 8, rpb);
+
+        String[][] exclusiveLines = EXCLUSIVE_INFO[selectedClass];
+        ly = rpy + 2 - rightScrollOffset * 9;
+        for (String[] line : exclusiveLines) {
+            if (!line[0].isEmpty() && ly < rpb && ly > rpy - 9) {
+                int color = Integer.parseInt(line[1], 16);
+                drawText(g, line[0], rpx + 4, ly, color);
+            }
+            ly += 9;
+        }
+        g.disableScissor();
+
+        // Fix #4: Scrollbar thumbs
+        drawScrollbar(g, guiLeft + LEFT_SB_X, guiTop + SB_TOP, guiTop + SB_BOTTOM,
+                leftScrollOffset, getTotalLines(EVERYONE_INFO[selectedClass]) + (hasClass ? 0 : 5));
+        drawScrollbar(g, guiLeft + RIGHT_SB_X, guiTop + SB_TOP, guiTop + SB_BOTTOM,
+                rightScrollOffset, getTotalLines(EXCLUSIVE_INFO[selectedClass]));
+
+        // Confirm button position
+        if (confirmButton != null) {
+            int btnX = guiLeft + CLASS_SLOTS_X + selectedClass * (CLASS_SLOT_W + CLASS_SLOT_GAP);
+            confirmButton.setX(btnX + 3);
+            confirmButton.setY(guiTop + CLASS_SLOT_Y + CLASS_SLOT_H - 19);
+            confirmButton.setWidth(CLASS_SLOT_W);
+        }
 
         super.render(g, mouseX, mouseY, partialTick);
     }
 
-    private int getMaxLines() {
-        return (guiTop + INFO_BOTTOM - (guiTop + INFO_Y + 2) - 14) / 10;
+    private void drawScrollbar(GuiGraphics g, int x, int top, int bottom, int scrollOffset, int totalLines) {
+        int trackH = bottom - top;
+        int visibleLines = trackH / 9;
+        if (totalLines <= visibleLines) return;
+
+        int maxScroll = Math.max(1, totalLines - visibleLines);
+        float scrollFraction = Math.min(1.0f, (float) scrollOffset / maxScroll);
+
+        int thumbH = Math.max(10, trackH * visibleLines / totalLines);
+        int thumbY = top + (int) ((trackH - thumbH) * scrollFraction);
+
+        // Clamp thumb within groove
+        thumbY = Math.max(top, Math.min(bottom - thumbH, thumbY));
+
+        // Thumb
+        g.fill(x, thumbY, x + SB_WIDTH, thumbY + thumbH, 0xAA8899AA);
+        g.fill(x, thumbY, x + SB_WIDTH, thumbY + 1, 0x40FFFFFF);
     }
 
-    private int getMaxScroll() {
-        if (selectedClass < 0) return 0;
-        return Math.max(0, CLASS_INFO[selectedClass].length - getMaxLines());
+    private int getTotalLines(String[][] lines) {
+        return lines.length;
     }
+
+    private void drawText(GuiGraphics g, String text, int x, int y, int color) {
+        g.drawString(this.font, Component.literal(text).withColor(color | 0xFF000000), x, y, color | 0xFF000000);
+    }
+
 
     @Override
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean consumed) {
@@ -354,25 +559,19 @@ public class ClassSelectionScreen extends Screen {
             double mx = this.minecraft.mouseHandler.xpos() * this.width / this.minecraft.getWindow().getScreenWidth();
             double my = this.minecraft.mouseHandler.ypos() * this.height / this.minecraft.getWindow().getScreenHeight();
 
-            // Check scrollbar click
-            int scrollTrackX = guiLeft + 241;
-            int scrollTrackTop = guiTop + 38;
-            int scrollTrackBottom = guiTop + 218;
-            if (selectedClass >= 0 && mx >= scrollTrackX && mx <= scrollTrackX + 8
-                    && my >= scrollTrackTop && my <= scrollTrackBottom) {
-                draggingScrollbar = true;
-                updateScrollFromMouse(my, scrollTrackTop, scrollTrackBottom);
-                return true;
-            }
-
             // Check class slot clicks
             for (int i = 0; i < 5; i++) {
-                int sy = guiTop + SLOTS_Y + i * (SLOT_H + SLOT_GAP);
-                int sx = guiLeft + SLOT_X;
-                if (mx >= sx && mx <= sx + SLOT_W && my >= sy && my <= sy + SLOT_H) {
+                int sx = guiLeft + CLASS_SLOTS_X + i * (CLASS_SLOT_W + CLASS_SLOT_GAP);
+                int sy = guiTop + CLASS_SLOT_Y;
+                if (mx >= sx && mx <= sx + CLASS_SLOT_W && my >= sy && my <= sy + CLASS_SLOT_H) {
                     selectedClass = i;
-                    scrollOffset = 0;
-                    confirmButton.active = true;
+                    leftScrollOffset = 0;
+                    rightScrollOffset = 0;
+                    // Reset confirm state when switching classes
+                    confirmPending = false;
+                    if (confirmButton != null) {
+                        confirmButton.setMessage(Component.literal("Confirm"));
+                    }
                     return true;
                 }
             }
@@ -381,49 +580,35 @@ public class ClassSelectionScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
-        if (draggingScrollbar && selectedClass >= 0 && this.minecraft != null) {
-            double my = this.minecraft.mouseHandler.ypos() * this.height / this.minecraft.getWindow().getScreenHeight();
-            int scrollTrackTop = guiTop + 38;
-            int scrollTrackBottom = guiTop + 218;
-            updateScrollFromMouse(my, scrollTrackTop, scrollTrackBottom);
-            return true;
-        }
-        return super.mouseDragged(event, dragX, dragY);
-    }
-
-    @Override
-    public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
-        draggingScrollbar = false;
-        return super.mouseReleased(event);
-    }
-
-    private void updateScrollFromMouse(double mouseY, int trackTop, int trackBottom) {
-        int maxScroll = getMaxScroll();
-        if (maxScroll <= 0) return;
-        double ratio = (mouseY - trackTop) / (trackBottom - trackTop);
-        ratio = Math.max(0, Math.min(1, ratio));
-        scrollOffset = (int) Math.round(ratio * maxScroll);
-    }
-
-    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (selectedClass >= 0) {
-            int maxScroll = getMaxScroll();
-            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) scrollY));
+        int rpx = guiLeft + RIGHT_PANEL_X;
+        // If mouse is in right panel, scroll right
+        if (mouseX >= rpx) {
+            int maxScroll = Math.max(0, EXCLUSIVE_INFO[selectedClass].length - 15);
+            rightScrollOffset = Math.max(0, Math.min(maxScroll, rightScrollOffset - (int) scrollY));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        // Otherwise scroll left
+        int maxScroll = Math.max(0, EVERYONE_INFO[selectedClass].length - 15);
+        leftScrollOffset = Math.max(0, Math.min(maxScroll, leftScrollOffset - (int) scrollY));
+        return true;
     }
 
-    private void onConfirm() {
-        if (selectedClass < 0) return;
-        ClassType chosen = CLASSES[selectedClass];
-        if (this.minecraft != null && this.minecraft.player != null) {
-            this.minecraft.player.connection.sendCommand("mlkymc class select " + chosen.name().toLowerCase());
-            ClientClassData.setChosenClass(chosen);
+    private void onConfirmClick() {
+        if (selectedClass < 0 || hasClass) return;
+
+        if (!confirmPending) {
+            // First click: transform to red "Certain?" button
+            confirmPending = true;
+            confirmButton.setMessage(Component.literal("Certain?").withColor(0xFF5555));
+        } else {
+            // Second click: actually select the class
+            ClassType chosen = CLASSES[selectedClass];
+            if (this.minecraft != null && this.minecraft.player != null) {
+                this.minecraft.player.connection.sendCommand("mlkymc class select " + chosen.name().toLowerCase());
+                this.onClose();
+            }
         }
-        this.onClose();
     }
 
     @Override

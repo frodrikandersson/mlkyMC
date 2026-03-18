@@ -108,8 +108,12 @@ public class ClassData {
     /**
      * Get the debuff multiplier for a profession.
      * Returns 0.0 to 0.5 (the percentage to reduce).
+     * If the player chose this class, the debuff is always 0 (zeroed at level 0).
      */
     public double getDebuffPercent(ProfessionType profession) {
+        if (hasChosenClass() && chosenClass.getMatchingProfession() == profession) {
+            return 0.0; // Choosing a class removes that class's debuff entirely
+        }
         return ProfessionType.getDebuffPercent(getLevel(profession));
     }
 

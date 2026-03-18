@@ -19,7 +19,12 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -92,34 +97,50 @@ public class ItemFunctionHandler {
             return;
         }
 
-        // Grappling Hook: launch player in look direction (simplified — no projectile)
-        if (held.is(ModItems.GRAPPLING_HOOK.get())) {
-            var look = player.getLookAngle();
-            double power = 2.5;
-            player.push(look.x * power, Math.max(0.4, look.y * power), look.z * power);
-            player.hurtMarked = true;
-            player.level().playSound(null, player.blockPosition(), SoundEvents.CHAIN_PLACE, SoundSource.PLAYERS, 1.0f, 0.8f);
-            held.hurtAndBreak(1, player, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
+        // Grappling Hook: handled by GrapplingHookItem.use() — do NOT intercept here
+
+        // Blessing Scroll: apply Unbreaking I to offhand gear
+        if (held.is(ModItems.BLESSING_SCROLL.get())) {
+            ItemStack offhand = player.getOffhandItem();
+            if (offhand.isDamageableItem()) {
+                applyEnchantment(player, offhand, Enchantments.UNBREAKING, 1);
+                player.sendSystemMessage(Component.literal("Blessing applied! Unbreaking I added to " + offhand.getHoverName().getString()).withColor(0x55FFFF));
+                held.shrink(1);
+                player.level().playSound(null, player.blockPosition(), SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 1.0f, 1.0f);
+            } else {
+                player.sendSystemMessage(Component.literal("Hold damageable gear in offhand!").withColor(0xFF5555));
+            }
             event.setCanceled(true);
             return;
         }
 
-        // Holy Water: splash damage to mobs + heal players in radius
+        // Whetstone: apply Sharpness I to offhand weapon
+        if (held.is(ModItems.WHETSTONE.get())) {
+            ItemStack offhand = player.getOffhandItem();
+            if (!offhand.isEmpty() && offhand.isDamageableItem()) {
+                applyEnchantment(player, offhand, Enchantments.SHARPNESS, 1);
+                player.sendSystemMessage(Component.literal("Sharpened! Sharpness I added to " + offhand.getHoverName().getString()).withColor(0xFFAA00));
+                held.shrink(1);
+                player.level().playSound(null, player.blockPosition(), SoundEvents.GRINDSTONE_USE, SoundSource.PLAYERS, 1.0f, 1.2f);
+            } else {
+                player.sendSystemMessage(Component.literal("Hold a weapon in offhand!").withColor(0xFF5555));
+            }
+            event.setCanceled(true);
+            return;
+        }
+
+        // Holy Water: throw like splash potion
         if (held.is(ModItems.HOLY_WATER.get())) {
             if (player.level() instanceof ServerLevel sl) {
-                double radius = 8.0;
-                // Damage hostile mobs
-                for (var mob : sl.getEntitiesOfClass(Monster.class, player.getBoundingBox().inflate(radius))) {
-                    mob.hurt(player.damageSources().magic(), 20.0f);
-                }
-                // Heal + invulnerability for players
-                for (var nearby : sl.getEntitiesOfClass(ServerPlayer.class, player.getBoundingBox().inflate(radius))) {
-                    nearby.heal(nearby.getMaxHealth());
-                    nearby.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 400, 4, false, true, true)); // 20s
-                    nearby.sendSystemMessage(Component.literal("Holy Water: Full heal + shield!").withColor(0xFFFFAA));
-                }
-                player.level().playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 1.0f);
+                // Throw a snowball entity that triggers holy water on impact
+                net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball projectile =
+                        new net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball(sl, player, held.copy());
+                projectile.shootFromRotation(player, player.getXRot(), player.getYRot(), 0.0f, 1.5f, 1.0f);
+                projectile.addTag("mlkymc_holy_water");
+                sl.addFreshEntity(projectile);
+
                 held.shrink(1);
+                sl.playSound(null, player.blockPosition(), SoundEvents.SPLASH_POTION_THROW, SoundSource.PLAYERS, 0.5f, 0.4f);
             }
             event.setCanceled(true);
             return;
@@ -186,35 +207,7 @@ public class ItemFunctionHandler {
             return;
         }
 
-        // Blessing Scroll: right-click on gear in offhand to add Unbreaking I
-        if (held.is(ModItems.BLESSING_SCROLL.get())) {
-            ItemStack offhand = player.getOffhandItem();
-            if (offhand.isDamageableItem()) {
-                // Add Unbreaking I via enchantment
-                // Simplified: just reduce future damage by storing a flag
-                player.sendSystemMessage(Component.literal("Blessing applied! Unbreaking I added to " + offhand.getHoverName().getString()).withColor(0x55FFFF));
-                held.shrink(1);
-                player.level().playSound(null, player.blockPosition(), SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 1.0f, 1.0f);
-            } else {
-                player.sendSystemMessage(Component.literal("Hold gear in offhand to bless it!").withColor(0xFF5555));
-            }
-            event.setCanceled(true);
-            return;
-        }
-
-        // Whetstone: right-click on weapon in offhand to add Sharpness I
-        if (held.is(ModItems.WHETSTONE.get())) {
-            ItemStack offhand = player.getOffhandItem();
-            if (!offhand.isEmpty() && offhand.getItem().toString().contains("sword")) {
-                player.sendSystemMessage(Component.literal("Sharpened! Sharpness I added to " + offhand.getHoverName().getString()).withColor(0xFFAA00));
-                held.shrink(1);
-                player.level().playSound(null, player.blockPosition(), SoundEvents.GRINDSTONE_USE, SoundSource.PLAYERS, 1.0f, 1.2f);
-            } else {
-                player.sendSystemMessage(Component.literal("Hold a sword in offhand to sharpen!").withColor(0xFF5555));
-            }
-            event.setCanceled(true);
-            return;
-        }
+        // Blessing Scroll + Whetstone: moved to onRightClickItem
 
         // Armor Plating: right-click on armor in offhand for +1 toughness
         if (held.is(ModItems.ARMOR_PLATING.get())) {
@@ -269,5 +262,58 @@ public class ItemFunctionHandler {
             if (inv.getItem(i).is(item)) return i;
         }
         return -1;
+    }
+
+    private void applyEnchantment(ServerPlayer player, ItemStack target, ResourceKey<Enchantment> enchantKey, int levelToAdd) {
+        var registry = player.level().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+        var holder = registry.get(enchantKey);
+        if (holder.isEmpty()) return;
+
+        Holder<Enchantment> enchant = holder.get();
+        int currentLevel = target.getEnchantmentLevel(enchant);
+        int newLevel = Math.min(currentLevel + levelToAdd, enchant.value().getMaxLevel());
+        target.enchant(enchant, newLevel);
+    }
+
+    // =========================================================================
+    // HOLY WATER IMPACT — triggered when the thrown snowball with tag lands
+    // =========================================================================
+
+    @SubscribeEvent
+    public void onProjectileImpact(net.neoforged.neoforge.event.entity.ProjectileImpactEvent event) {
+        if (event.getEntity().level().isClientSide()) return;
+        if (!event.getEntity().getTags().contains("mlkymc_holy_water")) return;
+        if (!(event.getEntity().level() instanceof ServerLevel sl)) return;
+
+        var impactPos = event.getEntity().position();
+        double radius = 8.0;
+
+        // Damage undead mobs only
+        for (var mob : sl.getEntitiesOfClass(net.minecraft.world.entity.monster.Monster.class,
+                event.getEntity().getBoundingBox().inflate(radius))) {
+            if (mob.isInvertedHealAndHarm()) {
+                // Undead mobs (zombies, skeletons, wither, phantoms, etc.)
+                mob.hurt(sl.damageSources().magic(), 40.0f);
+            }
+        }
+
+        // Heal + invulnerability for all nearby players
+        for (var nearby : sl.getEntitiesOfClass(ServerPlayer.class,
+                event.getEntity().getBoundingBox().inflate(radius))) {
+            nearby.heal(nearby.getMaxHealth());
+            nearby.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.ABSORPTION, 400, 4, false, true, true));
+            nearby.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                    "Holy Water: Full heal + shield!").withColor(0xFFFFAA));
+        }
+
+        // Particles + sound at impact
+        sl.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
+                impactPos.x, impactPos.y, impactPos.z, 30, 2.0, 1.0, 2.0, 0.1);
+        sl.playSound(null, net.minecraft.core.BlockPos.containing(impactPos),
+                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 1.5f);
+
+        // Remove the projectile
+        event.getEntity().discard();
     }
 }

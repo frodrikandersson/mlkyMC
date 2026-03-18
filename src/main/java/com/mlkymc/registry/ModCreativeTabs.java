@@ -24,6 +24,7 @@ public class ModCreativeTabs {
                         output.accept(ModItems.MILKY_STAR_JAR_FULL.get());
                         output.accept(ModItems.STALL_DEED.get());
                         output.accept(ModItems.MARKET_CATALOG.get());
+                        output.accept(ModItems.DIMENSION_COMPASS.get());
 
                         // Reagents
                         output.accept(ModItems.WAYSTONE_SHARD.get());
@@ -36,6 +37,7 @@ public class ModCreativeTabs {
                         output.accept(ModItems.WAYFINDER_COMPASS.get());
                         output.accept(ModItems.WARP_STONE.get());
                         output.accept(ModItems.GRAPPLING_HOOK.get());
+                        output.accept(ModItems.GRAPPLING_HOOK_AMMO.get());
 
                         // Cleric
                         output.accept(ModItems.TOTEM_OF_RESURRECTION.get());

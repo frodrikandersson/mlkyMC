@@ -22,9 +22,12 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MarketManager {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger("mlkymc");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private final Path dataFile;
     private MarketData data = new MarketData();
@@ -211,24 +214,33 @@ public class MarketManager {
     }
 
     private void spawnStallVillager(String ownerUuid, StallData stall) {
-        if (server == null) return;
+        if (server == null) {
+            LOGGER.warn("[Stall] server is null, cannot spawn villager for {}", ownerUuid);
+            return;
+        }
         despawnVillager(stallVillagers, ownerUuid);
         ServerLevel level = getLevel(stall.dimension);
-        if (level == null) return;
+        if (level == null) {
+            LOGGER.warn("[Stall] Could not find level for dimension '{}' for stall owner {}", stall.dimension, ownerUuid);
+            return;
+        }
 
         // Remove any old persisted stall villagers for this owner (from before restart)
         removeOldStallVillagers(level, ownerUuid, stall.x, stall.y, stall.z);
 
         String displayName = stall.stallName + " [" + stall.ownerName + "]";
         Villager villager = createVillager(level, displayName, stall.x, stall.y, stall.z, stall.yaw, ownerUuid);
-        level.addFreshEntity(villager);
+        boolean added = level.addFreshEntity(villager);
+        LOGGER.info("[Stall] Spawned villager for {} at {},{},{} in {} - addFreshEntity returned: {}, isAlive: {}, id: {}",
+                ownerUuid, stall.x, stall.y, stall.z, stall.dimension, added, villager.isAlive(), villager.getId());
         applyHeadRotation(villager, stall.yaw);
         stallVillagers.put(ownerUuid, villager);
     }
 
     private void removeOldStallVillagers(ServerLevel level, String ownerUuid, double x, double y, double z) {
         String ownerTag = STALL_TAG + "_" + ownerUuid;
-        var aabb = new net.minecraft.world.phys.AABB(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
+        // Search wider area — villagers might drift slightly
+        var aabb = new net.minecraft.world.phys.AABB(x - 5, y - 5, z - 5, x + 5, y + 5, z + 5);
         var old = level.getEntitiesOfClass(Villager.class, aabb, v -> v.getTags().contains(ownerTag));
         for (Villager v : old) {
             v.discard();

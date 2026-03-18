@@ -1,13 +1,13 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "TC ",
+    "T  ",
     "CL ",
     " CP"
   ],
   "key": {
     "T": "minecraft:tripwire_hook",
-    "C": "minecraft:chain",
+    "C": "minecraft:iron_chain",
     "L": "minecraft:lead",
     "P": "mlkymc:tempered_plate"
   },

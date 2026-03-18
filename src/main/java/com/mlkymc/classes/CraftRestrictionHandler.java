@@ -48,7 +48,7 @@ public class CraftRestrictionHandler {
 
         // Farmhand crafts
         restrict(ModItems.LIVING_ESSENCE, ClassType.FARMHAND);
-        restrict(ModItems.GROWTH_FERTILIZER, ClassType.FARMHAND);
+        // Growth Fertilizer is usable by any class — no restriction
         restrict(ModItems.ANIMAL_FEED, ClassType.FARMHAND);
 
         // MineCrafter crafts
@@ -62,6 +62,32 @@ public class CraftRestrictionHandler {
         restrict(ModItems.TEMPERED_PLATE, ClassType.SMITH);
         restrict(ModItems.WHETSTONE, ClassType.SMITH);
         restrict(ModItems.ARMOR_PLATING, ClassType.SMITH);
+        restrictVanilla(net.minecraft.world.item.Items.SPAWNER, ClassType.SMITH);
+
+        // Farmhand crafts — vanilla mob eggs
+        restrictVanilla(net.minecraft.world.item.Items.ZOMBIE_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.SKELETON_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.SPIDER_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.CAVE_SPIDER_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.BLAZE_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.SILVERFISH_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.MAGMA_CUBE_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.COW_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.SHEEP_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.CHICKEN_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.PIG_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.RABBIT_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.WOLF_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.CAT_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.BEE_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.GOAT_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.HORSE_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.DONKEY_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.LLAMA_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.FOX_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.FROG_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.TURTLE_SPAWN_EGG, ClassType.FARMHAND);
+        restrictVanilla(net.minecraft.world.item.Items.IRON_GOLEM_SPAWN_EGG, ClassType.FARMHAND);
 
         // Block items
         restrictBlock(ModBlocks.WARP_ANCHOR_ITEM, ClassType.ADVENTURER);
@@ -90,6 +116,10 @@ public class CraftRestrictionHandler {
         restrictedItems.put(item.get(), requiredClass);
     }
 
+    private void restrictVanilla(Item item, ClassType requiredClass) {
+        restrictedItems.put(item, requiredClass);
+    }
+
     @SubscribeEvent
     public void onItemCrafted(PlayerEvent.ItemCraftedEvent event) {
         ensureInitialized();
@@ -106,5 +136,26 @@ public class CraftRestrictionHandler {
         result.setCount(0);
         player.sendSystemMessage(Component.literal("Only " + required.getDisplayName() + " class can craft this!")
                 .withColor(0xFF5555));
+    }
+
+    /**
+     * Apply built-in enchantments to reinforced tools when crafted.
+     */
+    @SubscribeEvent
+    public void onReinforcedToolCrafted(PlayerEvent.ItemCraftedEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        ItemStack result = event.getCrafting();
+
+        if (result.is(ModItems.REINFORCED_PICKAXE.get()) || result.is(ModItems.REINFORCED_AXE.get())) {
+            var registry = player.level().registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+
+            // Unbreaking III
+            registry.get(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING)
+                    .ifPresent(h -> result.enchant(h, 3));
+
+            // Efficiency II
+            registry.get(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY)
+                    .ifPresent(h -> result.enchant(h, 2));
+        }
     }
 }

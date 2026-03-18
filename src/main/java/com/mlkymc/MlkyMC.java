@@ -72,6 +72,10 @@ public class MlkyMC {
     private final SpawnerAgingManager spawnerAgingManager;
     private final RegionManager regionManager;
     private final MarketManager marketManager;
+    private final com.mlkymc.grave.GraveManager graveManager;
+    private static com.mlkymc.grave.GraveManager graveManagerInstance;
+    private com.mlkymc.classes.ActiveSkillHandler activeSkillHandler;
+    private com.mlkymc.classes.PassiveSkillHandler passiveSkillHandler;
 
     // Commands (instance-based)
     private final ClassCommand classCommand;
@@ -93,12 +97,14 @@ public class MlkyMC {
     public MlkyMC(IEventBus modEventBus, ModContainer modContainer) {
         LOGGER.info("mlkyMC initializing...");
 
-        // Register blocks, items, creative tabs, and keybinds on the mod event bus
+        // Register blocks, items, entities, creative tabs, and keybinds on the mod event bus
         com.mlkymc.registry.ModBlocks.BLOCKS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
+        com.mlkymc.registry.ModEntities.ENTITIES.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
         if (FMLEnvironment.getDist() == Dist.CLIENT) {
             modEventBus.addListener(com.mlkymc.client.ModKeybinds::registerKeys);
+            modEventBus.addListener(com.mlkymc.client.ClientEntityRenderers::register);
         }
 
         configDir = FMLPaths.CONFIGDIR.get().resolve(MOD_ID);
@@ -120,6 +126,8 @@ public class MlkyMC {
         spawnerAgingManager = new SpawnerAgingManager(configDir);
         regionManager = new RegionManager(configDir);
         marketManager = new MarketManager(configDir);
+        graveManager = new com.mlkymc.grave.GraveManager();
+        graveManagerInstance = graveManager;
 
         // Initialize commands
         classCommand = new ClassCommand(classManager);
@@ -151,8 +159,11 @@ public class MlkyMC {
         forgeBus.register(new MobDropListener());
         forgeBus.register(new DebuffHandler(classManager));
         forgeBus.register(new ClassExpHandler(classManager));
-        forgeBus.register(new com.mlkymc.classes.PassiveSkillHandler(classManager));
-        forgeBus.register(new com.mlkymc.classes.ActiveSkillHandler(classManager));
+        passiveSkillHandler = new com.mlkymc.classes.PassiveSkillHandler(classManager);
+        forgeBus.register(passiveSkillHandler);
+        activeSkillHandler = new com.mlkymc.classes.ActiveSkillHandler(classManager);
+        activeSkillHandler.setGraveManager(graveManager);
+        forgeBus.register(activeSkillHandler);
         forgeBus.register(new com.mlkymc.classes.SpecialEffectHandler(classManager));
         forgeBus.register(new com.mlkymc.classes.CraftRestrictionHandler(classManager));
         forgeBus.register(new com.mlkymc.classes.TrophyBuffHandler());
@@ -165,12 +176,21 @@ public class MlkyMC {
         forgeBus.register(new MarketListener(marketManager));
         forgeBus.register(new WalletListener());
         forgeBus.register(new StreamListener(streamerManager));
+        forgeBus.register(new com.mlkymc.grave.GraveListener(graveManager));
+        forgeBus.register(new com.mlkymc.world.BellRaidListener());
+        forgeBus.register(new com.mlkymc.world.AntiExploitListener());
+        forgeBus.register(new com.mlkymc.world.ElytraRemover());
+        forgeBus.register(new com.mlkymc.world.SpawnerHandler());
 
         if (MlkyConfig.getDisableVillagerSpawning()) {
             forgeBus.register(new VillagerBlocker());
         }
 
         LOGGER.info("mlkyMC initialized!");
+    }
+
+    public static com.mlkymc.grave.GraveManager getGraveManager() {
+        return graveManagerInstance;
     }
 
     @SubscribeEvent
@@ -237,5 +257,30 @@ public class MlkyMC {
         }
 
         LOGGER.info("mlkyMC shutdown complete.");
+    }
+
+    @SubscribeEvent
+    public void onLevelTick(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
+        com.mlkymc.registry.GrapplingHookItem.tickHooks(event.getLevel());
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+            com.mlkymc.registry.ScarecrowBlock.tickCropBoost(sl);
+        }
+        if (activeSkillHandler != null) {
+            activeSkillHandler.tickNurtureFields(event.getLevel());
+            activeSkillHandler.tickAnimalFollowing(event.getLevel());
+        }
+        if (passiveSkillHandler != null) {
+            passiveSkillHandler.tickLavaFishing(event.getLevel());
+        }
+    }
+
+    @SubscribeEvent
+    public void onMobSpawnScarecrow(net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        // Only block hostile mobs
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.monster.Monster)) return;
+        if (com.mlkymc.registry.ScarecrowBlock.isProtectedByScarecrow(event.getEntity().blockPosition())) {
+            event.setSpawnCancelled(true);
+        }
     }
 }

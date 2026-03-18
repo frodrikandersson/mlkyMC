@@ -34,7 +34,7 @@ public class TrophyBuffHandler {
 
             // Scan for trophy bases near the player
             for (int dx = -SCAN_RADIUS; dx <= SCAN_RADIUS; dx++) {
-                for (int dy = -4; dy <= 4; dy++) {
+                for (int dy = -16; dy <= 16; dy++) {
                     for (int dz = -SCAN_RADIUS; dz <= SCAN_RADIUS; dz++) {
                         BlockPos pos = playerPos.offset(dx, dy, dz);
                         if (!level.getBlockState(pos).is(ModBlocks.TROPHY_BASE.get())) continue;
@@ -71,7 +71,7 @@ public class TrophyBuffHandler {
                             player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 80, 0, false, true, true));
                             activeTrophyTypes.add(trophyBlock);
                         } else if (trophyBlock == ModBlocks.TROPHY_SPIDER.get()) {
-                            player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 220, 0, false, true, true));
+                            player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, false, false, true));
                             activeTrophyTypes.add(trophyBlock);
                         } else if (trophyBlock == ModBlocks.TROPHY_PHANTOM.get()) {
                             player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 80, 0, false, true, true));

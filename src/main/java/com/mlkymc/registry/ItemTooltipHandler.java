@@ -43,8 +43,15 @@ public class ItemTooltipHandler {
 
         // --- Wayfinder Compass ---
         if (stack.is(ModItems.WAYFINDER_COMPASS.get())) {
+            tooltip.add(Component.literal("Right-click to find nearest structure").withColor(0x55FFFF));
+            tooltip.add(Component.literal("Adventurer class item").withColor(0xAAAAAA));
+            return;
+        }
+
+        // --- Dimension Compass ---
+        if (stack.is(ModItems.DIMENSION_COMPASS.get())) {
             tooltip.add(Component.literal("Right-click to view dimension status").withColor(0xAA00FF));
-            tooltip.add(Component.literal("Points to unexplored structures").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Shows Nether/End unlock progress").withColor(0xAAAAAA));
             return;
         }
 
@@ -71,7 +78,11 @@ public class ItemTooltipHandler {
             tooltip.add(Component.literal("Single use teleport").withColor(0xAAAAAA));
             tooltip.add(Component.literal("Returns you to its linked Warp Anchor").withColor(0xAAAAAA));
         } else if (stack.is(ModItems.GRAPPLING_HOOK.get())) {
-            tooltip.add(Component.literal("Throwable - pulls you to where it lands").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Throws a hook — pulls you to blocks").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Hooks entities — reel to meet in middle").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Requires Grappling Hooks as ammo").withColor(0x888888));
+        } else if (stack.is(ModItems.GRAPPLING_HOOK_AMMO.get())) {
+            tooltip.add(Component.literal("Ammo for the Grappling Hook").withColor(0xAAAAAA));
         }
 
         // --- Cleric ---
@@ -79,8 +90,10 @@ public class ItemTooltipHandler {
             tooltip.add(Component.literal("Consumed to resurrect a fallen player").withColor(0xFFD700));
             tooltip.add(Component.literal("Used after 60s death window expires").withColor(0xAAAAAA));
         } else if (stack.is(ModItems.HOLY_WATER.get())) {
-            tooltip.add(Component.literal("Splash: massive mob damage + full heal").withColor(0xFFFFAA));
-            tooltip.add(Component.literal("20s invulnerability for all players").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Throw to deal massive damage").withColor(0xFFFFAA));
+            tooltip.add(Component.literal("to undead mobs in the area").withColor(0xFFFFAA));
+            tooltip.add(Component.literal("Heals + 20s invulnerability").withColor(0x55FF55));
+            tooltip.add(Component.literal("for all nearby players").withColor(0x55FF55));
         } else if (stack.is(ModItems.BLESSING_SCROLL.get())) {
             tooltip.add(Component.literal("Apply to gear for Unbreaking I").withColor(0xAAAAAA));
             tooltip.add(Component.literal("Stacks with existing enchants").withColor(0xAAAAAA));
@@ -134,7 +147,9 @@ public class ItemTooltipHandler {
             tooltip.add(Component.literal("Buffs affect all players in ~8 block range").withColor(0xAAAAAA));
         } else if (stack.is(ModBlocks.SCARECROW_ITEM.get())) {
             tooltip.add(Component.literal("Farmhand craftable").withColor(0xAAAA00));
-            tooltip.add(Component.literal("Prevents hostile mob spawns on farmland").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Prevents hostile mob spawns (32 blocks)").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Boosts crop growth +10% (32 blocks)").withColor(0x55FF55));
+            tooltip.add(Component.literal("Growth boost does not stack with other scarecrows").withColor(0x888888));
         } else if (stack.is(ModBlocks.SOUL_FORGE_ITEM.get())) {
             tooltip.add(Component.literal("Smith craftable").withColor(0xAA5500));
             tooltip.add(Component.literal("Enhanced anvil: no Too Expensive cap").withColor(0xAAAAAA));

@@ -12,9 +12,13 @@ import java.util.EnumMap;
 public class ClientClassData {
     private static ClassType chosenClass = ClassType.NONE;
     private static final EnumMap<ProfessionType, Integer> levels = new EnumMap<>(ProfessionType.class);
+    private static final EnumMap<ProfessionType, Integer> xpValues = new EnumMap<>(ProfessionType.class);
 
     static {
-        for (ProfessionType p : ProfessionType.values()) levels.put(p, 0);
+        for (ProfessionType p : ProfessionType.values()) {
+            levels.put(p, 0);
+            xpValues.put(p, 0);
+        }
     }
 
     public static ClassType getChosenClass() { return chosenClass; }
@@ -25,8 +29,23 @@ public class ClientClassData {
     public static int getLevel(ProfessionType prof) { return levels.getOrDefault(prof, 0); }
     public static void setLevel(ProfessionType prof, int level) { levels.put(prof, level); }
 
+    public static int getXp(ProfessionType prof) { return xpValues.getOrDefault(prof, 0); }
+    public static void setXp(ProfessionType prof, int xp) { xpValues.put(prof, xp); }
+
+    /** XP needed for next level. Matches server formula. */
+    public static int getXpForNextLevel(int currentLevel) {
+        if (currentLevel >= 50) return 0;
+        if (currentLevel <= 10) return 100 + (currentLevel * 40);
+        if (currentLevel <= 20) return 500 + ((currentLevel - 10) * 50);
+        if (currentLevel <= 30) return 1000 + ((currentLevel - 20) * 75);
+        return 2000 + ((currentLevel - 30) * 100);
+    }
+
     public static void reset() {
         chosenClass = ClassType.NONE;
-        for (ProfessionType p : ProfessionType.values()) levels.put(p, 0);
+        for (ProfessionType p : ProfessionType.values()) {
+            levels.put(p, 0);
+            xpValues.put(p, 0);
+        }
     }
 }

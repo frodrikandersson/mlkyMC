@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "WDS",
+    "PNP",
+    "MER"
+  ],
+  "key": {
+    "D": "minecraft:dragon_breath",
+    "W": "minecraft:wet_sponge",
+    "S": "minecraft:sniffer_egg",
+    "N": "minecraft:nether_star",
+    "E": "minecraft:wind_charge",
+    "R": "minecraft:totem_of_undying",
+    "M": "minecraft:music_disc_5",
+    "P": "minecraft:phantom_membrane"
+  },
+  "result": {
+    "id": "minecraft:elytra",
+    "count": 1
+  }
+}

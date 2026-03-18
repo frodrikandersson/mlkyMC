@@ -35,9 +35,20 @@ public enum ProfessionType {
      */
     public static int xpForLevel(int level) {
         if (level < 0) return 0;
-        // Base 100 XP for level 1, scaling up
-        // Level 1: 100, Level 10: 1000, Level 25: 2500, Level 50: 5000
-        return 100 + (level * 100);
+        if (level >= 50) return 0; // Max level
+        // Lv 0-10:  100 to 500
+        // Lv 11-20: 500 to 1000
+        // Lv 21-30: 1000 to 1750
+        // Lv 31-50: 2000 to 4000
+        if (level <= 10) {
+            return 100 + (level * 40); // 100, 140, 180, ..., 500
+        } else if (level <= 20) {
+            return 500 + ((level - 10) * 50); // 550, 600, ..., 1000
+        } else if (level <= 30) {
+            return 1000 + ((level - 20) * 75); // 1075, 1150, ..., 1750
+        } else {
+            return 2000 + ((level - 30) * 100); // 2100, 2200, ..., 4000
+        }
     }
 
     /**

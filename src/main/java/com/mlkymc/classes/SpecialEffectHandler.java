@@ -98,43 +98,62 @@ public class SpecialEffectHandler {
     // tool durability decreased and heal it back sometimes.
     // =========================================================================
 
+    // Track previous damage values per player to detect actual durability loss
+    private final java.util.Map<java.util.UUID, Integer> prevMainHandDamage = new java.util.HashMap<>();
+    private final java.util.Map<java.util.UUID, int[]> prevArmorDamage = new java.util.HashMap<>();
+
     @SubscribeEvent
     public void onPlayerTick(net.neoforged.neoforge.event.tick.PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (player.tickCount % 5 != 0) return; // Every 0.25s
 
         ClassData data = classManager.getOrCreate(player);
         ClassType chosen = data.getChosenClass();
+        java.util.UUID pid = player.getUUID();
 
-        if (chosen == ClassType.MINECRAFTER) {
-            // 50% chance to negate durability loss on pickaxe/axe (effective 2x durability)
-            ItemStack mainHand = player.getMainHandItem();
+        // Track mainhand damage
+        ItemStack mainHand = player.getMainHandItem();
+        int currentDmg = mainHand.isDamageableItem() ? mainHand.getDamageValue() : 0;
+        Integer prevDmg = prevMainHandDamage.getOrDefault(pid, 0);
+
+        if (chosen == ClassType.MINECRAFTER && mainHand.isDamageableItem()) {
             String itemName = mainHand.getItem().toString();
-            if (mainHand.isDamageableItem() && (itemName.contains("pickaxe") || itemName.contains("axe"))
-                    && mainHand.getDamageValue() > 0 && player.level().random.nextFloat() < 0.5f) {
-                mainHand.setDamageValue(mainHand.getDamageValue() - 1);
+            if ((itemName.contains("pickaxe") || itemName.contains("axe")) && currentDmg > prevDmg) {
+                // Durability just decreased — 50% chance to negate
+                if (player.level().random.nextFloat() < 0.5f) {
+                    mainHand.setDamageValue(prevDmg); // Restore to previous
+                    currentDmg = prevDmg;
+                }
             }
         }
 
-        if (chosen == ClassType.ADVENTURER) {
-            // 33% chance to negate durability loss on swords
-            ItemStack mainHand = player.getMainHandItem();
-            if (mainHand.isDamageableItem() && mainHand.getItem().toString().contains("sword")
-                    && mainHand.getDamageValue() > 0 && player.level().random.nextFloat() < 0.33f) {
-                mainHand.setDamageValue(mainHand.getDamageValue() - 1);
+        if (chosen == ClassType.ADVENTURER && mainHand.isDamageableItem()) {
+            if (mainHand.getItem().toString().contains("sword") && currentDmg > prevDmg) {
+                if (player.level().random.nextFloat() < 0.33f) {
+                    mainHand.setDamageValue(prevDmg);
+                    currentDmg = prevDmg;
+                }
             }
         }
 
+        prevMainHandDamage.put(pid, currentDmg);
+
+        // Smith: armor durability
         if (chosen == ClassType.SMITH) {
-            // 25% chance to negate durability loss on armor
-            for (net.minecraft.world.entity.EquipmentSlot slot : net.minecraft.world.entity.EquipmentSlot.values()) {
-                if (slot.getType() == net.minecraft.world.entity.EquipmentSlot.Type.HUMANOID_ARMOR) {
-                    ItemStack armor = player.getItemBySlot(slot);
-                    if (armor.isDamageableItem() && armor.getDamageValue() > 0
-                            && player.level().random.nextFloat() < 0.25f) {
-                        armor.setDamageValue(armor.getDamageValue() - 1);
+            int[] prev = prevArmorDamage.computeIfAbsent(pid, k -> new int[4]);
+            int idx = 0;
+            for (net.minecraft.world.entity.EquipmentSlot slot : new net.minecraft.world.entity.EquipmentSlot[]{
+                    net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST,
+                    net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET}) {
+                ItemStack armor = player.getItemBySlot(slot);
+                int armorDmg = armor.isDamageableItem() ? armor.getDamageValue() : 0;
+                if (armor.isDamageableItem() && armorDmg > prev[idx]) {
+                    if (player.level().random.nextFloat() < 0.25f) {
+                        armor.setDamageValue(prev[idx]);
+                        armorDmg = prev[idx];
                     }
                 }
+                prev[idx] = armorDmg;
+                idx++;
             }
         }
     }

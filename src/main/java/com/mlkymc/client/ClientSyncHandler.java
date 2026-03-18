@@ -27,12 +27,19 @@ public class ClientSyncHandler {
                 ClientClassData.reset();
             }
 
-            // Parse levels if present
+            // Parse levels (indices 1-5) and XP (indices 6-10)
             ProfessionType[] profs = ProfessionType.values();
             for (int i = 0; i < profs.length && i + 1 < parts.length; i++) {
                 try {
                     int level = Integer.parseInt(parts[i + 1]);
                     ClientClassData.setLevel(profs[i], level);
+                } catch (NumberFormatException ignored) {}
+            }
+            // Parse XP values (after the 5 levels)
+            for (int i = 0; i < profs.length && i + 6 < parts.length; i++) {
+                try {
+                    int xp = Integer.parseInt(parts[i + 6]);
+                    ClientClassData.setXp(profs[i], xp);
                 } catch (NumberFormatException ignored) {}
             }
 
