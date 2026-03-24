@@ -442,8 +442,8 @@ public class MarketManager {
             ItemStack stack = result.getOrThrow();
 
             // Check if this is a wallet - show balance instead of container contents
-            if (MilkyStar.isWallet(stack)) {
-                int balance = MilkyStar.getWalletBalance(stack);
+            if (MilkyStar.isJar(stack)) {
+                int balance = MilkyStar.getJarBalance(stack);
                 contents.add(balance + " Milky Stars");
                 return contents;
             }

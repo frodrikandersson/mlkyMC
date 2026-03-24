@@ -20,7 +20,6 @@ import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -85,7 +84,37 @@ public class SoulForgeBlock extends HorizontalDirectionalBlock {
     }
 
     /**
+     * Check if a block is any Soul Forge variant.
+     */
+    public static boolean isSoulForge(BlockState state) {
+        return state.is(ModBlocks.SOUL_FORGE.get())
+                || state.is(ModBlocks.SOUL_FORGE_CHIPPED.get())
+                || state.is(ModBlocks.SOUL_FORGE_DAMAGED.get());
+    }
+
+    /**
+     * Degrade the Soul Forge: normal -> chipped -> damaged -> destroyed.
+     * 12% chance per use (same as vanilla anvil).
+     */
+    public static void damageSoulForge(Level level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (!isSoulForge(state)) return;
+
+        Direction facing = state.getValue(FACING);
+
+        if (state.is(ModBlocks.SOUL_FORGE.get())) {
+            level.setBlock(pos, ModBlocks.SOUL_FORGE_CHIPPED.get().defaultBlockState().setValue(FACING, facing), 3);
+        } else if (state.is(ModBlocks.SOUL_FORGE_CHIPPED.get())) {
+            level.setBlock(pos, ModBlocks.SOUL_FORGE_DAMAGED.get().defaultBlockState().setValue(FACING, facing), 3);
+        } else if (state.is(ModBlocks.SOUL_FORGE_DAMAGED.get())) {
+            level.removeBlock(pos, false);
+            level.levelEvent(1029, pos, 0); // Anvil break sound/particles
+        }
+    }
+
+    /**
      * Custom AnvilMenu that accepts Soul Forge block instead of vanilla anvil.
+     * Includes degradation logic on use.
      */
     private static class SoulForgeMenu extends AnvilMenu {
         private final ContainerLevelAccess access;
@@ -98,9 +127,20 @@ public class SoulForgeBlock extends HorizontalDirectionalBlock {
         @Override
         public boolean stillValid(Player player) {
             return this.access.evaluate((level, pos) -> {
-                if (!level.getBlockState(pos).is(ModBlocks.SOUL_FORGE.get())) return false;
+                if (!isSoulForge(level.getBlockState(pos))) return false;
                 return player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= 64.0;
             }, true).booleanValue();
+        }
+
+        @Override
+        protected void onTake(Player player, net.minecraft.world.item.ItemStack stack) {
+            super.onTake(player, stack);
+            // 12% chance to degrade per use (same as vanilla anvil)
+            this.access.execute((level, pos) -> {
+                if (level.random.nextFloat() < 0.12f) {
+                    damageSoulForge(level, pos);
+                }
+            });
         }
     }
 }

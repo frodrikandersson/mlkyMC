@@ -69,12 +69,12 @@ public class WalletMenu extends AbstractContainerMenu {
 
     private ItemStack getWalletItem() {
         ItemStack stack = viewer.getInventory().getItem(walletSlot);
-        if (MilkyStar.isWallet(stack)) return stack;
+        if (MilkyStar.isJar(stack)) return stack;
         return ItemStack.EMPTY;
     }
 
     private int getBalance() {
-        return MilkyStar.getWalletBalance(getWalletItem());
+        return MilkyStar.getJarBalance(getWalletItem());
     }
 
     private void setBalance(int balance) {
@@ -91,8 +91,8 @@ public class WalletMenu extends AbstractContainerMenu {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             if (i == walletSlot) continue;
             ItemStack stack = inv.getItem(i);
-            if (MilkyStar.isWallet(stack)) {
-                otherWalletStars += MilkyStar.getWalletBalance(stack);
+            if (MilkyStar.isJar(stack)) {
+                otherWalletStars += MilkyStar.getJarBalance(stack);
             }
             otherWalletStars += countWalletsInShulker(stack);
         }
@@ -111,7 +111,7 @@ public class WalletMenu extends AbstractContainerMenu {
         balanceItem.set(DataComponents.CUSTOM_NAME,
                 Component.literal("Jar: " + walletBal + " Milky Stars").withColor(0xFFD700));
         balanceItem.set(DataComponents.LORE, new ItemLore(List.of(
-                Component.literal("Owner: " + MilkyStar.getWalletOwner(getWalletItem())).withColor(0xAAAAAA),
+                Component.literal("Owner: " + MilkyStar.getJarOwner(getWalletItem())).withColor(0xAAAAAA),
                 Component.literal("In inventory: " + physicalStars + " Stars").withColor(0xAAAAAA),
                 Component.literal("Other wallets: " + otherWalletStars + " Stars").withColor(0xAAAAAA),
                 Component.literal("Total: " + totalStars + " Stars").withColor(0x55FF55)
@@ -281,8 +281,8 @@ public class WalletMenu extends AbstractContainerMenu {
         if (container == null) return 0;
         int total = 0;
         for (ItemStack inner : container.nonEmptyItems()) {
-            if (MilkyStar.isWallet(inner)) {
-                total += MilkyStar.getWalletBalance(inner);
+            if (MilkyStar.isJar(inner)) {
+                total += MilkyStar.getJarBalance(inner);
             }
         }
         return total;

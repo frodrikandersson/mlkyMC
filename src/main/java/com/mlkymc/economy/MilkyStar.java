@@ -264,21 +264,11 @@ public class MilkyStar {
         }
     }
 
-    /** @deprecated Use isJar instead */
-    public static boolean isWallet(ItemStack stack) {
-        return isJar(stack);
-    }
-
     public static int getJarBalance(ItemStack stack) {
         if (!isJar(stack)) return 0;
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         if (customData == null) return 0;
         return customData.copyTag().getIntOr(WALLET_BALANCE_KEY, 0);
-    }
-
-    /** @deprecated Use getJarBalance instead */
-    public static int getWalletBalance(ItemStack stack) {
-        return getJarBalance(stack);
     }
 
     public static void setJarBalance(ItemStack stack, int balance) {
@@ -288,11 +278,6 @@ public class MilkyStar {
         tag.putInt(WALLET_BALANCE_KEY, balance);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
         updateJarLore(stack, balance);
-    }
-
-    /** @deprecated Use setJarBalance instead */
-    public static void setWalletBalance(ItemStack stack, int balance) {
-        setJarBalance(stack, balance);
     }
 
     private static void updateJarLore(ItemStack stack, int balance) {
@@ -308,22 +293,12 @@ public class MilkyStar {
         return customData.copyTag().getStringOr(WALLET_OWNER_KEY, "");
     }
 
-    /** @deprecated Use getJarOwner instead */
-    public static String getWalletOwner(ItemStack stack) {
-        return getJarOwner(stack);
-    }
-
     public static int findJarSlot(Player player) {
         Inventory inv = player.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
             if (isJar(inv.getItem(i))) return i;
         }
         return -1;
-    }
-
-    /** @deprecated Use findJarSlot instead */
-    public static int findWalletSlot(Player player) {
-        return findJarSlot(player);
     }
 
     // ---- Stall Deed ----

@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mlkymc:block/soul_forge", "y": 180 },
+    "facing=south": { "model": "mlkymc:block/soul_forge" },
+    "facing=west": { "model": "mlkymc:block/soul_forge", "y": 90 },
+    "facing=east": { "model": "mlkymc:block/soul_forge", "y": 270 }
+  }
+}

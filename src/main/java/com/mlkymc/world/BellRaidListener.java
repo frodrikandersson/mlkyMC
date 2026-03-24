@@ -11,7 +11,6 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.ai.goal.MoveToBlockGoal;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -52,7 +51,6 @@ public class BellRaidListener {
     // Wave definitions matching vanilla raid composition
     // Each wave entry: {EntityType, count} — scaled by omen level
     // Omen 1: waves 1-3, Omen 2: waves 1-4, Omen 3-5: waves 1-5 with more mobs
-    private static final int MAX_WAVES_BY_OMEN = 5; // All levels get 5 waves, but higher = more mobs
     private static final long WAVE_TIMEOUT = 2400; // 2 minutes per wave timeout
     private static final long RAID_DURATION = 24000; // 20 minutes
 
@@ -166,20 +164,20 @@ public class BellRaidListener {
                 continue;
             }
 
-            // Retarget mobs toward players or bell
+            // Find nearest player once, then retarget all untargeted mobs
+            ServerPlayer nearestPlayer = null;
+            double nearestDist = Double.MAX_VALUE;
+            for (var p : level.players()) {
+                double d = p.distanceToSqr(Vec3.atCenterOf(raid.bellPos));
+                if (d < nearestDist && d < 60 * 60) {
+                    nearestPlayer = p;
+                    nearestDist = d;
+                }
+            }
             for (Mob mob : raid.spawnedMobs) {
                 if (mob.getTarget() == null || !mob.getTarget().isAlive()) {
-                    ServerPlayer nearest = null;
-                    double nearestDist = Double.MAX_VALUE;
-                    for (var p : level.players()) {
-                        double d = p.distanceToSqr(Vec3.atCenterOf(raid.bellPos));
-                        if (d < nearestDist && d < 60 * 60) {
-                            nearest = p;
-                            nearestDist = d;
-                        }
-                    }
-                    if (nearest != null) {
-                        mob.setTarget(nearest);
+                    if (nearestPlayer != null) {
+                        mob.setTarget(nearestPlayer);
                     } else {
                         mob.getNavigation().moveTo(
                                 raid.bellPos.getX() + 0.5,

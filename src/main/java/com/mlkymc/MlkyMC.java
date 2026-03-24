@@ -76,6 +76,12 @@ public class MlkyMC {
     private static com.mlkymc.grave.GraveManager graveManagerInstance;
     private com.mlkymc.classes.ActiveSkillHandler activeSkillHandler;
     private com.mlkymc.classes.PassiveSkillHandler passiveSkillHandler;
+    private com.mlkymc.classes.PowerHandler powerHandler;
+    private final com.mlkymc.altar.SoulAltarManager soulAltarManager;
+    private final com.mlkymc.ghost.GhostDataManager ghostDataManager;
+    private static ClassManager classManagerInstance;
+    private static com.mlkymc.altar.SoulAltarManager soulAltarManagerInstance;
+    private static com.mlkymc.ghost.GhostDataManager ghostDataManagerInstance;
 
     // Commands (instance-based)
     private final ClassCommand classCommand;
@@ -127,7 +133,13 @@ public class MlkyMC {
         regionManager = new RegionManager(configDir);
         marketManager = new MarketManager(configDir);
         graveManager = new com.mlkymc.grave.GraveManager();
+        soulAltarManager = new com.mlkymc.altar.SoulAltarManager(configDir);
+        ghostDataManager = new com.mlkymc.ghost.GhostDataManager(configDir);
         graveManagerInstance = graveManager;
+        ghostManagerInstance = ghostManager;
+        classManagerInstance = classManager;
+        soulAltarManagerInstance = soulAltarManager;
+        ghostDataManagerInstance = ghostDataManager;
 
         // Initialize commands
         classCommand = new ClassCommand(classManager);
@@ -149,12 +161,18 @@ public class MlkyMC {
         IEventBus forgeBus = NeoForge.EVENT_BUS;
         forgeBus.register(this);
         forgeBus.register(new GhostListener(ghostManager));
-        forgeBus.register(new ReviveListener(ghostManager, reviveManager));
+        forgeBus.register(new ReviveListener(ghostManager, reviveManager, classManager, graveManager));
         if (FMLEnvironment.getDist() == Dist.CLIENT) {
             forgeBus.register(new com.mlkymc.client.ModKeybinds());
             forgeBus.register(new com.mlkymc.client.ClientSyncHandler());
             forgeBus.register(new com.mlkymc.client.MinimapHud());
+            forgeBus.register(new com.mlkymc.client.PowerChargeHud());
+            forgeBus.register(new com.mlkymc.client.ResurrectionCountdownHud());
+            forgeBus.register(new com.mlkymc.client.DevotedLifeHud());
+            forgeBus.register(new com.mlkymc.client.SoulEnergyHud());
+            forgeBus.register(new com.mlkymc.client.SpectralEnergyHud());
             forgeBus.register(new com.mlkymc.registry.ItemTooltipHandler());
+            forgeBus.register(new com.mlkymc.client.BlockOwnerRenderer());
         }
         forgeBus.register(new MobDropListener());
         forgeBus.register(new DebuffHandler(classManager));
@@ -162,10 +180,13 @@ public class MlkyMC {
         passiveSkillHandler = new com.mlkymc.classes.PassiveSkillHandler(classManager);
         forgeBus.register(passiveSkillHandler);
         activeSkillHandler = new com.mlkymc.classes.ActiveSkillHandler(classManager);
-        activeSkillHandler.setGraveManager(graveManager);
+        activeSkillHandlerInstance = activeSkillHandler;
         forgeBus.register(activeSkillHandler);
         forgeBus.register(new com.mlkymc.classes.SpecialEffectHandler(classManager));
         forgeBus.register(new com.mlkymc.classes.CraftRestrictionHandler(classManager));
+        powerHandler = new com.mlkymc.classes.PowerHandler(classManager);
+        powerHandler.setGraveManager(graveManager);
+        forgeBus.register(powerHandler);
         forgeBus.register(new com.mlkymc.classes.TrophyBuffHandler());
         forgeBus.register(new com.mlkymc.classes.ItemFunctionHandler());
         forgeBus.register(new com.mlkymc.classes.ClassLoginHandler(classManager));
@@ -177,6 +198,7 @@ public class MlkyMC {
         forgeBus.register(new WalletListener());
         forgeBus.register(new StreamListener(streamerManager));
         forgeBus.register(new com.mlkymc.grave.GraveListener(graveManager));
+        forgeBus.register(new com.mlkymc.altar.SoulAltarListener());
         forgeBus.register(new com.mlkymc.world.BellRaidListener());
         forgeBus.register(new com.mlkymc.world.AntiExploitListener());
         forgeBus.register(new com.mlkymc.world.ElytraRemover());
@@ -186,11 +208,36 @@ public class MlkyMC {
             forgeBus.register(new VillagerBlocker());
         }
 
+        forgeBus.register(new com.mlkymc.world.DragonEggHandler());
+
         LOGGER.info("mlkyMC initialized!");
     }
 
     public static com.mlkymc.grave.GraveManager getGraveManager() {
         return graveManagerInstance;
+    }
+
+    private static com.mlkymc.ghost.GhostManager ghostManagerInstance;
+    public static com.mlkymc.ghost.GhostManager getGhostManager() {
+        return ghostManagerInstance;
+    }
+
+    public static ClassManager getClassManager() {
+        return classManagerInstance;
+    }
+
+    public static com.mlkymc.altar.SoulAltarManager getSoulAltarManager() {
+        return soulAltarManagerInstance;
+    }
+
+    public static com.mlkymc.ghost.GhostDataManager getGhostDataManager() {
+        return ghostDataManagerInstance;
+    }
+
+    private static com.mlkymc.classes.ActiveSkillHandler activeSkillHandlerInstance;
+    private final java.util.Map<java.util.UUID, String> lastBlockOwnerMsg = new java.util.HashMap<>();
+    public static com.mlkymc.classes.ActiveSkillHandler getActiveSkillHandler() {
+        return activeSkillHandlerInstance;
     }
 
     @SubscribeEvent
@@ -211,6 +258,8 @@ public class MlkyMC {
         var server = event.getServer();
 
         ghostManager.setServer(server);
+        graveManager.setServer(server);
+        graveManager.load();
         shopManager.setServer(server);
         marketManager.setServer(server);
         twitchHandler.setServer(server);
@@ -245,6 +294,8 @@ public class MlkyMC {
         regionManager.save();
         marketManager.save();
         marketManager.despawnAll();
+        soulAltarManager.save();
+        ghostDataManager.save();
 
         // Stop stream polling
         streamerManager.stop();
@@ -259,18 +310,130 @@ public class MlkyMC {
         LOGGER.info("mlkyMC shutdown complete.");
     }
 
+    // Performance profiling — log slow ticks (cumulative ns over 30s window)
+    private final long[] tickTimings = new long[12];
+
     @SubscribeEvent
     public void onLevelTick(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
-        com.mlkymc.registry.GrapplingHookItem.tickHooks(event.getLevel());
-        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+        var level = event.getLevel();
+        if (level.isClientSide()) return;
+        if (!(level instanceof net.minecraft.server.level.ServerLevel sl)) return;
+
+        long gameTime = sl.getGameTime();
+        long t0;
+
+        // Every-tick handlers (only if active state exists)
+        t0 = System.nanoTime();
+        com.mlkymc.registry.GrapplingHookItem.tickHooks(level);
+        if (powerHandler != null) {
+            powerHandler.tickJackhammer(level);
+            powerHandler.tickCharmedMobs(level);
+        }
+        // Sync mimic mob positions (overworld only to avoid duplicate ticks)
+        if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            ghostDataManager.tickMimicEntities(sl.getServer());
+        }
+        tickTimings[0] += System.nanoTime() - t0;
+
+        // Every 2 ticks
+        if (gameTime % 2 == 0) {
+            if (powerHandler != null) {
+                t0 = System.nanoTime();
+                powerHandler.tickNaturesCall(level);
+                tickTimings[8] += System.nanoTime() - t0;
+
+                t0 = System.nanoTime();
+                powerHandler.tickAutoSmelt(level);
+                tickTimings[9] += System.nanoTime() - t0;
+            }
+            if (passiveSkillHandler != null) {
+                t0 = System.nanoTime();
+                passiveSkillHandler.tickLavaFishing(level);
+                tickTimings[10] += System.nanoTime() - t0;
+            }
+        }
+
+        // Every 10 ticks (0.5 seconds)
+        if (gameTime % 10 == 0) {
+            t0 = System.nanoTime();
             com.mlkymc.registry.ScarecrowBlock.tickCropBoost(sl);
+            if (activeSkillHandler != null) {
+                activeSkillHandler.tickAnimalFollowing(level);
+            }
+            if (passiveSkillHandler != null) {
+                passiveSkillHandler.tickComposters(level);
+            }
+            // Periodic block owner data save (dirty flag, max every 30s)
+            com.mlkymc.world.BlockOwnerData.get(sl.getServer()).tickSave();
+            tickTimings[2] += System.nanoTime() - t0;
         }
-        if (activeSkillHandler != null) {
-            activeSkillHandler.tickNurtureFields(event.getLevel());
-            activeSkillHandler.tickAnimalFollowing(event.getLevel());
+
+        // Every 40 ticks (2 seconds)
+        if (gameTime % 40 == 0) {
+            t0 = System.nanoTime();
+            if (powerHandler != null) {
+                powerHandler.tickSmithPassives(level);
+            }
+            // Check grave expiry (60 minutes)
+            if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+                graveManager.tick(sl.getServer());
+            }
+            tickTimings[3] += System.nanoTime() - t0;
         }
-        if (passiveSkillHandler != null) {
-            passiveSkillHandler.tickLavaFishing(event.getLevel());
+
+        // Ghost system ticks (once per second, overworld only)
+        if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD
+                && gameTime % 20 == 0) {
+            t0 = System.nanoTime();
+            ghostDataManager.tickSpectralEnergy(sl.getServer());
+            ghostDataManager.tickHauntZones(sl.getServer());
+            ghostDataManager.tickSpectralVision(sl.getServer());
+        }
+
+        // Block owner sync (every 5 ticks = 0.25s)
+        if (gameTime % 5 == 0) {
+            t0 = System.nanoTime();
+            var ownerData = com.mlkymc.world.BlockOwnerData.get(sl.getServer());
+            for (var player : sl.players()) {
+                if (!(player instanceof net.minecraft.server.level.ServerPlayer sp)) continue;
+                String newMsg = null;
+                var hitResult = sp.pick(5.0, 1.0f, false);
+                if (hitResult instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                        && hitResult.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                    var pos = blockHit.getBlockPos();
+                    com.mlkymc.world.BlockOwnerData.OwnerEntry owner = ownerData.getOwner(pos);
+                    if (owner != null) {
+                        var state = sl.getBlockState(pos);
+                        String id = state.getBlock().getDescriptionId();
+                        if (id.contains("furnace") || id.contains("smoker") || id.contains("blast")
+                                || id.contains("composter") || id.contains("brewing") || id.contains("anvil")
+                                || id.contains("enchanting")) {
+                            newMsg = "[MLKYMC_BLOCK_OWNERS:" + pos.getX() + "," + pos.getY() + "," + pos.getZ()
+                                    + "," + owner.uuid() + "," + owner.name() + "]";
+                        }
+                    }
+                }
+                if (newMsg == null) newMsg = "[MLKYMC_BLOCK_OWNERS:CLEAR]";
+                String lastMsg = lastBlockOwnerMsg.get(sp.getUUID());
+                if (!newMsg.equals(lastMsg)) {
+                    lastBlockOwnerMsg.put(sp.getUUID(), newMsg);
+                    sp.sendSystemMessage(net.minecraft.network.chat.Component.literal(newMsg));
+                }
+            }
+            tickTimings[7] += System.nanoTime() - t0;
+        }
+
+        // Report timings every 30 seconds (600 ticks) to server log
+        if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD && gameTime % 600 == 0 && gameTime > 0) {
+            String[] names = {"everyTick", "every2tick", "every10tick", "every40tick",
+                    "ghostSE", "hauntZones", "spectralVision", "blockOwnerSync",
+                    "naturesCall", "autoSmelt", "lavaFishing"};
+            var sb = new StringBuilder("[mlkyMC PERF] ");
+            for (int i = 0; i < 11; i++) {
+                sb.append(names[i]).append("=").append(tickTimings[i] / 1_000_000).append("ms ");
+                tickTimings[i] = 0;
+            }
+            LOGGER.info(sb.toString());
         }
     }
 

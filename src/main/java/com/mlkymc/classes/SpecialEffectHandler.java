@@ -1,11 +1,8 @@
 package com.mlkymc.classes;
 
-import com.mlkymc.registry.ModItems;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 
 /**
@@ -28,7 +25,8 @@ public class SpecialEffectHandler {
     }
 
     // =========================================================================
-    // ADVENTURER: 2x hostile mob drops
+    // ADVENTURER EXCLUSIVE: Hostile mob drop-rate bonus
+    // Lv5: +20%, Lv15: +40%, Lv25: +60%, Lv35: +80%, Lv45: +100%
     // =========================================================================
 
     @SubscribeEvent
@@ -40,11 +38,27 @@ public class SpecialEffectHandler {
         ClassData data = classManager.getOrCreate(player);
         if (data.getChosenClass() != ClassType.ADVENTURER) return;
 
-        // Double all drops from hostile mobs
+        int level = data.getLevel(ProfessionType.ADVENTURER);
+        double bonusPercent = getAdventurerDropBonus(level);
+        if (bonusPercent <= 0) return;
+
+        // Apply bonus: each drop item has bonusPercent chance to be doubled
+        var random = player.level().random;
         for (var drop : event.getDrops()) {
             ItemStack item = drop.getItem();
-            item.setCount(item.getCount() * 2);
+            if (random.nextFloat() < bonusPercent) {
+                item.setCount(item.getCount() * 2);
+            }
         }
+    }
+
+    private static double getAdventurerDropBonus(int level) {
+        if (level >= 45) return 1.0;  // +100%
+        if (level >= 35) return 0.8;  // +80%
+        if (level >= 25) return 0.6;  // +60%
+        if (level >= 15) return 0.4;  // +40%
+        if (level >= 5)  return 0.2;  // +20%
+        return 0.0;
     }
 
     // =========================================================================
@@ -74,18 +88,136 @@ public class SpecialEffectHandler {
         ClassData data = classManager.getOrCreate(player);
         if (data.getChosenClass() != ClassType.MINECRAFTER) return;
 
+        int level = data.getLevel(ProfessionType.MINECRAFTER);
         String blockId = event.getState().getBlock().getDescriptionId();
+        boolean isMiningBlock = blockId.contains("ore") || blockId.contains("ancient_debris")
+                || blockId.contains("stone") || blockId.contains("deepslate")
+                || blockId.contains("log") || blockId.contains("wood");
 
-        // Fortune +1: increase ore drops by ~33%
+        // Fortune +1 base (special effect), +1 at Lv20 excl, +1 at Lv40 excl
         if (blockId.contains("ore") || blockId.contains("ancient_debris")) {
+            int fortuneBonus = 1; // Base +1 for MineCrafter class
+            if (level >= 20) fortuneBonus = 2; // Lv20 exclusive: +1 more
+            if (level >= 40) fortuneBonus = 3; // Lv40 exclusive: +1 more
             for (var drop : event.getDrops()) {
                 ItemStack item = drop.getItem();
-                // ~33% chance to add 1 extra
-                if (player.level().random.nextFloat() < 0.33f) {
-                    item.grow(1);
+                for (int f = 0; f < fortuneBonus; f++) {
+                    if (player.level().random.nextFloat() < 0.33f) {
+                        item.grow(1);
+                    }
                 }
             }
         }
+
+        // Exclusive drop bonus: +20/40/60/80/100% at Lv5/15/25/35/45
+        if (isMiningBlock) {
+            double bonusPercent = getMinecrafterDropBonus(level);
+            if (bonusPercent > 0) {
+                var random = player.level().random;
+                for (var drop : event.getDrops()) {
+                    ItemStack item = drop.getItem();
+                    if (random.nextFloat() < bonusPercent) {
+                        item.setCount(item.getCount() * 2);
+                    }
+                }
+            }
+        }
+    }
+
+    private static double getMinecrafterDropBonus(int level) {
+        if (level >= 45) return 1.0;
+        if (level >= 35) return 0.8;
+        if (level >= 25) return 0.6;
+        if (level >= 15) return 0.4;
+        if (level >= 5)  return 0.2;
+        return 0.0;
+    }
+
+    // =========================================================================
+    // FARMHAND: Drop debuff (everyone) + exclusive drop bonus
+    // Affects: neutral mob drops, crop drops
+    // Fishing is handled separately in PassiveSkillHandler
+    // =========================================================================
+
+    /**
+     * Farmhand debuff: reduce neutral mob drops.
+     * Farmhand exclusive: bonus neutral mob drops (+20/40/60/80/100%).
+     */
+    @SubscribeEvent
+    public void onAnimalDrop(net.neoforged.neoforge.event.entity.living.LivingDropsEvent event) {
+        var source = event.getSource().getEntity();
+        if (!(source instanceof ServerPlayer player)) return;
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.animal.Animal)) return;
+
+        ClassData data = classManager.getOrCreate(player);
+        int farmLevel = data.getLevel(ProfessionType.FARMHAND);
+
+        // Debuff: chance to clear drops (everyone)
+        double debuff = data.getDebuffPercent(ProfessionType.FARMHAND);
+        if (debuff > 0 && player.level().random.nextDouble() < debuff) {
+            event.getDrops().clear();
+            return;
+        }
+
+        // Exclusive bonus: chance to double drops
+        if (data.getChosenClass() == ClassType.FARMHAND) {
+            double bonus = getFarmhandDropBonus(farmLevel);
+            if (bonus > 0) {
+                for (var drop : event.getDrops()) {
+                    if (player.level().random.nextFloat() < bonus) {
+                        drop.getItem().setCount(drop.getItem().getCount() * 2);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Farmhand debuff + bonus on crop drops.
+     * Applied in addition to MineCrafter's onBlockDrop (they don't overlap — MC is ores/stone, Farm is crops).
+     */
+    @SubscribeEvent
+    public void onCropDrop(BlockDropsEvent event) {
+        if (!(event.getBreaker() instanceof ServerPlayer player)) return;
+
+        String blockId = event.getState().getBlock().getDescriptionId();
+        boolean isFarmBlock = blockId.contains("wheat") || blockId.contains("carrot")
+                || blockId.contains("potato") || blockId.contains("beetroot")
+                || blockId.contains("nether_wart") || blockId.contains("melon")
+                || blockId.contains("pumpkin") || blockId.contains("cocoa")
+                || blockId.contains("sweet_berr");
+        if (!isFarmBlock) return;
+
+        ClassData data = classManager.getOrCreate(player);
+        int farmLevel = data.getLevel(ProfessionType.FARMHAND);
+
+        // Debuff: chance to clear drops (everyone)
+        double debuff = data.getDebuffPercent(ProfessionType.FARMHAND);
+        if (debuff > 0 && player.level().random.nextDouble() < debuff) {
+            event.getDrops().clear();
+            return;
+        }
+
+        // Exclusive bonus: chance to double drops
+        if (data.getChosenClass() == ClassType.FARMHAND) {
+            double bonus = getFarmhandDropBonus(farmLevel);
+            if (bonus > 0) {
+                for (var drop : event.getDrops()) {
+                    if (player.level().random.nextFloat() < bonus) {
+                        drop.getItem().setCount(drop.getItem().getCount() * 2);
+                    }
+                }
+            }
+        }
+    }
+
+    private static double getFarmhandDropBonus(int level) {
+        if (level >= 45) return 1.0;
+        if (level >= 35) return 0.8;
+        if (level >= 25) return 0.6;
+        if (level >= 15) return 0.4;
+        if (level >= 5)  return 0.2;
+        return 0.0;
     }
 
     // =========================================================================
@@ -100,6 +232,7 @@ public class SpecialEffectHandler {
 
     // Track previous damage values per player to detect actual durability loss
     private final java.util.Map<java.util.UUID, Integer> prevMainHandDamage = new java.util.HashMap<>();
+    private final java.util.Map<java.util.UUID, net.minecraft.world.item.Item> prevMainHandItem = new java.util.HashMap<>();
     private final java.util.Map<java.util.UUID, int[]> prevArmorDamage = new java.util.HashMap<>();
 
     @SubscribeEvent
@@ -110,10 +243,47 @@ public class SpecialEffectHandler {
         ClassType chosen = data.getChosenClass();
         java.util.UUID pid = player.getUUID();
 
-        // Track mainhand damage
+        // Tempered Mind: negate ALL durability loss while active
+        // Can apply to non-Smiths via Lv30 AoE sharing
+        if (PowerHandler.isTemperedMindActive(pid)) {
+            // Restore all equipment to previous damage values
+            ItemStack mh = player.getMainHandItem();
+            if (mh.isDamageableItem()) {
+                int prev = prevMainHandDamage.containsKey(pid)
+                        ? prevMainHandDamage.get(pid)
+                        : mh.getDamageValue(); // Initialize to current, not 0
+                if (mh.getDamageValue() > prev) mh.setDamageValue(prev);
+            }
+            int[] prevArmor = prevArmorDamage.get(pid);
+            if (prevArmor != null) {
+                int idx = 0;
+                for (net.minecraft.world.entity.EquipmentSlot slot : new net.minecraft.world.entity.EquipmentSlot[]{
+                        net.minecraft.world.entity.EquipmentSlot.HEAD, net.minecraft.world.entity.EquipmentSlot.CHEST,
+                        net.minecraft.world.entity.EquipmentSlot.LEGS, net.minecraft.world.entity.EquipmentSlot.FEET}) {
+                    ItemStack armor = player.getItemBySlot(slot);
+                    if (armor.isDamageableItem() && armor.getDamageValue() > prevArmor[idx]) {
+                        armor.setDamageValue(prevArmor[idx]);
+                    }
+                    idx++;
+                }
+            }
+            // Still update tracking values for when Tempered Mind expires
+            prevMainHandDamage.put(pid, mh.isDamageableItem() ? mh.getDamageValue() : 0);
+            return;
+        }
+
+        // Track mainhand damage — reset when item changes (prevents repair on item switch)
         ItemStack mainHand = player.getMainHandItem();
         int currentDmg = mainHand.isDamageableItem() ? mainHand.getDamageValue() : 0;
-        Integer prevDmg = prevMainHandDamage.getOrDefault(pid, 0);
+        net.minecraft.world.item.Item currentItem = mainHand.getItem();
+        net.minecraft.world.item.Item lastItem = prevMainHandItem.get(pid);
+
+        if (lastItem == null || lastItem != currentItem) {
+            // Item changed — reset tracking to current damage
+            prevMainHandDamage.put(pid, currentDmg);
+            prevMainHandItem.put(pid, currentItem);
+        }
+        int prevDmg = prevMainHandDamage.get(pid);
 
         if (chosen == ClassType.MINECRAFTER && mainHand.isDamageableItem()) {
             String itemName = mainHand.getItem().toString();
@@ -127,7 +297,9 @@ public class SpecialEffectHandler {
         }
 
         if (chosen == ClassType.ADVENTURER && mainHand.isDamageableItem()) {
-            if (mainHand.getItem().toString().contains("sword") && currentDmg > prevDmg) {
+            String itemName = mainHand.getItem().toString();
+            if ((itemName.contains("sword") || itemName.contains("bow") || itemName.contains("crossbow"))
+                    && currentDmg > prevDmg) {
                 if (player.level().random.nextFloat() < 0.33f) {
                     mainHand.setDamageValue(prevDmg);
                     currentDmg = prevDmg;
@@ -136,6 +308,7 @@ public class SpecialEffectHandler {
         }
 
         prevMainHandDamage.put(pid, currentDmg);
+        prevMainHandItem.put(pid, currentItem);
 
         // Smith: armor durability
         if (chosen == ClassType.SMITH) {
@@ -147,7 +320,7 @@ public class SpecialEffectHandler {
                 ItemStack armor = player.getItemBySlot(slot);
                 int armorDmg = armor.isDamageableItem() ? armor.getDamageValue() : 0;
                 if (armor.isDamageableItem() && armorDmg > prev[idx]) {
-                    if (player.level().random.nextFloat() < 0.25f) {
+                    if (player.level().random.nextFloat() < 0.50f) { // Half durability damage
                         armor.setDamageValue(prev[idx]);
                         armorDmg = prev[idx];
                     }

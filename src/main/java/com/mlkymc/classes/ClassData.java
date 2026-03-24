@@ -16,11 +16,21 @@ public class ClassData {
     private final EnumMap<ProfessionType, Integer> levels;
     private final EnumMap<ProfessionType, Integer> xp;
 
+    // Soul Energy system (Cleric)
+    private int soulEnergy;           // 0-100 personal SE bar
+    private boolean soulEnergyMode;   // true = SE mode, false = XP mode
+    private int selectedAltarAbility; // 0 = base Soul Skill, 1+ = altar tier abilities
+    private boolean tomeUnlocked;     // true when SE first reaches 100
+
     public ClassData(UUID playerUuid) {
         this.playerUuid = playerUuid;
         this.chosenClass = ClassType.NONE;
         this.levels = new EnumMap<>(ProfessionType.class);
         this.xp = new EnumMap<>(ProfessionType.class);
+        this.soulEnergy = 0;
+        this.soulEnergyMode = false;
+        this.selectedAltarAbility = 0;
+        this.tomeUnlocked = false;
 
         for (ProfessionType prof : ProfessionType.values()) {
             levels.put(prof, 0);
@@ -126,6 +136,32 @@ public class ClassData {
         return chosenClass.getMatchingProfession() == profession;
     }
 
+    // --- Soul Energy ---
+
+    public int getSoulEnergy() { return soulEnergy; }
+
+    public void setSoulEnergy(int amount) {
+        this.soulEnergy = Math.max(0, Math.min(100, amount));
+    }
+
+    public int addSoulEnergy(int amount) {
+        int before = soulEnergy;
+        soulEnergy = Math.max(0, Math.min(100, soulEnergy + amount));
+        return soulEnergy - before;
+    }
+
+    public boolean isSoulEnergyMode() { return soulEnergyMode; }
+
+    public void setSoulEnergyMode(boolean mode) { this.soulEnergyMode = mode; }
+
+    public int getSelectedAltarAbility() { return selectedAltarAbility; }
+
+    public void setSelectedAltarAbility(int ability) { this.selectedAltarAbility = ability; }
+
+    public boolean isTomeUnlocked() { return tomeUnlocked; }
+
+    public void setTomeUnlocked(boolean unlocked) { this.tomeUnlocked = unlocked; }
+
     // --- Serialization helpers ---
 
     public Map<String, Object> serialize() {
@@ -141,6 +177,12 @@ public class ClassData {
             profData.put(prof.name(), profEntry);
         }
         data.put("professions", profData);
+
+        // Soul Energy fields
+        data.put("soulEnergy", soulEnergy);
+        data.put("soulEnergyMode", soulEnergyMode);
+        data.put("selectedAltarAbility", selectedAltarAbility);
+        data.put("tomeUnlocked", tomeUnlocked);
 
         return data;
     }
@@ -166,6 +208,20 @@ public class ClassData {
                     cd.xp.put(prof, ((Number) profEntry.get("xp")).intValue());
                 }
             }
+        }
+
+        // Soul Energy fields (backwards compatible — defaults to 0/false if missing)
+        if (data.containsKey("soulEnergy")) {
+            cd.soulEnergy = ((Number) data.get("soulEnergy")).intValue();
+        }
+        if (data.containsKey("soulEnergyMode")) {
+            cd.soulEnergyMode = (Boolean) data.get("soulEnergyMode");
+        }
+        if (data.containsKey("selectedAltarAbility")) {
+            cd.selectedAltarAbility = ((Number) data.get("selectedAltarAbility")).intValue();
+        }
+        if (data.containsKey("tomeUnlocked")) {
+            cd.tomeUnlocked = (Boolean) data.get("tomeUnlocked");
         }
 
         return cd;

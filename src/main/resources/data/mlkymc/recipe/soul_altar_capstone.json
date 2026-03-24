@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "CAC",
+    "BBB",
+    "BOB"
+  ],
+  "key": {
+    "C": "minecraft:crying_obsidian",
+    "A": "minecraft:amethyst_block",
+    "B": "mlkymc:soulstone_brick",
+    "O": "mlkymc:conduit_core"
+  },
+  "result": {
+    "id": "mlkymc:soul_altar_capstone",
+    "count": 1
+  }
+}

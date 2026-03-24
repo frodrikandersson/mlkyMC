@@ -43,6 +43,7 @@ public class ModCreativeTabs {
                         output.accept(ModItems.TOTEM_OF_RESURRECTION.get());
                         output.accept(ModItems.HOLY_WATER.get());
                         output.accept(ModItems.BLESSING_SCROLL.get());
+                        output.accept(ModItems.TOME_OF_SOUL_WARDEN.get());
 
                         // Farmhand
                         output.accept(ModItems.GROWTH_FERTILIZER.get());
@@ -63,6 +64,12 @@ public class ModCreativeTabs {
                         output.accept(ModBlocks.TROPHY_BASE_ITEM.get());
                         output.accept(ModBlocks.SCARECROW_ITEM.get());
                         output.accept(ModBlocks.SOUL_FORGE_ITEM.get());
+
+                        // Soul Altar blocks
+                        output.accept(ModBlocks.SOULSTONE_BRICK_ITEM.get());
+                        output.accept(ModBlocks.SOUL_PILLAR_ITEM.get());
+                        output.accept(ModBlocks.CONDUIT_CORE_ITEM.get());
+                        output.accept(ModBlocks.SOUL_ALTAR_CAPSTONE_ITEM.get());
 
                         // Trophies
                         output.accept(ModBlocks.TROPHY_WITHER_ITEM.get());

@@ -40,6 +40,7 @@ public class GhostManager {
         applyGhostEffects(player);
     }
 
+    @SuppressWarnings("unchecked")
     private void dropAllItems(ServerPlayer player) {
         ServerLevel level = (ServerLevel) player.level();
 
@@ -75,10 +76,47 @@ public class GhostManager {
         storage.getGhosts().remove(id);
         storage.save();
         removeGhostEffects(player);
+
+        // Clear ghost data (SE, mimic state, haunt zones, etc.)
+        var gdm = com.mlkymc.MlkyMC.getGhostDataManager();
+        if (gdm != null) {
+            // End any active mimic or haunt zone
+            var data = gdm.get(id);
+            if (data != null) {
+                if (data.isMimicking()) {
+                    gdm.endMimic(player, data, false);
+                }
+                if (data.hasHauntZone()) {
+                    gdm.toggleHauntZone(player, data);
+                }
+            }
+            gdm.remove(id);
+            gdm.save();
+        }
+
+        // Clear pending mimic selection
+        var ph = com.mlkymc.classes.PowerHandler.getInstance();
+        if (ph != null) {
+            ph.clearGhostState(id);
+        }
+
+        // Disconnect from any Soul Altar
+        var altarManager = com.mlkymc.MlkyMC.getSoulAltarManager();
+        if (altarManager != null) {
+            altarManager.disconnectGhostFromAll(id);
+        }
+
+        // Broadcast revive to cancel resurrection countdown and reset ghost HUDs on all clients
+        if (server != null) {
+            String cancelSync = "[MLKYMC_REVIVED:" + player.getName().getString() + "]";
+            for (ServerPlayer online : server.getPlayerList().getPlayers()) {
+                online.sendSystemMessage(Component.literal(cancelSync).withColor(0x000000));
+            }
+        }
     }
 
     public void applyGhostEffects(ServerPlayer player) {
-        player.setGameMode(GameType.ADVENTURE);
+        player.setGameMode(GameType.SURVIVAL);
 
         int speedAmp = MlkyConfig.getGhostSpeedAmplifier();
         int jumpAmp = MlkyConfig.getGhostJumpAmplifier();
@@ -86,11 +124,10 @@ public class GhostManager {
         player.addEffect(new MobEffectInstance(MobEffects.SPEED, Integer.MAX_VALUE, speedAmp, false, false));
         player.addEffect(new MobEffectInstance(MobEffects.JUMP_BOOST, Integer.MAX_VALUE, jumpAmp, false, false));
         player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
-        player.addEffect(new MobEffectInstance(MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false));
         player.addEffect(new MobEffectInstance(MobEffects.SATURATION, Integer.MAX_VALUE, 0, false, false));
+        // No Glowing — ghosts should be invisible to living players
 
-        player.sendSystemMessage(Component.literal("You are now a ghost. Find someone to revive you!")
-                .withColor(0xAAAAAA));
+        // Death messages handled by GhostListener to avoid duplicates
     }
 
     public void removeGhostEffects(ServerPlayer player) {

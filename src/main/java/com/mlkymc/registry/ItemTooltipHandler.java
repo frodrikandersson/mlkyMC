@@ -2,9 +2,14 @@ package com.mlkymc.registry;
 
 import com.mlkymc.economy.MilkyStar;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Adds tooltip descriptions to mlkyMC items.
@@ -12,12 +17,118 @@ import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
  */
 public class ItemTooltipHandler {
 
+    private static Map<Item, String> classRestrictions;
+
+    private static void initRestrictions() {
+        if (classRestrictions != null) return;
+        classRestrictions = new HashMap<>();
+
+        // Adventurer
+        classRestrictions.put(ModItems.WAYSTONE_SHARD.get(), "Adventurer");
+        classRestrictions.put(ModItems.WAYFINDER_COMPASS.get(), "Adventurer");
+        classRestrictions.put(ModItems.GRAPPLING_HOOK.get(), "Adventurer");
+        classRestrictions.put(ModItems.GRAPPLING_HOOK_AMMO.get(), "Adventurer");
+        classRestrictions.put(ModItems.WARP_STONE.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.WARP_ANCHOR_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_BASE_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_WITHER_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_DRAGON_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_ELDER_GUARDIAN_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_WARDEN_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_BLAZE_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_ENDER_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_CREEPER_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_SPIDER_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_PHANTOM_ITEM.get(), "Adventurer");
+        classRestrictions.put(ModBlocks.TROPHY_WITCH_ITEM.get(), "Adventurer");
+
+        // Cleric
+        classRestrictions.put(ModItems.BLESSED_EMBER.get(), "Cleric");
+        classRestrictions.put(ModItems.TOTEM_OF_RESURRECTION.get(), "Cleric");
+        classRestrictions.put(ModItems.HOLY_WATER.get(), "Cleric");
+        classRestrictions.put(ModItems.BLESSING_SCROLL.get(), "Cleric");
+        classRestrictions.put(ModItems.TOME_OF_SOUL_WARDEN.get(), "Cleric");
+        classRestrictions.put(Items.ENCHANTED_GOLDEN_APPLE, "Cleric");
+        classRestrictions.put(Items.EXPERIENCE_BOTTLE, "Cleric");
+        classRestrictions.put(ModBlocks.SOULSTONE_BRICK_ITEM.get(), "Cleric");
+        classRestrictions.put(ModBlocks.SOUL_PILLAR_ITEM.get(), "Cleric");
+        classRestrictions.put(ModBlocks.CONDUIT_CORE_ITEM.get(), "Cleric");
+        classRestrictions.put(ModBlocks.SOUL_ALTAR_CAPSTONE_ITEM.get(), "Cleric");
+
+        // Farmhand
+        classRestrictions.put(ModItems.LIVING_ESSENCE.get(), "Farmhand");
+        classRestrictions.put(ModItems.GROWTH_FERTILIZER.get(), "Farmhand");
+        classRestrictions.put(ModItems.ANIMAL_FEED.get(), "Farmhand");
+        classRestrictions.put(ModBlocks.SCARECROW_ITEM.get(), "Farmhand");
+
+        // MineCrafter
+        classRestrictions.put(ModItems.RESONANT_CORE.get(), "MineCrafter");
+        classRestrictions.put(ModItems.REINFORCED_PICKAXE.get(), "MineCrafter");
+        classRestrictions.put(ModItems.REINFORCED_AXE.get(), "MineCrafter");
+        classRestrictions.put(ModItems.BUILDERS_WAND.get(), "MineCrafter");
+        classRestrictions.put(ModItems.ENDER_CHEST_BACKPACK.get(), "MineCrafter");
+        classRestrictions.put(Items.LODESTONE, "MineCrafter");
+
+        // Smith
+        classRestrictions.put(ModItems.TEMPERED_PLATE.get(), "Smith");
+        classRestrictions.put(ModItems.WHETSTONE.get(), "Smith");
+        classRestrictions.put(ModItems.ARMOR_PLATING.get(), "Smith");
+        classRestrictions.put(ModBlocks.SOUL_FORGE_ITEM.get(), "Smith");
+        classRestrictions.put(Items.SPAWNER, "Smith");
+        classRestrictions.put(Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE, "Smith");
+    }
+
+    private static String getClassRestriction(Item item) {
+        initRestrictions();
+        return classRestrictions.get(item);
+    }
+
     @SubscribeEvent
     public void onItemTooltip(ItemTooltipEvent event) {
         ItemStack stack = event.getItemStack();
         if (stack.isEmpty()) return;
 
-        // Only process mlkymc items - skip everything else immediately
+        // Check for Farmhand-blessed food tag (applies to any item, not just mlkymc namespace)
+        var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+        if (customData != null) {
+            var nbt = customData.copyTag();
+            if (nbt.getBooleanOr("mlkymc_farmhand_food", false)) {
+                event.getToolTip().add(Component.literal("Farmhand Blessed").withColor(0x55FF55));
+                if (nbt.getBooleanOr("mlkymc_farmhand_food_lv50", false)) {
+                    event.getToolTip().add(Component.literal("Regen, Speed, Luck + AoE buff").withColor(0xAAFFAA));
+                } else {
+                    event.getToolTip().add(Component.literal("Regen I (5s), Speed I (15s), Luck (1m)").withColor(0xAAFFAA));
+                }
+            }
+        }
+
+        // Show class restriction for any restricted item (mlkymc or vanilla)
+        String className = getClassRestriction(stack.getItem());
+        if (className != null) {
+            event.getToolTip().add(Component.literal("Craftable by " + className + "s").withColor(0xAA55FF));
+        }
+
+        // Show Adaptive enchantment effect description
+        if (stack.getTagEnchantments().size() > 0) {
+            var mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.level != null) {
+                var enchReg = mc.level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+                var adaptiveKey = net.minecraft.resources.ResourceKey.create(
+                        net.minecraft.core.registries.Registries.ENCHANTMENT,
+                        net.minecraft.resources.Identifier.fromNamespaceAndPath("mlkymc", "adaptive"));
+                var holder = enchReg.get(adaptiveKey).orElse(null);
+                if (holder != null && stack.getTagEnchantments().getLevel(holder) > 0) {
+                    event.getToolTip().add(Component.literal("Class effect varies:").withColor(0xAAAAAA));
+                    event.getToolTip().add(Component.literal(" Cleric: SE fills Altar first").withColor(0x777777));
+                    event.getToolTip().add(Component.literal(" Adventurer: 2x dash distance").withColor(0x777777));
+                    event.getToolTip().add(Component.literal(" Farmhand: Free Nature's Call, half growth").withColor(0x777777));
+                    event.getToolTip().add(Component.literal(" MineCrafter: Smelt stone variants").withColor(0x777777));
+                    event.getToolTip().add(Component.literal(" Smith: Ignite nearby on Tempered Body").withColor(0x777777));
+                }
+            }
+        }
+
+        // Only process mlkymc items for other tooltips
         var itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
         if (itemId == null || !itemId.getNamespace().equals("mlkymc")) return;
 
@@ -95,22 +206,26 @@ public class ItemTooltipHandler {
             tooltip.add(Component.literal("Heals + 20s invulnerability").withColor(0x55FF55));
             tooltip.add(Component.literal("for all nearby players").withColor(0x55FF55));
         } else if (stack.is(ModItems.BLESSING_SCROLL.get())) {
-            tooltip.add(Component.literal("Apply to gear for Unbreaking I").withColor(0xAAAAAA));
-            tooltip.add(Component.literal("Stacks with existing enchants").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Choose any enchantment").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Converts to enchanted book").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Costs player XP levels").withColor(0xAAAAAA));
         }
 
         // --- Farmhand ---
         else if (stack.is(ModItems.GROWTH_FERTILIZER.get())) {
-            tooltip.add(Component.literal("AoE bone meal - grows nearby crops").withColor(0x55FF55));
+            tooltip.add(Component.literal("AoE bone meal (5 block radius)").withColor(0x55FF55));
+            tooltip.add(Component.literal("Not affected by class debuffs").withColor(0xAAAAAA));
         } else if (stack.is(ModItems.ANIMAL_FEED.get())) {
             tooltip.add(Component.literal("Removes breeding cooldown").withColor(0x55FF55));
         }
 
         // --- MineCrafter ---
         else if (stack.is(ModItems.REINFORCED_PICKAXE.get())) {
-            tooltip.add(Component.literal("Unbreaking III + Efficiency II built-in").withColor(0x55FFFF));
+            tooltip.add(Component.literal("Unbreaking III + Efficiency IV").withColor(0x55FFFF));
+            tooltip.add(Component.literal("Grants Vein Mine to any class").withColor(0xFFAA00));
         } else if (stack.is(ModItems.REINFORCED_AXE.get())) {
-            tooltip.add(Component.literal("Unbreaking III + Efficiency II built-in").withColor(0x55FFFF));
+            tooltip.add(Component.literal("Unbreaking III + Efficiency IV").withColor(0x55FFFF));
+            tooltip.add(Component.literal("Grants Timber to any class").withColor(0xFFAA00));
         } else if (stack.is(ModItems.BUILDERS_WAND.get())) {
             tooltip.add(Component.literal("Extend placed blocks in facing direction").withColor(0xAAAAAA));
             tooltip.add(Component.literal("Consumes blocks from inventory").withColor(0xAAAAAA));
@@ -120,8 +235,8 @@ public class ItemTooltipHandler {
 
         // --- Smith ---
         else if (stack.is(ModItems.WHETSTONE.get())) {
-            tooltip.add(Component.literal("Apply to weapon for Sharpness I").withColor(0xAAAAAA));
-            tooltip.add(Component.literal("Stacks with existing enchants").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Repairs offhand item by +10%").withColor(0xAAAAAA));
+            tooltip.add(Component.literal("Single-use").withColor(0xAAAAAA));
         } else if (stack.is(ModItems.ARMOR_PLATING.get())) {
             tooltip.add(Component.literal("Apply to armor for +1 toughness").withColor(0xAAAAAA));
             tooltip.add(Component.literal("Permanent upgrade").withColor(0xAAAAAA));

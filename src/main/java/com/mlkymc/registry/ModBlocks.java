@@ -71,6 +71,73 @@ public class ModBlocks {
                     .sound(SoundType.ANVIL)
                     .noOcclusion()));
 
+    public static final DeferredBlock<Block> SOUL_FORGE_CHIPPED = BLOCKS.register(
+            "soul_forge_chipped",
+            id -> new SoulForgeBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.COLOR_BLACK)
+                    .strength(5.0f, 1200.0f)
+                    .requiresCorrectToolForDrops()
+                    .sound(SoundType.ANVIL)
+                    .noOcclusion()));
+
+    public static final DeferredBlock<Block> SOUL_FORGE_DAMAGED = BLOCKS.register(
+            "soul_forge_damaged",
+            id -> new SoulForgeBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.COLOR_BLACK)
+                    .strength(5.0f, 1200.0f)
+                    .requiresCorrectToolForDrops()
+                    .sound(SoundType.ANVIL)
+                    .noOcclusion()));
+
+    // --- Soul Altar Components ---
+
+    public static final DeferredBlock<Block> SOULSTONE_BRICK = BLOCKS.register(
+            "soulstone_brick",
+            id -> new Block(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.COLOR_BLACK)
+                    .strength(3.0f, 6.0f)
+                    .requiresCorrectToolForDrops()
+                    .sound(SoundType.DEEPSLATE)));
+
+    private static final net.minecraft.world.phys.shapes.VoxelShape PILLAR_SHAPE =
+            Block.box(4, 0, 4, 12, 16, 12);
+
+    public static final DeferredBlock<Block> SOUL_PILLAR = BLOCKS.register(
+            "soul_pillar",
+            id -> new FacingBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.COLOR_BLACK)
+                    .strength(3.0f, 6.0f)
+                    .requiresCorrectToolForDrops()
+                    .sound(SoundType.DEEPSLATE)
+                    .noOcclusion()
+                    .lightLevel(state -> 3),
+                    PILLAR_SHAPE));
+
+    public static final DeferredBlock<Block> CONDUIT_CORE = BLOCKS.register(
+            "conduit_core",
+            id -> new Block(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.COLOR_PURPLE)
+                    .strength(50.0f, 1200.0f)
+                    .requiresCorrectToolForDrops()
+                    .sound(SoundType.AMETHYST)
+                    .lightLevel(state -> 5)));
+
+    public static final DeferredBlock<Block> SOUL_ALTAR_CAPSTONE = BLOCKS.register(
+            "soul_altar_capstone",
+            id -> new SoulAltarCapstoneBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.COLOR_PURPLE)
+                    .strength(50.0f, 1200.0f)
+                    .requiresCorrectToolForDrops()
+                    .sound(SoundType.AMETHYST)
+                    .noOcclusion()
+                    .lightLevel(state -> 7)));
+
     // --- Trophies (TrophyBlock: directional + only on Trophy Base) ---
 
     private static BlockBehaviour.Properties trophyProps(net.minecraft.resources.Identifier id) {
@@ -99,6 +166,11 @@ public class ModBlocks {
     public static final DeferredItem<BlockItem> TROPHY_BASE_ITEM = ModItems.ITEMS.registerSimpleBlockItem(TROPHY_BASE);
     public static final DeferredItem<BlockItem> SCARECROW_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SCARECROW);
     public static final DeferredItem<BlockItem> SOUL_FORGE_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SOUL_FORGE);
+
+    public static final DeferredItem<BlockItem> SOULSTONE_BRICK_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SOULSTONE_BRICK);
+    public static final DeferredItem<BlockItem> SOUL_PILLAR_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SOUL_PILLAR);
+    public static final DeferredItem<BlockItem> CONDUIT_CORE_ITEM = ModItems.ITEMS.registerSimpleBlockItem(CONDUIT_CORE);
+    public static final DeferredItem<BlockItem> SOUL_ALTAR_CAPSTONE_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SOUL_ALTAR_CAPSTONE);
 
     public static final DeferredItem<BlockItem> TROPHY_WITHER_ITEM = ModItems.ITEMS.registerSimpleBlockItem(TROPHY_WITHER);
     public static final DeferredItem<BlockItem> TROPHY_DRAGON_ITEM = ModItems.ITEMS.registerSimpleBlockItem(TROPHY_DRAGON);

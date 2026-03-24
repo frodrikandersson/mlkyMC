@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mlkymc:block/soul_pillar", "y": 180 },
+    "facing=south": { "model": "mlkymc:block/soul_pillar" },
+    "facing=west": { "model": "mlkymc:block/soul_pillar", "y": 90 },
+    "facing=east": { "model": "mlkymc:block/soul_pillar", "y": 270 }
+  }
+}

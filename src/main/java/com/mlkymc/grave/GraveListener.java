@@ -35,6 +35,12 @@ public class GraveListener {
             player.sendSystemMessage(Component.literal("Your items are in a grave at " +
                     grave.pos.getX() + ", " + grave.pos.getY() + ", " + grave.pos.getZ())
                     .withColor(0xFFAA00));
+
+            // Notify all online players about the death for Cleric resurrection countdown
+            String deathSync = "[MLKYMC_DEATH:" + player.getName().getString() + "]";
+            for (ServerPlayer online : level.getServer().getPlayerList().getPlayers()) {
+                online.sendSystemMessage(Component.literal(deathSync).withColor(0x000000));
+            }
         }
     }
 
@@ -67,7 +73,7 @@ public class GraveListener {
             graveManager.claimGrave(player, grave, level);
             player.sendSystemMessage(Component.literal("Claimed " + grave.ownerName + "'s uncollected grave.").withColor(0xFFAA00));
         } else {
-            long remainingTicks = 12000 - (currentTime - grave.deathTime);
+            long remainingTicks = 1200 - (currentTime - grave.deathTime);
             int remainingSeconds = (int) (remainingTicks / 20);
             int mins = remainingSeconds / 60;
             int secs = remainingSeconds % 60;

@@ -1,6 +1,5 @@
 package com.mlkymc.shop;
 
-import com.mlkymc.economy.MilkyStar;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -56,7 +55,6 @@ public class ShopListener {
         }
 
         int totalSlots = calculateSlots(buyIndices.size(), sellIndices.size());
-        int rows = totalSlots / 9;
 
         Map<Integer, Integer> slotMap = new HashMap<>();
         playerSlotMap.put(player.getUUID(), slotMap);

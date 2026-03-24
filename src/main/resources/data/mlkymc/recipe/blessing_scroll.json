@@ -1,10 +1,15 @@
 {
-  "type": "minecraft:crafting_shapeless",
-  "ingredients": [
-    "minecraft:paper",
-    "minecraft:lapis_block",
-    "mlkymc:milky_star"
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "MMM",
+    "LPL",
+    "MMM"
   ],
+  "key": {
+    "M": "mlkymc:milky_star",
+    "P": "minecraft:paper",
+    "L": "minecraft:lapis_block"
+  },
   "result": {
     "id": "mlkymc:blessing_scroll",
     "count": 1

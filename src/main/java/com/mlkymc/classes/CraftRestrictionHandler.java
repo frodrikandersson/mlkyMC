@@ -11,7 +11,6 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Supplier;
 
 /**
  * Phase 5: Restricts crafting of class-specific items.
@@ -39,16 +38,25 @@ public class CraftRestrictionHandler {
         restrict(ModItems.WAYSTONE_SHARD, ClassType.ADVENTURER);
         restrict(ModItems.WAYFINDER_COMPASS, ClassType.ADVENTURER);
         restrict(ModItems.GRAPPLING_HOOK, ClassType.ADVENTURER);
+        restrict(ModItems.GRAPPLING_HOOK_AMMO, ClassType.ADVENTURER);
+        restrict(ModItems.WARP_STONE, ClassType.ADVENTURER);
 
         // Cleric crafts
         restrict(ModItems.BLESSED_EMBER, ClassType.CLERIC);
         restrict(ModItems.TOTEM_OF_RESURRECTION, ClassType.CLERIC);
         restrict(ModItems.HOLY_WATER, ClassType.CLERIC);
         restrict(ModItems.BLESSING_SCROLL, ClassType.CLERIC);
+        restrictVanilla(net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, ClassType.CLERIC);
+        restrictVanilla(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, ClassType.CLERIC);
+        restrict(ModItems.TOME_OF_SOUL_WARDEN, ClassType.CLERIC);
+        restrictBlock(ModBlocks.SOULSTONE_BRICK_ITEM, ClassType.CLERIC);
+        restrictBlock(ModBlocks.SOUL_PILLAR_ITEM, ClassType.CLERIC);
+        restrictBlock(ModBlocks.CONDUIT_CORE_ITEM, ClassType.CLERIC);
+        restrictBlock(ModBlocks.SOUL_ALTAR_CAPSTONE_ITEM, ClassType.CLERIC);
 
         // Farmhand crafts
         restrict(ModItems.LIVING_ESSENCE, ClassType.FARMHAND);
-        // Growth Fertilizer is usable by any class — no restriction
+        restrict(ModItems.GROWTH_FERTILIZER, ClassType.FARMHAND);
         restrict(ModItems.ANIMAL_FEED, ClassType.FARMHAND);
 
         // MineCrafter crafts
@@ -57,12 +65,14 @@ public class CraftRestrictionHandler {
         restrict(ModItems.REINFORCED_AXE, ClassType.MINECRAFTER);
         restrict(ModItems.BUILDERS_WAND, ClassType.MINECRAFTER);
         restrict(ModItems.ENDER_CHEST_BACKPACK, ClassType.MINECRAFTER);
+        restrictVanilla(net.minecraft.world.item.Items.LODESTONE, ClassType.MINECRAFTER);
 
         // Smith crafts
         restrict(ModItems.TEMPERED_PLATE, ClassType.SMITH);
         restrict(ModItems.WHETSTONE, ClassType.SMITH);
         restrict(ModItems.ARMOR_PLATING, ClassType.SMITH);
         restrictVanilla(net.minecraft.world.item.Items.SPAWNER, ClassType.SMITH);
+        restrictVanilla(net.minecraft.world.item.Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE, ClassType.SMITH);
 
         // Farmhand crafts — vanilla mob eggs
         restrictVanilla(net.minecraft.world.item.Items.ZOMBIE_SPAWN_EGG, ClassType.FARMHAND);
@@ -139,6 +149,23 @@ public class CraftRestrictionHandler {
     }
 
     /**
+     * Bottle o' Enchanting: consume 1 XP level on craft. Void if lacking XP.
+     */
+    @SubscribeEvent
+    public void onExpBottleCrafted(PlayerEvent.ItemCraftedEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        ItemStack result = event.getCrafting();
+        if (!result.is(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE)) return;
+
+        if (player.experienceLevel < 1) {
+            result.setCount(0);
+            player.sendSystemMessage(Component.literal("Need at least 1 XP level to craft!").withColor(0xFF5555));
+            return;
+        }
+        player.giveExperienceLevels(-1);
+    }
+
+    /**
      * Apply built-in enchantments to reinforced tools when crafted.
      */
     @SubscribeEvent
@@ -153,9 +180,9 @@ public class CraftRestrictionHandler {
             registry.get(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING)
                     .ifPresent(h -> result.enchant(h, 3));
 
-            // Efficiency II
+            // Efficiency IV
             registry.get(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY)
-                    .ifPresent(h -> result.enchant(h, 2));
+                    .ifPresent(h -> result.enchant(h, 4));
         }
     }
 }

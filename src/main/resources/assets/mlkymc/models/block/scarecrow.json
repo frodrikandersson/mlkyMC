@@ -1,6 +1,4 @@
 {
-	"format_version": "1.21.11",
-	"credit": "Made with Blockbench",
 	"textures": {
 		"0": "mlkymc:block/scarecrow",
 		"particle": "mlkymc:block/scarecrow"
@@ -24,12 +22,12 @@
 			"to": [12, 16, 11],
 			"rotation": {"angle": 0, "axis": "y", "origin": [4, 8, 6]},
 			"faces": {
-				"north": {"uv": [8, 4, 12, 8], "texture": "#0"},
-				"east": {"uv": [12, 4, 16, 8], "texture": "#0"},
-				"south": {"uv": [4, 8, 8, 12], "texture": "#0"},
-				"west": {"uv": [0, 8, 4, 12], "texture": "#0"},
-				"up": {"uv": [8, 8, 12, 12], "texture": "#0"},
-				"down": {"uv": [12, 8, 16, 12], "texture": "#0"}
+				"north": {"uv": [8, 4, 9, 5], "texture": "#0"},
+				"east": {"uv": [8.4375, 4, 9, 5], "texture": "#0"},
+				"south": {"uv": [8.0625, 4, 9, 5], "texture": "#0"},
+				"west": {"uv": [8.0625, 4, 8.625, 5], "texture": "#0"},
+				"up": {"uv": [8, 4.0625, 8.9375, 4.1875], "texture": "#0"},
+				"down": {"uv": [8, 4.25, 9, 4.6875], "texture": "#0"}
 			}
 		},
 		{

@@ -1,6 +1,4 @@
 {
-	"format_version": "1.21.11",
-	"credit": "Made with Blockbench",
 	"render_type": "minecraft:cutout",
 	"textures": {
 		"0": "mlkymc:block/trophy_warden",
@@ -9,7 +7,6 @@
 	},
 	"elements": [
 		{
-			"name": "head",
 			"from": [3, 21, 17],
 			"to": [13, 31, 21],
 			"rotation": {"angle": -45, "axis": "x", "origin": [8, 2, 19]},
@@ -23,7 +20,6 @@
 			}
 		},
 		{
-			"name": "left_ear",
 			"from": [-3, 26, 19],
 			"to": [3, 32, 19],
 			"rotation": {"angle": -45, "axis": "x", "origin": [11, 2, 17]},
@@ -37,7 +33,6 @@
 			}
 		},
 		{
-			"name": "right_ear",
 			"from": [12, 26, 19],
 			"to": [18, 32, 19],
 			"rotation": {"angle": -45, "axis": "x", "origin": [2, 2, 17]},
@@ -90,7 +85,6 @@
 			}
 		},
 		{
-			"name": "body",
 			"from": [2, 10, 24],
 			"to": [14, 25, 29],
 			"rotation": {"angle": -45, "axis": "x", "origin": [8, -6, 26]},
@@ -104,7 +98,6 @@
 			}
 		},
 		{
-			"name": "right_arm",
 			"from": [14, 1, -5],
 			"to": [18, 19, -1],
 			"rotation": {"angle": 22.5, "axis": "x", "origin": [3, -7, -3]},
@@ -118,7 +111,6 @@
 			}
 		},
 		{
-			"name": "left_arm",
 			"from": [-2, 1, -5],
 			"to": [2, 19, -1],
 			"rotation": {"angle": 22.5, "axis": "x", "origin": [13, -6, -3]},
@@ -132,7 +124,6 @@
 			}
 		},
 		{
-			"name": "left_leg",
 			"from": [3, -1, 5],
 			"to": [7, 10, 9],
 			"rotation": {"angle": 45, "axis": "x", "origin": [11, -2, 7]},
@@ -146,7 +137,6 @@
 			}
 		},
 		{
-			"name": "right_leg",
 			"from": [9, -1, 5],
 			"to": [13, 10, 9],
 			"rotation": {"angle": 45, "axis": "x", "origin": [5, -2, 7]},
@@ -162,49 +152,41 @@
 	],
 	"groups": [
 		{
-			"name": "head",
 			"origin": [0, 34, 0],
 			"color": 0,
 			"children": [0, 1, 2, 3, 4, 5]
 		},
 		{
-			"name": "left_ear",
 			"origin": [-8, 46.5, 0],
 			"color": 0,
 			"children": []
 		},
 		{
-			"name": "right_ear",
 			"origin": [8, 46.5, 0],
 			"color": 0,
 			"children": []
 		},
 		{
-			"name": "body",
 			"origin": [0, 34, 0],
 			"color": 0,
 			"children": [6]
 		},
 		{
-			"name": "right_arm",
 			"origin": [11, 30, 0],
 			"color": 0,
 			"children": [7]
 		},
 		{
-			"name": "left_arm",
 			"origin": [-11, 30, 0],
 			"color": 0,
 			"children": [8]
 		},
 		{
-			"name": "left_leg",
 			"origin": [-6, 13, 0],
 			"color": 0,
 			"children": [9]
 		},
 		{
-			"name": "right_leg",
 			"origin": [6, 13, 0],
 			"color": 0,
 			"children": [10]

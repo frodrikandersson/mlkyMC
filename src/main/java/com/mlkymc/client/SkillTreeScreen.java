@@ -181,7 +181,6 @@ public class SkillTreeScreen extends Screen {
             // --- Description panel: single column, scrollable ---
             int descY = guiTop + 206;
             int descBottom = guiTop + GUI_H - 10;
-            int descMaxLines = (descBottom - descY - 2) / 9;
             g.enableScissor(guiLeft + 10, descY, guiLeft + GUI_W - 10, descBottom);
 
             String[] details = CLASS_DETAILS[selectedTab];

@@ -9,7 +9,6 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -37,6 +36,9 @@ public class MinimapHud {
     private static int lastScanX = Integer.MIN_VALUE;
     private static int lastScanZ = Integer.MIN_VALUE;
     private static long lastScanTick = 0;
+    private static int standStillTicks = 0;
+    private static java.util.List<Monster> cachedMobs = null;
+    private static java.util.List<Player> cachedPlayers = null;
 
     public static void toggle() { enabled = !enabled; }
     public static boolean isEnabled() { return enabled; }
@@ -70,9 +72,10 @@ public class MinimapHud {
         int px = player.getBlockX();
         int pz = player.getBlockZ();
 
-        // Rebuild every frame if moved, or every tick regardless
+        // Rebuild only when player moves to a new block, throttled to every 10 ticks (0.5s)
         long gameTick = level.getGameTime();
-        if (px != lastScanX || pz != lastScanZ || gameTick != lastScanTick) {
+        boolean moved = px != lastScanX || pz != lastScanZ;
+        if (moved && gameTick - lastScanTick >= 10) {
             rebuildTexture(level, px, pz);
             lastScanX = px;
             lastScanZ = pz;
@@ -88,10 +91,15 @@ public class MinimapHud {
         int centerY = mapY + MAP_SIZE / 2;
         g.fill(centerX - 1, centerY - 1, centerX + 2, centerY + 2, 0xFFFFFFFF);
 
-        // Lv20: Mob dots (red)
+        // Lv20 EXCLUSIVE: Mob dots (red) — only for Adventurer class
+        // Throttled: only refresh entity lists every 10 ticks (0.5s)
         int advLevel = ClientClassData.getLevel(ProfessionType.ADVENTURER);
-        if (advLevel >= 20) {
-            for (Monster mob : level.getEntitiesOfClass(Monster.class, player.getBoundingBox().inflate(SCAN_RADIUS))) {
+        boolean isAdventurer = ClientClassData.getChosenClass() == ClassType.ADVENTURER;
+        if (isAdventurer && advLevel >= 20 && gameTick % 10 == 0) {
+            cachedMobs = level.getEntitiesOfClass(Monster.class, player.getBoundingBox().inflate(SCAN_RADIUS));
+        }
+        if (isAdventurer && advLevel >= 20 && cachedMobs != null) {
+            for (Monster mob : cachedMobs) {
                 int dotX = mapX + (int) ((mob.getX() - px + SCAN_RADIUS) * MAP_SIZE / (SCAN_RADIUS * 2));
                 int dotY = mapY + (int) ((mob.getZ() - pz + SCAN_RADIUS) * MAP_SIZE / (SCAN_RADIUS * 2));
                 if (dotX >= mapX && dotX < mapX + MAP_SIZE - 1 && dotY >= mapY && dotY < mapY + MAP_SIZE - 1) {
@@ -100,17 +108,32 @@ public class MinimapHud {
             }
         }
 
-        // Lv50: Player dots (green, standing still only)
-        if (advLevel >= 50 && player.getDeltaMovement().horizontalDistance() < 0.01) {
-            for (Player other : level.getEntitiesOfClass(Player.class, player.getBoundingBox().inflate(SCAN_RADIUS))) {
-                if (other != player && !other.isShiftKeyDown()) {
-                    int dotX = mapX + (int) ((other.getX() - px + SCAN_RADIUS) * MAP_SIZE / (SCAN_RADIUS * 2));
-                    int dotY = mapY + (int) ((other.getZ() - pz + SCAN_RADIUS) * MAP_SIZE / (SCAN_RADIUS * 2));
-                    if (dotX >= mapX && dotX < mapX + MAP_SIZE - 1 && dotY >= mapY && dotY < mapY + MAP_SIZE - 1) {
-                        g.fill(dotX, dotY, dotX + 3, dotY + 3, 0xFF33FF33);
+        // Lv50 EXCLUSIVE: Player dots (green) — must stand still for 10 seconds
+        if (isAdventurer && advLevel >= 50) {
+            if (player.getDeltaMovement().horizontalDistance() < 0.01) {
+                standStillTicks++;
+            } else {
+                standStillTicks = 0;
+                cachedPlayers = null;
+            }
+
+            // Only search for players every 10 ticks while standing still
+            if (standStillTicks >= 200 && gameTick % 10 == 5) {
+                cachedPlayers = level.getEntitiesOfClass(Player.class, player.getBoundingBox().inflate(SCAN_RADIUS));
+            }
+            if (standStillTicks >= 200 && cachedPlayers != null) {
+                for (Player other : cachedPlayers) {
+                    if (other != player && !other.isShiftKeyDown()) {
+                        int dotX = mapX + (int) ((other.getX() - px + SCAN_RADIUS) * MAP_SIZE / (SCAN_RADIUS * 2));
+                        int dotY = mapY + (int) ((other.getZ() - pz + SCAN_RADIUS) * MAP_SIZE / (SCAN_RADIUS * 2));
+                        if (dotX >= mapX && dotX < mapX + MAP_SIZE - 1 && dotY >= mapY && dotY < mapY + MAP_SIZE - 1) {
+                            g.fill(dotX, dotY, dotX + 3, dotY + 3, 0xFF33FF33);
+                        }
                     }
                 }
             }
+        } else {
+            standStillTicks = 0;
         }
 
         // Frame overlay
@@ -199,13 +222,4 @@ public class MinimapHud {
         return 0x333333;
     }
 
-    /**
-     * Convert RGB int to ABGR format used by NativeImage.
-     */
-    private int toABGR(int rgb) {
-        int r = (rgb >> 16) & 0xFF;
-        int g = (rgb >> 8) & 0xFF;
-        int b = rgb & 0xFF;
-        return 0xFF000000 | (b << 16) | (g << 8) | r;
-    }
 }

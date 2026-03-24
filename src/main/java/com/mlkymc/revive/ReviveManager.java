@@ -3,7 +3,6 @@ package com.mlkymc.revive;
 import com.mlkymc.config.MlkyConfig;
 import com.mlkymc.ghost.GhostManager;
 import com.mlkymc.storage.JsonStorage;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;

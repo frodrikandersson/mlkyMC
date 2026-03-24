@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "B",
+    "S",
+    "B"
+  ],
+  "key": {
+    "B": "mlkymc:soulstone_brick",
+    "S": "minecraft:soul_sand"
+  },
+  "result": {
+    "id": "mlkymc:soul_pillar",
+    "count": 2
+  }
+}

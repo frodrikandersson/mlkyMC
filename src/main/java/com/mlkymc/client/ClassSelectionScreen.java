@@ -37,57 +37,78 @@ public class ClassSelectionScreen extends Screen {
     // Max 25 chars per line. Use "" for blank lines.
     private static final String[][][] EVERYONE_INFO = {
             { // Adventurer
+                    {"HOW TO GAIN XP:", "55FFFF"},
+                    {"  Explore new blocks", "778899"},
+                    {"  Kill hostile mobs", "778899"},
+                    {"    (harder = more XP)", "778899"},
+                    {"  Craft Adventurer", "778899"},
+                    {"    exclusive recipes", "778899"},
+                    {"", ""},
                     {"DEBUFF:", "CC8888"},
                     {"Hostile mob drop-rate", "CC8888"},
                     {"and drop-chance -50%", "CC8888"},
                     {"", ""},
                     {"Lv5:  Debuff -40%", "99AABB"},
-                    {"  Gain +2 max health", "778899"},
-                    {"Lv10: Auto-step 1 block", "99AABB"},
-                    {"  Gain +4 max health", "778899"},
+                    {"  +2 max health (1 heart)", "778899"},
+                    {"Lv10: +4 max health", "99AABB"},
                     {"Lv15: Debuff -30%", "99AABB"},
-                    {"  Gain +6 max health", "778899"},
-                    {"Lv20: Jump 1.5 blocks", "99AABB"},
-                    {"  Gain +8 max health", "778899"},
+                    {"  +6 max health", "778899"},
+                    {"Lv20: +8 max health", "99AABB"},
                     {"Lv25: Debuff -20%", "99AABB"},
-                    {"  Gain +10 max health", "778899"},
+                    {"  +10 max health", "778899"},
                     {"Lv30: Wind-up damage", "99AABB"},
                     {"  Sprint 10 blocks for", "778899"},
-                    {"  +5 bonus melee dmg", "778899"},
-                    {"  Gain +12 max health", "778899"},
+                    {"  +5 bonus melee dmg.", "778899"},
+                    {"  +12 max health", "778899"},
                     {"Lv35: Debuff -10%", "99AABB"},
-                    {"  Gain +14 max health", "778899"},
+                    {"  +14 max health", "778899"},
                     {"Lv40: -50% fall damage", "99AABB"},
-                    {"  Gain +16 max health", "778899"},
+                    {"  +16 max health", "778899"},
                     {"Lv45: Debuff removed", "99AABB"},
-                    {"  Gain +18 max health", "778899"},
-                    {"Lv50: Movement speed+", "99AABB"},
-                    {"  Gain +20 max health", "778899"},
+                    {"  +18 max health", "778899"},
+                    {"Lv50: +20 max health", "99AABB"},
+                    {"  (10 hearts total)", "778899"},
             },
             { // Cleric
+                    {"HOW TO GAIN XP:", "55FFFF"},
+                    {"  Heal yourself/others", "778899"},
+                    {"  Resurrect players", "778899"},
+                    {"  Enchant items/books", "778899"},
+                    {"  Brew potions (harder", "778899"},
+                    {"    potions = more XP)", "778899"},
+                    {"  Pick up XP orbs", "778899"},
+                    {"  Craft Cleric recipes", "778899"},
+                    {"", ""},
                     {"DEBUFF:", "CC8888"},
-                    {"EXP gain -50%", "CC8888"},
+                    {"Regular EXP gain -50%", "CC8888"},
                     {"", ""},
                     {"Lv5:  EXP debuff -40%", "99AABB"},
-                    {"Lv10: Healing Pulse", "99AABB"},
-                    {"  radius increased", "778899"},
+                    {"Lv10: Faster HP regen", "99AABB"},
+                    {"  when food bar is full", "778899"},
                     {"Lv15: EXP debuff -30%", "99AABB"},
                     {"Lv20: Potions you brew", "99AABB"},
                     {"  last 25% longer", "778899"},
                     {"Lv25: EXP debuff -20%", "99AABB"},
-                    {"Lv30: Potions you drink", "99AABB"},
-                    {"  give weaker version", "778899"},
-                    {"  to nearby allies", "778899"},
+                    {"Lv30: Devoted Life for", "99AABB"},
+                    {"  all non-Cleric classes", "778899"},
+                    {"  (revive at 20% HP,", "778899"},
+                    {"  1hr cooldown)", "778899"},
                     {"Lv35: EXP debuff -10%", "99AABB"},
                     {"Lv40: 25% chance to not", "99AABB"},
-                    {"  consume lapis when", "778899"},
-                    {"  enchanting", "778899"},
+                    {"  consume lapis", "778899"},
                     {"Lv45: EXP debuff removed", "99AABB"},
-                    {"Lv50: Enchanting can go", "99AABB"},
-                    {"  +1 above max level", "778899"},
-                    {"  (e.g. Sharpness VI)", "778899"},
+                    {"Lv50: Better enchants", "99AABB"},
+                    {"  from enchanting table", "778899"},
             },
             { // Farmhand
+                    {"HOW TO GAIN XP:", "55FFFF"},
+                    {"  Breed or kill animals", "778899"},
+                    {"  Fish", "778899"},
+                    {"  Harvest grown crops", "778899"},
+                    {"  Cook food (smelting)", "778899"},
+                    {"  Craft Farmhand", "778899"},
+                    {"    exclusive recipes", "778899"},
+                    {"", ""},
                     {"DEBUFF:", "CC8888"},
                     {"Neutral mob, fishing &", "CC8888"},
                     {"farming drops -50%", "CC8888"},
@@ -97,65 +118,75 @@ public class ClassSelectionScreen extends Screen {
                     {"  Right-click harvest", "778899"},
                     {"  replants the crop", "778899"},
                     {"Lv15: Debuff -30%", "99AABB"},
-                    {"Lv20: Animals you breed", "99AABB"},
-                    {"  grow 25% faster &", "778899"},
-                    {"  breed CD -25%", "778899"},
+                    {"Lv20: Breed growth +25%", "99AABB"},
+                    {"  Breed cooldown -25%", "778899"},
                     {"Lv25: Debuff -20%", "99AABB"},
                     {"Lv30: 2x shearing &", "99AABB"},
-                    {"  seeds. Crops 2x tick", "778899"},
+                    {"  seeds. Grass drops", "778899"},
+                    {"  more farm seeds.", "778899"},
+                    {"  Crops tick 2x speed", "778899"},
                     {"Lv35: Debuff -10%", "99AABB"},
                     {"Lv40: Rare fishing", "99AABB"},
                     {"  drops (Saddle, Name", "778899"},
                     {"  Tag, Heart of Sea)", "778899"},
                     {"Lv45: Debuff removed", "99AABB"},
-                    {"Lv50: Crops in chunk", "99AABB"},
-                    {"  grow at 4x speed", "778899"},
+                    {"Lv50: Crops in 10 block", "99AABB"},
+                    {"  radius grow at 4x", "778899"},
             },
             { // MineCrafter
+                    {"HOW TO GAIN XP:", "55FFFF"},
+                    {"  Mine stone and ores", "778899"},
+                    {"  Chop wood", "778899"},
+                    {"  Craft items (XP based", "778899"},
+                    {"    on material value)", "778899"},
+                    {"  Smelt ores to ingots", "778899"},
+                    {"  Craft MineCrafter", "778899"},
+                    {"    exclusive recipes", "778899"},
+                    {"", ""},
                     {"DEBUFF:", "CC8888"},
                     {"Mining & woodcutting", "CC8888"},
                     {"drop-chance -50%", "CC8888"},
                     {"", ""},
                     {"Lv5:  Debuff -40%", "99AABB"},
-                    {"Lv10: Haste I while", "99AABB"},
-                    {"  mining stone.", "778899"},
-                    {"  +1 block reach", "778899"},
+                    {"Lv10: Haste I (mining)", "99AABB"},
                     {"Lv15: Debuff -30%", "99AABB"},
-                    {"Lv20: Chance to get XP", "99AABB"},
-                    {"  from mining stone", "778899"},
-                    {"  (not player-placed)", "778899"},
+                    {"Lv20: XP orbs from", "99AABB"},
+                    {"  mining stone", "778899"},
                     {"Lv25: Debuff -20%", "99AABB"},
-                    {"Lv30: Rare chance to", "99AABB"},
-                    {"  find Milky Stars", "778899"},
-                    {"  embedded in ore", "778899"},
+                    {"Lv30: Rare Milky Stars", "99AABB"},
+                    {"  from mining ore", "778899"},
                     {"Lv35: Debuff -10%", "99AABB"},
                     {"Lv40: Crafting produces", "99AABB"},
-                    {"  +1 output (stacks)", "778899"},
+                    {"  +1 output (25%)", "778899"},
+                    {"  +1 block reach", "778899"},
                     {"Lv45: Debuff removed", "99AABB"},
                     {"Lv50: More Milky Stars", "99AABB"},
-                    {"  from mining ore", "778899"},
+                    {"  from mining", "778899"},
             },
             { // Smith
+                    {"HOW TO GAIN XP:", "55FFFF"},
+                    {"  Smelt non-food items", "778899"},
+                    {"  Use anvil to repair", "778899"},
+                    {"    or enchant items", "778899"},
+                    {"  Craft Smith exclusive", "778899"},
+                    {"    recipes", "778899"},
+                    {"", ""},
                     {"DEBUFF:", "CC8888"},
                     {"Smelting speed -50%", "CC8888"},
                     {"", ""},
-                    {"Lv5:  Debuff -40%", "99AABB"},
-                    {"Lv10: 25% chance to not", "99AABB"},
-                    {"  consume fuel when", "778899"},
-                    {"  smelting", "778899"},
-                    {"Lv15: Debuff -30%", "99AABB"},
-                    {"Lv20: Items repaired on", "99AABB"},
-                    {"  anvil gain +10% bonus", "778899"},
-                    {"  durability above max", "778899"},
-                    {"Lv25: Debuff -20%", "99AABB"},
-                    {"Lv30: Permanent +1", "99AABB"},
-                    {"  Resistance effect", "778899"},
-                    {"Lv35: Debuff -10%", "99AABB"},
-                    {"Lv40: Too Expensive cap", "99AABB"},
-                    {"  raised from 40 to 55", "778899"},
-                    {"Lv45: Debuff removed", "99AABB"},
-                    {"Lv50: +1 Resistance", "99AABB"},
-                    {"  (stacks with Lv30)", "778899"},
+                    {"Lv5:  Smelt debuff -40%", "99AABB"},
+                    {"Lv10: +1 Armor (perm.)", "99AABB"},
+                    {"  25% fuel saving", "778899"},
+                    {"Lv15: Smelt debuff -30%", "99AABB"},
+                    {"Lv20: Anvil repair gives", "99AABB"},
+                    {"  +10% bonus durability", "778899"},
+                    {"Lv25: Smelt debuff -20%", "99AABB"},
+                    {"Lv30: +1 Armor (total 2)", "99AABB"},
+                    {"Lv35: Smelt debuff -10%", "99AABB"},
+                    {"Lv40: Anvil Too Expensive", "99AABB"},
+                    {"  cap 40 -> 55 levels", "778899"},
+                    {"Lv45: Smelt debuff gone", "99AABB"},
+                    {"Lv50: +1 Armor (total 3)", "99AABB"},
                     {"  Breathe underwater", "778899"},
                     {"  longer", "778899"},
             },
@@ -165,28 +196,40 @@ public class ClassSelectionScreen extends Screen {
     private static final String[][][] EXCLUSIVE_INFO = {
             { // Adventurer
                     {"ACTIVE SKILLS:", "55FFFF"},
-                    {"Weapon Dash:", "AABBCC"},
-                    {"  Hold RMB with sword", "778899"},
-                    {"  to dash forward.", "778899"},
-                    {"  Distance scales with", "778899"},
-                    {"  hold duration.", "778899"},
-                    {"Wind-up Damage:", "AABBCC"},
-                    {"  Sprint 10 blocks to", "778899"},
-                    {"  charge +5 bonus dmg.", "778899"},
-                    {"  Lasts 10s, resets on", "778899"},
-                    {"  hit.", "778899"},
+                    {"Primary: Weapon Dash", "AABBCC"},
+                    {"  Hold to charge,", "778899"},
+                    {"  release to dash.", "778899"},
+                    {"  Longer hold = more", "778899"},
+                    {"  distance. No cooldown.", "778899"},
+                    {"Secondary: Map HUD", "AABBCC"},
+                    {"  Toggle the Map Wall", "778899"},
+                    {"  HUD on/off.", "778899"},
+                    {"Power Shot:", "AABBCC"},
+                    {"  Bow/xbow speed boost.", "778899"},
+                    {"  Auto on next shot.", "778899"},
+                    {"  15s cooldown.", "778899"},
                     {"", ""},
                     {"SPECIAL EFFECTS:", "55FF55"},
-                    {"  2x EXP gain", "88CC88"},
+                    {"  2x Adventurer EXP", "88CC88"},
                     {"  Weapon durability+", "88CC88"},
-                    {"  2x hostile mob drops", "88CC88"},
-                    {"  Minimap HUD (M key)", "88CC88"},
+                    {"    (swords, bows, xbows)", "88CC88"},
+                    {"  Map Wall HUD", "88CC88"},
                     {"", ""},
                     {"EXCLUSIVE PASSIVES:", "FFAA00"},
-                    {"  Lv20: Mobs shown on", "CCAA55"},
-                    {"    minimap", "CCAA55"},
-                    {"  Lv50: Non-crouched", "CCAA55"},
-                    {"    players on minimap", "CCAA55"},
+                    {"  Lv5:  Mob drops +20%", "CCAA55"},
+                    {"  Lv10: Quick step", "CCAA55"},
+                    {"    (auto 1-block step)", "CCAA55"},
+                    {"  Lv15: Mob drops +40%", "CCAA55"},
+                    {"  Lv20: Mobs on map HUD", "CCAA55"},
+                    {"    Jump 1.5 blocks", "CCAA55"},
+                    {"  Lv25: Mob drops +60%", "CCAA55"},
+                    {"  Lv35: Mob drops +80%", "CCAA55"},
+                    {"  Lv40: Bow/xbow charge", "CCAA55"},
+                    {"    time halved", "CCAA55"},
+                    {"  Lv45: Mob drops +100%", "CCAA55"},
+                    {"  Lv50: Movement speed+", "CCAA55"},
+                    {"    See non-crouched", "CCAA55"},
+                    {"    players on map", "CCAA55"},
                     {"    (stand still 10s)", "CCAA55"},
                     {"", ""},
                     {"CRAFTABLE ITEMS:", "B4C8DC"},
@@ -199,28 +242,58 @@ public class ClassSelectionScreen extends Screen {
             },
             { // Cleric
                     {"ACTIVE SKILLS:", "55FFFF"},
-                    {"Healing Pulse:", "AABBCC"},
-                    {"  RMB with Milky Star", "778899"},
-                    {"  to heal nearby players", "778899"},
-                    {"  Costs EXP + 1 star.", "778899"},
-                    {"  Scales with level.", "778899"},
-                    {"Resurrection:", "AABBCC"},
-                    {"  RMB at player grave.", "778899"},
-                    {"  Within 60s: 1 star.", "778899"},
-                    {"  After 60s: 1 totem.", "778899"},
-                    {"  10min cooldown.", "778899"},
+                    {"Primary: Heal", "AABBCC"},
+                    {"  Costs 40 Soul Energy.", "778899"},
+                    {"  Heals 3 hearts to all", "778899"},
+                    {"  nearby players (8 blk)", "778899"},
+                    {"  Upgradeable via Altar.", "778899"},
+                    {"Secondary: Soul Conduit", "AABBCC"},
+                    {"  Toggle XP/Soul Energy", "778899"},
+                    {"  mode. Look at a grave", "778899"},
+                    {"  to resurrect instead.", "778899"},
+                    {"  Within 60s: free.", "778899"},
+                    {"  After 60s: needs Totem", "778899"},
+                    {"", ""},
+                    {"SOUL ENERGY:", "AA55FF"},
+                    {"  Toggle SE mode to", "8855CC"},
+                    {"  collect Soul Energy", "8855CC"},
+                    {"  from XP orbs instead.", "8855CC"},
+                    {"  R-click Milky Star in", "8855CC"},
+                    {"  SE mode = +20 SE.", "8855CC"},
+                    {"  Build a Soul Altar to", "8855CC"},
+                    {"  unlock tier abilities!", "8855CC"},
                     {"", ""},
                     {"SPECIAL EFFECTS:", "55FF55"},
-                    {"  2x EXP gain", "88CC88"},
-                    {"  Cheaper enchanting", "88CC88"},
-                    {"  Potions stronger +1", "88CC88"},
+                    {"  2x Cleric EXP", "88CC88"},
+                    {"  Reduced enchant costs", "88CC88"},
+                    {"  Brewed potions +1 amp", "88CC88"},
                     {"  Chance to save levels", "88CC88"},
                     {"", ""},
                     {"EXCLUSIVE PASSIVES:", "FFAA00"},
-                    {"  Lv50: Resurrection", "CCAA55"},
-                    {"    cooldown halved", "CCAA55"},
+                    {"  Lv5:  Regular XP +20%", "CCAA55"},
+                    {"  Lv10: Healing radius+", "CCAA55"},
+                    {"    Devoted Life (20%", "CCAA55"},
+                    {"    HP, 1hr cooldown)", "CCAA55"},
+                    {"  Lv15: Regular XP +40%", "CCAA55"},
+                    {"  Lv20: Devoted Life", "CCAA55"},
+                    {"    (40% HP, 45min CD)", "CCAA55"},
+                    {"  Lv25: Regular XP +60%", "CCAA55"},
+                    {"  Lv30: Potion sharing", "CCAA55"},
+                    {"  Lv35: Regular XP +80%", "CCAA55"},
+                    {"  Lv40: Devoted Life", "CCAA55"},
+                    {"    (60% HP, 30min CD)", "CCAA55"},
+                    {"  Lv45: Regular XP +100%", "CCAA55"},
+                    {"  Lv50: Enchants +1 max", "CCAA55"},
+                    {"    Resurrection CD/2", "CCAA55"},
+                    {"    Devoted Life (80%", "CCAA55"},
+                    {"    HP, 20min CD)", "CCAA55"},
                     {"", ""},
                     {"CRAFTABLE ITEMS:", "B4C8DC"},
+                    {"  Soulstone Brick", "99AABB"},
+                    {"  Soul Pillar", "99AABB"},
+                    {"  Conduit Core", "99AABB"},
+                    {"  Soul Altar Capstone", "99AABB"},
+                    {"  Tome of Soul Warden", "99AABB"},
                     {"  Totem of Resurrection", "99AABB"},
                     {"  Holy Water", "99AABB"},
                     {"  Enchanted Golden Apple", "99AABB"},
@@ -230,77 +303,101 @@ public class ClassSelectionScreen extends Screen {
             },
             { // Farmhand
                     {"ACTIVE SKILLS:", "55FFFF"},
-                    {"Nature's Call:", "AABBCC"},
-                    {"  Crouch to nurture", "778899"},
-                    {"  crops in 5-block", "778899"},
-                    {"  radius. ~10x growth.", "778899"},
-                    {"Whisperer:", "AABBCC"},
-                    {"  Shift+RMB. Charms", "778899"},
-                    {"  hostile mobs to fight", "778899"},
-                    {"  for you (10s). Neutral", "778899"},
-                    {"  mobs follow (1min).", "778899"},
+                    {"Primary: Nature Call", "AABBCC"},
+                    {"  Toggle crop growth", "778899"},
+                    {"  boost in 5-block", "778899"},
+                    {"  radius (+50% base).", "778899"},
+                    {"  Scales with level.", "778899"},
+                    {"Secondary: Whisperer", "AABBCC"},
+                    {"  Charm hostiles (10s).", "778899"},
+                    {"  Friendly mobs follow", "778899"},
+                    {"  (1min). 10 block range.", "778899"},
                     {"  1min cooldown.", "778899"},
                     {"", ""},
                     {"SPECIAL EFFECTS:", "55FF55"},
-                    {"  2x EXP gain", "88CC88"},
-                    {"  Passive crop growth", "88CC88"},
+                    {"  2x Farmhand EXP", "88CC88"},
+                    {"  Passive crop growth+", "88CC88"},
                     {"  Twin breeding chance", "88CC88"},
                     {"  Fish luck/lure +1", "88CC88"},
                     {"", ""},
                     {"EXCLUSIVE PASSIVES:", "FFAA00"},
-                    {"  Lv20: +1 item per", "CCAA55"},
-                    {"    fish catch (2 total)", "CCAA55"},
-                    {"  Lv30: Lava fishing!", "CCAA55"},
-                    {"    Custom nether loot", "CCAA55"},
-                    {"  Lv35: Food gives", "CCAA55"},
-                    {"    Regen, Speed, Luck", "CCAA55"},
-                    {"  Lv40: +2 items per", "CCAA55"},
-                    {"    fish catch (3 total)", "CCAA55"},
-                    {"  Lv50: Crafted food", "CCAA55"},
-                    {"    gives full buffs", "CCAA55"},
-                    {"    to any player", "CCAA55"},
+                    {"  Lv5:  Farm drops +20%", "CCAA55"},
+                    {"  Lv10: Nature's Call", "CCAA55"},
+                    {"    +100% growth speed", "CCAA55"},
+                    {"    Composters: 20% Milky Star", "CCAA55"},
+                    {"  Lv15: Farm drops +40%", "CCAA55"},
+                    {"  Lv20: +1 fish item (2)", "CCAA55"},
+                    {"    Nature +150% growth", "CCAA55"},
+                    {"  Lv25: Farm drops +60%", "CCAA55"},
+                    {"  Lv30: Nether lava fishing!", "CCAA55"},
+                    {"    Nature +200% growth", "CCAA55"},
+                    {"  Lv35: Farm drops +80%", "CCAA55"},
+                    {"    Food gives Regen,", "CCAA55"},
+                    {"    Speed, Luck", "CCAA55"},
+                    {"  Lv40: +1 fish item (3)", "CCAA55"},
+                    {"    Nature +250% growth", "CCAA55"},
+                    {"  Lv45: Farm drops +100%", "CCAA55"},
+                    {"  Lv50: Food gives full", "CCAA55"},
+                    {"    buffs to all players", "CCAA55"},
+                    {"    (+Fortune, +Looting)", "CCAA55"},
+                    {"    Nature +300% growth", "CCAA55"},
+                    {"    Nature radius -> 10", "CCAA55"},
                     {"", ""},
                     {"CRAFTABLE ITEMS:", "B4C8DC"},
                     {"  Growth Fertilizer", "99AABB"},
                     {"  Animal Feed", "99AABB"},
                     {"  Scarecrow", "99AABB"},
                     {"  Living Essence", "99AABB"},
-                    {"  Spawn Eggs (all mob", "99AABB"},
-                    {"    types for spawners)", "99AABB"},
+                    {"  Spawn Eggs (for", "99AABB"},
+                    {"    mob spawners)", "99AABB"},
             },
             { // MineCrafter
                     {"ACTIVE SKILLS:", "55FFFF"},
                     {"Vein Mine:", "AABBCC"},
-                    {"  Shift+mine ore to", "778899"},
-                    {"  break all connected", "778899"},
-                    {"  ore (8-18 blocks).", "778899"},
+                    {"  Crouch+mine ore with", "778899"},
+                    {"  pickaxe to break all", "778899"},
+                    {"  connected (8-18+).", "778899"},
                     {"Timber:", "AABBCC"},
-                    {"  Shift+chop log to", "778899"},
-                    {"  fell the whole tree.", "778899"},
-                    {"Auto-Smelt:", "AABBCC"},
+                    {"  Crouch+chop log with", "778899"},
+                    {"  axe to fell tree.", "778899"},
+                    {"Primary: Jackhammer", "AABBCC"},
+                    {"  10s instant-mine +", "778899"},
+                    {"  knockback on hits.", "778899"},
+                    {"  1min cooldown.", "778899"},
+                    {"Secondary: Auto-Smelt", "AABBCC"},
                     {"  Toggle. Ore drops", "778899"},
-                    {"  come out smelted.", "778899"},
+                    {"  become ingots + glow.", "778899"},
+                    {"  Uses 1 coal/80s.", "778899"},
                     {"", ""},
                     {"SPECIAL EFFECTS:", "55FF55"},
-                    {"  2x EXP gain", "88CC88"},
+                    {"  2x MineCrafter EXP", "88CC88"},
                     {"  Ingredient return", "88CC88"},
                     {"  Fortune +1 built-in", "88CC88"},
                     {"  2x pick/axe durabil.", "88CC88"},
                     {"", ""},
                     {"EXCLUSIVE PASSIVES:", "FFAA00"},
-                    {"  Lv20: +1 Haste and", "CCAA55"},
-                    {"    +1 Fortune on top", "CCAA55"},
-                    {"  Lv30: Crafting always", "CCAA55"},
-                    {"    produces 2x output", "CCAA55"},
-                    {"  Lv40: Another +1", "CCAA55"},
-                    {"    Haste/Fortune.", "CCAA55"},
-                    {"    +2 block reach.", "CCAA55"},
-                    {"  Lv50: Vein Mine", "CCAA55"},
-                    {"    limit doubled", "CCAA55"},
+                    {"  Lv5:  Mine drops +20%", "CCAA55"},
+                    {"  Lv10: +1 Reach", "CCAA55"},
+                    {"  Lv15: Mine drops +40%", "CCAA55"},
+                    {"  Lv20: +1 Haste, +1", "CCAA55"},
+                    {"    Fortune (permanent)", "CCAA55"},
+                    {"  Lv25: Mine drops +60%", "CCAA55"},
+                    {"  Lv30: 2x craft output", "CCAA55"},
+                    {"    Good chance Milky", "CCAA55"},
+                    {"    Stars from mining", "CCAA55"},
+                    {"  Lv35: Mine drops +80%", "CCAA55"},
+                    {"  Lv40: +1 Haste, +1", "CCAA55"},
+                    {"    Fortune (stacks)", "CCAA55"},
+                    {"    +1 Reach (total +2)", "CCAA55"},
+                    {"  Lv45: Mine drops +100%", "CCAA55"},
+                    {"  Lv50: Vein Mine limit", "CCAA55"},
+                    {"    doubled. Jackhammer", "CCAA55"},
+                    {"    30s + bonus damage", "CCAA55"},
                     {"", ""},
                     {"CRAFTABLE ITEMS:", "B4C8DC"},
-                    {"  Reinforced Pickaxe", "99AABB"},
-                    {"  Reinforced Axe", "99AABB"},
+                    {"  Reinforced Pick/Axe", "99AABB"},
+                    {"    (gives Vein Mine /", "99AABB"},
+                    {"    Timber to anyone!)", "99AABB"},
                     {"  Builder's Wand", "99AABB"},
                     {"  Ender Chest Backpack", "99AABB"},
                     {"  Lodestone", "99AABB"},
@@ -309,36 +406,41 @@ public class ClassSelectionScreen extends Screen {
             { // Smith
                     {"ACTIVE SKILLS:", "55FFFF"},
                     {"Forge Heat:", "AABBCC"},
-                    {"  Shift+RMB furnace", "778899"},
-                    {"  to create lava in", "778899"},
-                    {"  empty fuel slots.", "778899"},
-                    {"Emergency Repair:", "AABBCC"},
-                    {"  RMB to restore 25%", "778899"},
-                    {"  durability. Costs", "778899"},
-                    {"  iron. 10s cooldown.", "778899"},
-                    {"Tempered Body:", "AABBCC"},
-                    {"  Fire resistance", "778899"},
-                    {"  (half dmg). Activate", "778899"},
-                    {"  to extinguish fire.", "778899"},
+                    {"  Shift+RMB furnace to", "778899"},
+                    {"  fill fuel with lava.", "778899"},
+                    {"Primary: Temp. Mind", "AABBCC"},
+                    {"  No durability loss on", "778899"},
+                    {"  all items for 20s.", "778899"},
+                    {"  40s cooldown.", "778899"},
+                    {"Secondary: Temp. Body", "AABBCC"},
+                    {"  Passive: fire resist.", "778899"},
+                    {"  Activate: extinguish", "778899"},
+                    {"  fire. 10s cooldown.", "778899"},
                     {"", ""},
                     {"SPECIAL EFFECTS:", "55FF55"},
-                    {"  2x EXP gain", "88CC88"},
+                    {"  2x Smith EXP", "88CC88"},
                     {"  Anvil 50% cheaper", "88CC88"},
                     {"  Faster smelting", "88CC88"},
-                    {"  Less armor dur loss", "88CC88"},
+                    {"  Half armor dur loss", "88CC88"},
                     {"", ""},
                     {"EXCLUSIVE PASSIVES:", "FFAA00"},
-                    {"  Lv10: Unbreakable", "CCAA55"},
-                    {"    aura. Nearby players", "CCAA55"},
-                    {"    10% gain durability", "CCAA55"},
-                    {"  Lv30: Anvil never", "CCAA55"},
-                    {"    breaks", "CCAA55"},
-                    {"  Lv40: +1 Haste and", "CCAA55"},
-                    {"    +1 Fortune", "CCAA55"},
-                    {"  Lv50: Can combine", "CCAA55"},
-                    {"    conflicting enchants", "CCAA55"},
-                    {"    (e.g. Smite+Sharp)", "CCAA55"},
-                    {"    at 3x level cost", "CCAA55"},
+                    {"  Lv5:  Smelt speed +20%", "CCAA55"},
+                    {"  Lv10: Unbreakable aura", "CCAA55"},
+                    {"    (10% dur gain near)", "CCAA55"},
+                    {"  Lv15: Smelt speed +40%", "CCAA55"},
+                    {"  Lv20: Milky Stars from", "CCAA55"},
+                    {"    smelting (low chance)", "CCAA55"},
+                    {"  Lv25: Smelt speed +60%", "CCAA55"},
+                    {"  Lv30: Anvil never breaks", "CCAA55"},
+                    {"    Tempered Mind/Body", "CCAA55"},
+                    {"    AoE 10 block radius", "CCAA55"},
+                    {"  Lv35: Smelt speed +80%", "CCAA55"},
+                    {"  Lv40: Mob slowdown aura", "CCAA55"},
+                    {"    Pressure anvil aura", "CCAA55"},
+                    {"  Lv45: Smelt speed+100%", "CCAA55"},
+                    {"  Lv50: Combine conflict", "CCAA55"},
+                    {"    enchants (3x cost)", "CCAA55"},
+                    {"    e.g. Smite+Sharpness", "CCAA55"},
                     {"", ""},
                     {"CRAFTABLE ITEMS:", "B4C8DC"},
                     {"  Netherite Template", "99AABB"},
@@ -346,9 +448,7 @@ public class ClassSelectionScreen extends Screen {
                     {"  Armor Plating", "99AABB"},
                     {"  Soul Forge", "99AABB"},
                     {"  Tempered Plate", "99AABB"},
-                    {"  Mob Spawner Block", "99AABB"},
-                    {"    (needs Farmhand eggs", "99AABB"},
-                    {"    to set mob type)", "99AABB"},
+                    {"  Empty Mob Spawner", "99AABB"},
             },
     };
 
@@ -364,7 +464,6 @@ public class ClassSelectionScreen extends Screen {
     private static final int CLASS_SLOTS_X = 3;      // First slot x
 
     private static final int INFO_BAR_Y = 46;        // Middle info/header bar
-    private static final int INFO_BAR_H = 14;        // Header bar height
 
     private static final int PANEL_Y = 62;           // Content panels start
     private static final int PANEL_BOTTOM = GUI_H - 6;
@@ -379,7 +478,12 @@ public class ClassSelectionScreen extends Screen {
     private int rightScrollOffset = 0;
     private Button confirmButton;
     private boolean hasClass;
-    private boolean confirmPending = false; // True after first click, waiting for "Certain?" confirmation
+    private boolean confirmPending = false;
+
+    // Scrollbar drag state: 0=none, 1=left, 2=right
+    private int draggingScrollbar = 0;
+    private double dragStartY = 0;
+    private int dragStartOffset = 0;
 
     public ClassSelectionScreen() {
         super(Component.literal("Class Selection"));
@@ -430,7 +534,18 @@ public class ClassSelectionScreen extends Screen {
             int sx = guiLeft + CLASS_SLOTS_X + i * (CLASS_SLOT_W + CLASS_SLOT_GAP);
             int sy = guiTop + CLASS_SLOT_Y;
 
-            // Selection highlight: Top +1px, Left +1px, Bottom +2px, Right +4px from previous
+            // Chosen class: colored border to make it obvious at a glance
+            boolean isChosenClass = hasClass && CLASSES[i] == ClientClassData.getChosenClass();
+            if (isChosenClass) {
+                int cc = CLASSES[i].getColor() | 0xFF000000;
+                // Draw colored border (2px thick)
+                g.fill(sx + 2, sy, sx + CLASS_SLOT_W + 4, sy + 1, cc);           // top
+                g.fill(sx + 2, sy + CLASS_SLOT_H + 1, sx + CLASS_SLOT_W + 4, sy + CLASS_SLOT_H + 2, cc); // bottom
+                g.fill(sx + 2, sy, sx + 3, sy + CLASS_SLOT_H + 2, cc);           // left
+                g.fill(sx + CLASS_SLOT_W + 3, sy, sx + CLASS_SLOT_W + 4, sy + CLASS_SLOT_H + 2, cc); // right
+            }
+
+            // Selection highlight (currently viewed tab)
             if (i == selectedClass) {
                 g.fill(sx + 3, sy + 1, sx + CLASS_SLOT_W + 3, sy + CLASS_SLOT_H + 1, 0x30FFFFFF);
             } else if (mouseX >= sx && mouseX <= sx + CLASS_SLOT_W && mouseY >= sy && mouseY <= sy + CLASS_SLOT_H) {
@@ -559,15 +674,39 @@ public class ClassSelectionScreen extends Screen {
             double mx = this.minecraft.mouseHandler.xpos() * this.width / this.minecraft.getWindow().getScreenWidth();
             double my = this.minecraft.mouseHandler.ypos() * this.height / this.minecraft.getWindow().getScreenHeight();
 
-            // Check class slot clicks
+            // Check scrollbar clicks for drag
+            int leftSbX = guiLeft + LEFT_SB_X;
+            int rightSbX = guiLeft + RIGHT_SB_X;
+            int sbTop = guiTop + SB_TOP;
+            int sbBottom = guiTop + SB_BOTTOM;
+
+            if (mx >= leftSbX && mx <= leftSbX + SB_WIDTH + 2 && my >= sbTop && my <= sbBottom) {
+                draggingScrollbar = 1;
+                dragStartY = my;
+                dragStartOffset = leftScrollOffset;
+                return true;
+            }
+            if (mx >= rightSbX && mx <= rightSbX + SB_WIDTH + 2 && my >= sbTop && my <= sbBottom) {
+                draggingScrollbar = 2;
+                dragStartY = my;
+                dragStartOffset = rightScrollOffset;
+                return true;
+            }
+
+            // Check class slot clicks — skip if confirm button was clicked
+            boolean onConfirmBtn = confirmButton != null && confirmButton.visible
+                    && mx >= confirmButton.getX() && mx <= confirmButton.getX() + confirmButton.getWidth()
+                    && my >= confirmButton.getY() && my <= confirmButton.getY() + confirmButton.getHeight();
+
             for (int i = 0; i < 5; i++) {
                 int sx = guiLeft + CLASS_SLOTS_X + i * (CLASS_SLOT_W + CLASS_SLOT_GAP);
                 int sy = guiTop + CLASS_SLOT_Y;
                 if (mx >= sx && mx <= sx + CLASS_SLOT_W && my >= sy && my <= sy + CLASS_SLOT_H) {
+                    if (onConfirmBtn) return super.mouseClicked(event, consumed); // Let the button handle it
+                    if (i == selectedClass) return true; // Already selected, don't reset
                     selectedClass = i;
                     leftScrollOffset = 0;
                     rightScrollOffset = 0;
-                    // Reset confirm state when switching classes
                     confirmPending = false;
                     if (confirmButton != null) {
                         confirmButton.setMessage(Component.literal("Confirm"));
@@ -577,6 +716,41 @@ public class ClassSelectionScreen extends Screen {
             }
         }
         return super.mouseClicked(event, consumed);
+    }
+
+    @Override
+    public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double dragX, double dragY) {
+        if (draggingScrollbar != 0 && this.minecraft != null) {
+            double mouseY = this.minecraft.mouseHandler.ypos() * this.height / this.minecraft.getWindow().getScreenHeight();
+            int trackH = SB_BOTTOM - SB_TOP;
+            double deltaY = mouseY - dragStartY;
+            int totalLines;
+            int visibleLines = trackH / 9;
+
+            if (draggingScrollbar == 1) {
+                totalLines = getTotalLines(EVERYONE_INFO[selectedClass]) + (hasClass ? 0 : 5);
+            } else {
+                totalLines = getTotalLines(EXCLUSIVE_INFO[selectedClass]);
+            }
+
+            int maxScroll = Math.max(1, totalLines - visibleLines);
+            int newOffset = dragStartOffset + (int) (deltaY / trackH * maxScroll);
+            newOffset = Math.max(0, Math.min(maxScroll, newOffset));
+
+            if (draggingScrollbar == 1) {
+                leftScrollOffset = newOffset;
+            } else {
+                rightScrollOffset = newOffset;
+            }
+            return true;
+        }
+        return super.mouseDragged(event, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
+        draggingScrollbar = 0;
+        return super.mouseReleased(event);
     }
 
     @Override

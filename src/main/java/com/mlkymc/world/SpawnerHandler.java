@@ -31,43 +31,45 @@ import java.util.Map;
  */
 public class SpawnerHandler {
 
-    // Spawn limits per mob type
+    // Spawn limits per mob type (loaded from config)
     private static Map<EntityType<?>, Integer> spawnLimits;
 
     private void initLimits() {
         if (spawnLimits != null) return;
         spawnLimits = new HashMap<>();
 
-        // Hostile (64 spawns)
-        spawnLimits.put(EntityType.ZOMBIE, 64);
-        spawnLimits.put(EntityType.SKELETON, 64);
-        spawnLimits.put(EntityType.SPIDER, 64);
-        spawnLimits.put(EntityType.CAVE_SPIDER, 64);
-        spawnLimits.put(EntityType.BLAZE, 64);
-        spawnLimits.put(EntityType.SILVERFISH, 64);
-        spawnLimits.put(EntityType.MAGMA_CUBE, 64);
+        var limits = com.mlkymc.config.MlkyConfig.getSpawnerMobLimits();
 
-        // Neutral farm (128 spawns)
-        spawnLimits.put(EntityType.COW, 128);
-        spawnLimits.put(EntityType.SHEEP, 128);
-        spawnLimits.put(EntityType.CHICKEN, 128);
-        spawnLimits.put(EntityType.PIG, 128);
-        spawnLimits.put(EntityType.RABBIT, 128);
+        // Hostile
+        spawnLimits.put(EntityType.ZOMBIE, limits.zombie);
+        spawnLimits.put(EntityType.SKELETON, limits.skeleton);
+        spawnLimits.put(EntityType.SPIDER, limits.spider);
+        spawnLimits.put(EntityType.CAVE_SPIDER, limits.cave_spider);
+        spawnLimits.put(EntityType.BLAZE, limits.blaze);
+        spawnLimits.put(EntityType.SILVERFISH, limits.silverfish);
+        spawnLimits.put(EntityType.MAGMA_CUBE, limits.magma_cube);
 
-        // Neutral utility (32 spawns)
-        spawnLimits.put(EntityType.WOLF, 32);
-        spawnLimits.put(EntityType.BEE, 32);
-        spawnLimits.put(EntityType.IRON_GOLEM, 32);
+        // Farm animals
+        spawnLimits.put(EntityType.COW, limits.cow);
+        spawnLimits.put(EntityType.SHEEP, limits.sheep);
+        spawnLimits.put(EntityType.CHICKEN, limits.chicken);
+        spawnLimits.put(EntityType.PIG, limits.pig);
+        spawnLimits.put(EntityType.RABBIT, limits.rabbit);
 
-        // Neutral other (64 spawns)
-        spawnLimits.put(EntityType.HORSE, 64);
-        spawnLimits.put(EntityType.DONKEY, 64);
-        spawnLimits.put(EntityType.LLAMA, 64);
-        spawnLimits.put(EntityType.FOX, 64);
-        spawnLimits.put(EntityType.FROG, 64);
-        spawnLimits.put(EntityType.TURTLE, 64);
-        spawnLimits.put(EntityType.GOAT, 64);
-        spawnLimits.put(EntityType.CAT, 64);
+        // Utility
+        spawnLimits.put(EntityType.WOLF, limits.wolf);
+        spawnLimits.put(EntityType.BEE, limits.bee);
+        spawnLimits.put(EntityType.IRON_GOLEM, limits.iron_golem);
+        spawnLimits.put(EntityType.CAT, limits.cat);
+
+        // Other neutrals
+        spawnLimits.put(EntityType.HORSE, limits.horse);
+        spawnLimits.put(EntityType.DONKEY, limits.donkey);
+        spawnLimits.put(EntityType.LLAMA, limits.llama);
+        spawnLimits.put(EntityType.FOX, limits.fox);
+        spawnLimits.put(EntityType.FROG, limits.frog);
+        spawnLimits.put(EntityType.TURTLE, limits.turtle);
+        spawnLimits.put(EntityType.GOAT, limits.goat);
     }
 
     /**
@@ -119,7 +121,7 @@ public class SpawnerHandler {
         BaseSpawner spawner = spawnerBE.getSpawner();
         spawner.setEntityId(mobType, level, level.random, pos);
 
-        int limit = spawnLimits.getOrDefault(mobType, 64);
+        int limit = spawnLimits.getOrDefault(mobType, com.mlkymc.config.MlkyConfig.getSpawnerDefaultMaxSpawns());
         data.putInt("mlkymc_spawn_limit", limit);
         data.putInt("mlkymc_spawn_count", 0);
         data.putString("mlkymc_mob_type", EntityType.getKey(mobType).toString());
@@ -153,6 +155,22 @@ public class SpawnerHandler {
                 event.getPos().getY() + 0.5,
                 event.getPos().getZ() + 0.5,
                 new ItemStack(Items.SPAWNER)));
+    }
+
+    /**
+     * Spirit Ward: suppress hostile mob spawns within 30 blocks of active ward.
+     */
+    @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.HIGH)
+    public void onSpiritWardCheck(FinalizeSpawnEvent event) {
+        if (event.isCanceled()) return;
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.monster.Monster)) return;
+        if (event.getSpawnType() == EntitySpawnReason.SPAWNER) return; // Don't block player-placed spawners
+
+        net.minecraft.core.BlockPos spawnPos = event.getEntity().blockPosition();
+        if (com.mlkymc.classes.PowerHandler.isSpiritWardActive(spawnPos)) {
+            event.setSpawnCancelled(true);
+            event.setCanceled(true);
+        }
     }
 
     /**

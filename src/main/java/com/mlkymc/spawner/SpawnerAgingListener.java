@@ -43,7 +43,7 @@ public class SpawnerAgingListener {
         String key = SpawnerAgingManager.makeKey(dimension, spawnerPos.getX(), spawnerPos.getY(), spawnerPos.getZ());
 
         int count = manager.incrementAndGet(key);
-        int maxSpawns = MlkyConfig.getSpawnerMaxSpawns();
+        int maxSpawns = MlkyConfig.getSpawnerDefaultMaxSpawns();
 
         if (count >= maxSpawns) {
             // Break the spawner

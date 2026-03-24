@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "BSB",
+    "SOS",
+    "BSB"
+  ],
+  "key": {
+    "B": "minecraft:blackstone",
+    "S": "minecraft:soul_sand",
+    "O": "minecraft:soul_soil"
+  },
+  "result": {
+    "id": "mlkymc:soulstone_brick",
+    "count": 4
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "PPP",
+    "PSB",
+    "PPP"
+  ],
+  "key": {
+    "P": "minecraft:paper",
+    "S": "minecraft:soul_sand",
+    "B": "mlkymc:soulstone_brick"
+  },
+  "result": {
+    "id": "mlkymc:tome_of_soul_warden",
+    "count": 1
+  }
+}

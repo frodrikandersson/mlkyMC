@@ -13,6 +13,9 @@ public class ClientClassData {
     private static ClassType chosenClass = ClassType.NONE;
     private static final EnumMap<ProfessionType, Integer> levels = new EnumMap<>(ProfessionType.class);
     private static final EnumMap<ProfessionType, Integer> xpValues = new EnumMap<>(ProfessionType.class);
+    private static int soulEnergy = 0;
+    private static boolean soulEnergyMode = false;
+    private static int altarSE = 0;
 
     static {
         for (ProfessionType p : ProfessionType.values()) {
@@ -32,6 +35,13 @@ public class ClientClassData {
     public static int getXp(ProfessionType prof) { return xpValues.getOrDefault(prof, 0); }
     public static void setXp(ProfessionType prof, int xp) { xpValues.put(prof, xp); }
 
+    public static int getSoulEnergy() { return soulEnergy; }
+    public static void setSoulEnergy(int se) { soulEnergy = se; }
+    public static boolean isSoulEnergyMode() { return soulEnergyMode; }
+    public static void setSoulEnergyMode(boolean mode) { soulEnergyMode = mode; }
+    public static int getAltarSE() { return altarSE; }
+    public static void setAltarSE(int se) { altarSE = se; }
+
     /** XP needed for next level. Matches server formula. */
     public static int getXpForNextLevel(int currentLevel) {
         if (currentLevel >= 50) return 0;
@@ -47,5 +57,8 @@ public class ClientClassData {
             levels.put(p, 0);
             xpValues.put(p, 0);
         }
+        soulEnergy = 0;
+        soulEnergyMode = false;
+        altarSE = 0;
     }
 }

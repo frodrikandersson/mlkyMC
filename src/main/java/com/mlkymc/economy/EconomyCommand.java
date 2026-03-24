@@ -80,7 +80,7 @@ public class EconomyCommand {
 
         // Check if player already has a wallet
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            if (MilkyStar.isWallet(player.getInventory().getItem(i))) {
+            if (MilkyStar.isJar(player.getInventory().getItem(i))) {
                 player.sendSystemMessage(Component.literal("You already have a wallet!").withColor(0xFF5555));
                 return 0;
             }

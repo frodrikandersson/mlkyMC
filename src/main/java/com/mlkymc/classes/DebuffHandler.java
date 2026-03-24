@@ -1,7 +1,9 @@
 package com.mlkymc.classes;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.monster.Monster;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerXpEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 
@@ -37,19 +39,42 @@ public class DebuffHandler {
 
     /**
      * Cleric debuff: reduce XP pickup amount.
+     * Cleric exclusive: bonus XP gain (+20/40/60/80/100% at Lv5/15/25/35/45).
      */
     @SubscribeEvent
     public void onXpPickup(PlayerXpEvent.PickupXp event) {
+        if (event.isCanceled()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         ClassData data = classManager.getOrCreate(player);
-        double debuff = data.getDebuffPercent(ProfessionType.CLERIC);
-        if (debuff <= 0) return;
+        int level = data.getLevel(ProfessionType.CLERIC);
 
-        // Reduce XP orb value by debuff percent
         var orb = event.getOrb();
-        int original = orb.getValue();
-        int reduced = (int) Math.ceil(original * (1.0 - debuff));
-        orb.setValue(Math.max(1, reduced));
+        int value = orb.getValue();
+
+        // Debuff: reduce XP for everyone
+        double debuff = data.getDebuffPercent(ProfessionType.CLERIC);
+        if (debuff > 0) {
+            value = (int) Math.ceil(value * (1.0 - debuff));
+        }
+
+        // Cleric exclusive: bonus XP gain
+        if (data.getChosenClass() == ClassType.CLERIC) {
+            double bonus = getClericXpBonus(level);
+            if (bonus > 0) {
+                value = (int) Math.ceil(value * (1.0 + bonus));
+            }
+        }
+
+        orb.setValue(Math.max(1, value));
+    }
+
+    private static double getClericXpBonus(int level) {
+        if (level >= 45) return 1.0;  // +100%
+        if (level >= 35) return 0.8;  // +80%
+        if (level >= 25) return 0.6;  // +60%
+        if (level >= 15) return 0.4;  // +40%
+        if (level >= 5)  return 0.2;  // +20%
+        return 0.0;
     }
 
     /**
@@ -103,5 +128,51 @@ public class DebuffHandler {
         double debuff = data.getDebuffPercent(ProfessionType.SMITH);
         if (debuff <= 0) return 1.0;
         return 1.0 / (1.0 - debuff);
+    }
+
+    /**
+     * Adventurer debuff: reduce hostile mob drops.
+     * Chance to clear all mob drops on kill.
+     */
+    @SubscribeEvent
+    public void onHostileMobDrop(LivingDropsEvent event) {
+        if (!(event.getEntity() instanceof Monster)) return;
+        var source = event.getSource();
+        if (source.getEntity() == null) return;
+        if (!(source.getEntity() instanceof ServerPlayer player)) return;
+
+        ClassData data = classManager.getOrCreate(player);
+        double debuff = data.getDebuffPercent(ProfessionType.ADVENTURER);
+        if (debuff <= 0) return;
+
+        if (ThreadLocalRandom.current().nextDouble() < debuff) {
+            event.getDrops().clear();
+        }
+    }
+
+    /**
+     * Farmhand debuff: reduce crop/farming block drops.
+     * Applies to wheat, carrots, potatoes, beetroot, sugar cane, melon, pumpkin, cocoa, nether wart.
+     */
+    @SubscribeEvent
+    public void onFarmBlockDrop(BlockDropsEvent event) {
+        if (!(event.getBreaker() instanceof ServerPlayer player)) return;
+
+        String blockId = event.getState().getBlock().getDescriptionId();
+        boolean isFarming = blockId.contains("wheat") || blockId.contains("carrot")
+                || blockId.contains("potato") || blockId.contains("beetroot")
+                || blockId.contains("sugar_cane") || blockId.contains("melon")
+                || blockId.contains("pumpkin") || blockId.contains("cocoa")
+                || blockId.contains("nether_wart") || blockId.contains("sweet_berr");
+
+        if (!isFarming) return;
+
+        ClassData data = classManager.getOrCreate(player);
+        double debuff = data.getDebuffPercent(ProfessionType.FARMHAND);
+        if (debuff <= 0) return;
+
+        if (ThreadLocalRandom.current().nextDouble() < debuff) {
+            event.getDrops().clear();
+        }
     }
 }

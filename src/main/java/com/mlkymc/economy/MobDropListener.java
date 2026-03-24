@@ -19,7 +19,7 @@ public class MobDropListener {
     @SubscribeEvent
     public void onMobDeath(LivingDeathEvent event) {
         Entity source = event.getSource().getEntity();
-        if (!(source instanceof ServerPlayer player)) return;
+        if (!(source instanceof ServerPlayer)) return;
         if (!(event.getEntity() instanceof Monster)) return;
 
         Entity deadEntity = event.getEntity();

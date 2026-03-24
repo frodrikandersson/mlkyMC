@@ -79,17 +79,17 @@ public class GrapplingHookItem extends Item {
 
                 if (hook instanceof GrapplingHookEntity ghe) {
                     if (ghe.isAttachedToEntity()) {
-                        // === ENTITY PULL: both meet in the middle ===
+                        // === ENTITY PULL: both meet in the middle (50% reduced power) ===
                         net.minecraft.world.entity.Entity target = ghe.getAttachedEntity();
                         Vec3 midpoint = player.position().add(target.position()).scale(0.5);
 
-                        Vec3 playerPull = midpoint.subtract(player.position()).normalize().scale(2.0);
-                        player.setDeltaMovement(playerPull.x, Math.max(playerPull.y, 0.3), playerPull.z);
+                        Vec3 playerPull = midpoint.subtract(player.position()).normalize().scale(1.0);
+                        player.setDeltaMovement(playerPull.x, Math.max(playerPull.y, 0.15), playerPull.z);
                         player.fallDistance = 0;
                         sp.connection.send(new net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket(sp));
 
-                        Vec3 entityPull = midpoint.subtract(target.position()).normalize().scale(2.0);
-                        target.setDeltaMovement(entityPull.x, Math.max(entityPull.y, 0.3), entityPull.z);
+                        Vec3 entityPull = midpoint.subtract(target.position()).normalize().scale(1.0);
+                        target.setDeltaMovement(entityPull.x, Math.max(entityPull.y, 0.15), entityPull.z);
                         target.hurtMarked = true;
 
                         // Fire Aspect: set entity on fire

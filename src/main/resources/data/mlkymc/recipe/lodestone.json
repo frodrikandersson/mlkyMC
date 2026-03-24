@@ -3,11 +3,12 @@
   "pattern": [
     " I ",
     "ISI",
-    " I "
+    " N "
   ],
   "key": {
     "I": "minecraft:iron_ingot",
-    "S": "minecraft:chiseled_stone_bricks"
+    "S": "minecraft:chiseled_stone_bricks",
+    "N": "minecraft:netherite_scrap"
   },
   "result": {
     "id": "minecraft:lodestone",

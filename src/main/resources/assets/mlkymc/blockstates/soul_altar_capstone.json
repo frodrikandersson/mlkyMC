@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "mlkymc:block/soul_altar_capstone", "y": 180 },
+    "facing=south": { "model": "mlkymc:block/soul_altar_capstone" },
+    "facing=west": { "model": "mlkymc:block/soul_altar_capstone", "y": 90 },
+    "facing=east": { "model": "mlkymc:block/soul_altar_capstone", "y": 270 }
+  }
+}

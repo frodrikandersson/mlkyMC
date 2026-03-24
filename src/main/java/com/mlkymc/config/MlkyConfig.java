@@ -70,7 +70,8 @@ public class MlkyConfig {
 
     // Spawner aging settings
     public static boolean isSpawnerAgingEnabled() { return data.spawnerAging.enabled; }
-    public static int getSpawnerMaxSpawns() { return data.spawnerAging.maxSpawns; }
+    public static int getSpawnerDefaultMaxSpawns() { return data.spawnerAging.defaultMaxSpawns; }
+    public static SpawnerMobLimits getSpawnerMobLimits() { return data.spawnerAging.mobLimits; }
 
     // World settings
     public static boolean getDisableVillagerSpawning() { return data.world.disableVillagerSpawning; }
@@ -133,7 +134,41 @@ public class MlkyConfig {
 
     public static class SpawnerAgingConfig {
         public boolean enabled = true;
-        public int maxSpawns = 200;
+        public int defaultMaxSpawns = 64;
+        public SpawnerMobLimits mobLimits = new SpawnerMobLimits();
+    }
+
+    public static class SpawnerMobLimits {
+        // Hostile mobs
+        public int zombie = 64;
+        public int skeleton = 64;
+        public int spider = 64;
+        public int cave_spider = 64;
+        public int blaze = 64;
+        public int silverfish = 64;
+        public int magma_cube = 64;
+
+        // Farm animals
+        public int cow = 128;
+        public int sheep = 128;
+        public int chicken = 128;
+        public int pig = 128;
+        public int rabbit = 128;
+
+        // Utility mobs
+        public int wolf = 32;
+        public int bee = 32;
+        public int iron_golem = 32;
+        public int cat = 64;
+
+        // Other neutrals
+        public int horse = 64;
+        public int donkey = 64;
+        public int llama = 64;
+        public int fox = 64;
+        public int frog = 64;
+        public int turtle = 64;
+        public int goat = 64;
     }
 
     public static class WorldConfig {

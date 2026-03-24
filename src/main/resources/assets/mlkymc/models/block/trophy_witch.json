@@ -1,6 +1,4 @@
 {
-	"format_version": "1.21.11",
-	"credit": "Made with Blockbench",
 	"render_type": "minecraft:cutout",
 	"textures": {
 		"0": "mlkymc:block/trophy_witch",
@@ -439,49 +437,41 @@
 	],
 	"groups": [
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [0, 1, 2]
 		},
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [3, 4, 5]
 		},
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [6, 7, 8]
 		},
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [9, 10, 11]
 		},
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [12, 13, 14]
 		},
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [15, 16, 17]
 		},
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [18, 19, 20]
 		},
 		{
-			"name": "group",
 			"origin": [5, 0, 3],
 			"color": 0,
 			"children": [21, 22, 23]

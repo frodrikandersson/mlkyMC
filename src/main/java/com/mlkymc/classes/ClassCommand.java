@@ -129,17 +129,75 @@ public class ClassCommand {
                                 .then(Commands.argument("target", EntityArgument.player())
                                         .executes(ctx -> {
                                             ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
-                                            ClassData data = classManager.getOrCreate(target);
                                             // Force reset by creating fresh data
                                             classManager.resetPlayer(target.getUUID());
-                                            // Sync to client so keybind shows Class Selection instead of Skill Tree
-                                            target.sendSystemMessage(Component.literal("[MLKYMC_SYNC:NONE]").withColor(0x000000));
+                                            // Clear all active power states (auto-smelt, jackhammer, etc)
+                                            var ph = PowerHandler.getInstance();
+                                            if (ph != null) ph.clearAllStates(target);
+                                            // Sync full reset to client (all zeros)
+                                            classManager.sendLevelSync(target);
                                             target.sendSystemMessage(Component.literal("Your class has been reset. Press [K] to choose a new class.").withColor(0xFFFF55));
                                             ctx.getSource().sendSuccess(() -> Component.literal(
                                                     "Reset " + target.getName().getString() + "'s class data. They must choose again."), true);
                                             return 1;
                                         })))
-                ));
+                        // /mlkymc class resync <player> — force full client resync
+                        .then(Commands.literal("resync")
+                                .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
+                                .then(Commands.argument("target", EntityArgument.player())
+                                        .executes(ctx -> {
+                                            ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
+                                            // Send revive signal to clear ghost HUDs
+                                            String reviveMsg = "[MLKYMC_REVIVED:" + target.getName().getString() + "]";
+                                            target.sendSystemMessage(Component.literal(reviveMsg).withColor(0x000000));
+                                            // Sync class levels
+                                            classManager.sendLevelSync(target);
+                                            // Sync soul energy
+                                            classManager.sendSoulSync(target);
+                                            // Clear ghost data if not a ghost
+                                            var gm = com.mlkymc.MlkyMC.getGhostManager();
+                                            if (gm != null && !gm.isGhost(target.getUUID())) {
+                                                var gdm = com.mlkymc.MlkyMC.getGhostDataManager();
+                                                if (gdm != null) {
+                                                    gdm.remove(target.getUUID());
+                                                }
+                                            }
+                                            // Clear power handler state
+                                            var ph = PowerHandler.getInstance();
+                                            if (ph != null) {
+                                                ph.clearGhostState(target.getUUID());
+                                                ph.clearAllStates(target);
+                                            }
+                                            ctx.getSource().sendSuccess(() -> Component.literal(
+                                                    "Resynced " + target.getName().getString() + "'s client state."), true);
+                                            return 1;
+                                        })))
+                )
+                // /mlkymc mimic <form> — ghost mimic activation (used by clickable chat)
+                .then(Commands.literal("mimic")
+                        .then(Commands.argument("form", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    builder.suggest("bat");
+                                    builder.suggest("creeper");
+                                    builder.suggest("enderman");
+                                    return builder.buildFuture();
+                                })
+                                .executes(ctx -> {
+                                    if (!(ctx.getSource().getEntity() instanceof ServerPlayer player)) return 0;
+                                    var gm = com.mlkymc.MlkyMC.getGhostManager();
+                                    if (gm == null || !gm.isGhost(player.getUUID())) {
+                                        player.sendSystemMessage(Component.literal("Only ghosts can use Spectral Mimic.").withColor(0xFF5555));
+                                        return 0;
+                                    }
+                                    String form = StringArgumentType.getString(ctx, "form").toLowerCase();
+                                    var gdm = com.mlkymc.MlkyMC.getGhostDataManager();
+                                    if (gdm != null) {
+                                        var data = gdm.getOrCreate(player.getUUID());
+                                        gdm.startMimic(player, data, form);
+                                    }
+                                    return 1;
+                                })))
+        );
     }
 
     private void showClassInfo(ServerPlayer viewer, ServerPlayer target) {

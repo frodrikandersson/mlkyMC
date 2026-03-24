@@ -1,5 +1,6 @@
 {
   "itemGroup.mlkymc.mlkymc_tab": "mlkyMC",
+  "enchantment.mlkymc.adaptive": "Adaptive",
 
   "item.mlkymc.milky_star": "Milky Star",
   "item.mlkymc.milky_star_jar_empty": "Milky Star Jar",
@@ -39,7 +40,14 @@
   "block.mlkymc.warp_anchor": "Warp Anchor",
   "block.mlkymc.trophy_base": "Trophy Base",
   "block.mlkymc.scarecrow": "Scarecrow",
+  "block.mlkymc.soulstone_brick": "Soulstone Brick",
+  "block.mlkymc.soul_pillar": "Soul Pillar",
+  "block.mlkymc.conduit_core": "Conduit Core",
+  "block.mlkymc.soul_altar_capstone": "Soul Altar Capstone",
+  "item.mlkymc.tome_of_soul_warden": "Tome of the Soul Warden",
   "block.mlkymc.soul_forge": "Soul Forge",
+  "block.mlkymc.soul_forge_chipped": "Chipped Soul Forge",
+  "block.mlkymc.soul_forge_damaged": "Damaged Soul Forge",
   "block.mlkymc.trophy_wither": "Wither Trophy",
   "block.mlkymc.trophy_dragon": "Dragon Trophy",
   "block.mlkymc.trophy_elder_guardian": "Elder Guardian Trophy",
@@ -56,5 +64,6 @@
   "key.categories.mlkymc": "mlkyMC",
   "key.category.mlkymc.keybinds": "mlkyMC",
   "key.mlkymc.class_menu": "Class Menu",
-  "key.mlkymc.minimap": "Toggle Minimap"
+  "key.mlkymc.primary_power": "Primary Power",
+  "key.mlkymc.secondary_power": "Secondary Power"
 }
