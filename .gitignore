@@ -1,5 +1,7 @@
 .gradle/
 build/
+bin/
+assets/
 .idea/
 *.iml
 .vscode/
