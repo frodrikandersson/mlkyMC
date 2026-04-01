@@ -6,8 +6,12 @@
     "MMM"
   ],
   "key": {
-    "M": "mlkymc:milky_star",
-    "S": "minecraft:dragon_egg"
+    "M": {
+      "item": "mlkymc:milky_star"
+    },
+    "S": {
+      "item": "minecraft:dragon_egg"
+    }
   },
   "result": {
     "id": "mlkymc:trophy_dragon",

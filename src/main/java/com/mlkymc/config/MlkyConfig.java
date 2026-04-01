@@ -169,6 +169,15 @@ public class MlkyConfig {
         public int frog = 64;
         public int turtle = 64;
         public int goat = 64;
+
+        public int getLimit(String mobId, int defaultLimit) {
+            try {
+                var field = SpawnerMobLimits.class.getDeclaredField(mobId);
+                return field.getInt(this);
+            } catch (Exception e) {
+                return defaultLimit;
+            }
+        }
     }
 
     public static class WorldConfig {

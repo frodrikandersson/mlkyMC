@@ -16,12 +16,11 @@ import java.util.Map;
 public class DimensionManager {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private final Path dataFile;
+    private Path dataFile;
     private Map<String, DimensionData> dimensions = new HashMap<>();
 
     public DimensionManager(Path configDir) {
         this.dataFile = configDir.resolve("dimensions.json");
-        load();
     }
 
     public int getProgress(String dimension) {
@@ -123,6 +122,11 @@ public class DimensionManager {
         } catch (IOException e) {
             MlkyMC.LOGGER.error("Failed to save dimensions.json", e);
         }
+    }
+
+    public void reload(Path dir) {
+        this.dataFile = dir.resolve("dimensions.json");
+        load();
     }
 
     public static class DimensionData {

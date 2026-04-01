@@ -6,9 +6,15 @@
     " N "
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "S": "minecraft:chiseled_stone_bricks",
-    "N": "minecraft:netherite_scrap"
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "S": {
+      "item": "minecraft:chiseled_stone_bricks"
+    },
+    "N": {
+      "item": "minecraft:netherite_scrap"
+    }
   },
   "result": {
     "id": "minecraft:lodestone",

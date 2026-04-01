@@ -6,10 +6,18 @@
     " CP"
   ],
   "key": {
-    "T": "minecraft:tripwire_hook",
-    "C": "minecraft:iron_chain",
-    "L": "minecraft:lead",
-    "P": "mlkymc:tempered_plate"
+    "T": {
+      "item": "minecraft:tripwire_hook"
+    },
+    "C": {
+      "item": "minecraft:chain"
+    },
+    "L": {
+      "item": "minecraft:lead"
+    },
+    "P": {
+      "item": "mlkymc:tempered_plate"
+    }
   },
   "result": {
     "id": "mlkymc:grappling_hook",

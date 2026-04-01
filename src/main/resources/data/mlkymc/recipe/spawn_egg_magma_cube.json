@@ -6,9 +6,15 @@
     "SSS"
   ],
   "key": {
-    "S": "mlkymc:milky_star",
-    "L": "mlkymc:living_essence",
-    "M": "minecraft:magma_cream"
+    "S": {
+      "item": "mlkymc:milky_star"
+    },
+    "L": {
+      "item": "mlkymc:living_essence"
+    },
+    "M": {
+      "item": "minecraft:magma_cream"
+    }
   },
   "result": {
     "id": "minecraft:magma_cube_spawn_egg",

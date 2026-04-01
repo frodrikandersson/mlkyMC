@@ -43,7 +43,7 @@ public class ModCreativeTabs {
                         output.accept(ModItems.TOTEM_OF_RESURRECTION.get());
                         output.accept(ModItems.HOLY_WATER.get());
                         output.accept(ModItems.BLESSING_SCROLL.get());
-                        output.accept(ModItems.TOME_OF_SOUL_WARDEN.get());
+                        output.accept(ModItems.TOME_OF_THE_SOUL_WARDEN.get());
 
                         // Farmhand
                         output.accept(ModItems.GROWTH_FERTILIZER.get());
@@ -53,7 +53,7 @@ public class ModCreativeTabs {
                         output.accept(ModItems.REINFORCED_PICKAXE.get());
                         output.accept(ModItems.REINFORCED_AXE.get());
                         output.accept(ModItems.BUILDERS_WAND.get());
-                        output.accept(ModItems.ENDER_CHEST_BACKPACK.get());
+                        output.accept(ModItems.ENDER_POUCH.get());
 
                         // Smith
                         output.accept(ModItems.WHETSTONE.get());

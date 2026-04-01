@@ -26,7 +26,7 @@ import java.util.*;
  */
 public class SoulAltarManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private final Path dataFile;
+    private Path dataFile;
     private final List<SoulAltarData> altars = new ArrayList<>();
 
     // Tier thresholds
@@ -39,7 +39,6 @@ public class SoulAltarManager {
 
     public SoulAltarManager(Path configDir) {
         this.dataFile = configDir.resolve("soul_altars.json");
-        load();
     }
 
 
@@ -154,7 +153,20 @@ public class SoulAltarManager {
         }
         altar.addDonorLog(donorName, actualGain);
         save();
+        syncAltarOwner(altar);
         return actualGain;
+    }
+
+    /** Sync the Soul Energy bar for the altar owner if they're online. */
+    public void syncAltarOwner(SoulAltarData altar) {
+        var cm = MlkyMC.getClassManager();
+        if (cm == null) return;
+        net.minecraft.server.MinecraftServer srv = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (srv == null) return;
+        net.minecraft.server.level.ServerPlayer owner = srv.getPlayerList().getPlayer(altar.ownerUuid);
+        if (owner != null) {
+            cm.sendSoulSync(owner);
+        }
     }
 
     public int channelPersonalSE(SoulAltarData altar, ServerPlayer player, int amount) {
@@ -171,6 +183,7 @@ public class SoulAltarManager {
         MlkyMC.getClassManager().sendSoulSync(player);
         altar.addDonorLog(player.getName().getString() + " (channeled)", transfer);
         save();
+        syncAltarOwner(altar);
         return transfer;
     }
 
@@ -194,6 +207,7 @@ public class SoulAltarManager {
 
         altar.addDonorLog(ghostName + " (ghost)", actualGain);
         save();
+        syncAltarOwner(altar);
         return actualGain;
     }
 
@@ -201,6 +215,7 @@ public class SoulAltarManager {
         if (altar.storedSE < cost) return false;
         altar.storedSE -= cost;
         save();
+        syncAltarOwner(altar);
         return true;
     }
 
@@ -278,6 +293,11 @@ public class SoulAltarManager {
         } catch (IOException e) {
             MlkyMC.LOGGER.error("Failed to load soul altar data", e);
         }
+    }
+
+    public void reload(Path dir) {
+        this.dataFile = dir.resolve("soul_altars.json");
+        load();
     }
 
     public List<SoulAltarData> getAllAltars() {

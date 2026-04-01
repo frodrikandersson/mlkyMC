@@ -6,8 +6,12 @@
     " I "
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "A": "minecraft:amethyst_shard"
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "A": {
+      "item": "minecraft:amethyst_shard"
+    }
   },
   "result": {
     "id": "mlkymc:dimension_compass",

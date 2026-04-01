@@ -137,8 +137,11 @@ public class StreamerManager {
             team = scoreboard.addPlayerTeam(teamName);
         }
 
-        boolean isLive = liveStreams.values().stream()
-                .anyMatch(info -> info.mcName().equalsIgnoreCase(mcName));
+        boolean isLive;
+        synchronized (liveStreams) {
+            isLive = liveStreams.values().stream()
+                    .anyMatch(info -> info.mcName().equalsIgnoreCase(mcName));
+        }
 
         if (isLive) {
             team.setPlayerPrefix(Component.literal("\u25CF ").withColor(0x55FF55)); // Green circle
@@ -238,28 +241,19 @@ public class StreamerManager {
                 String gameName = stream.has("game_name") ? stream.get("game_name").getAsString() : "";
                 int viewerCount = stream.get("viewer_count").getAsInt();
 
-                // Find the MC name for this Twitch name
-                String mcName = null;
+                // Find ALL MC names linked to this Twitch name
+                nowLive.add(twitchName);
                 for (Map.Entry<String, String> entry : streamers.entrySet()) {
                     if (entry.getValue().equals(twitchName)) {
-                        mcName = entry.getKey();
-                        break;
+                        String mcName = entry.getKey();
+                        // Store per MC name so each linked player gets the live indicator
+                        newLiveStreams.put(twitchName + ":" + mcName,
+                                new StreamInfo(mcName, displayName, twitchName, title, gameName, viewerCount));
                     }
                 }
-
-                if (mcName != null) {
-                    nowLive.add(twitchName);
-                    newLiveStreams.put(twitchName, new StreamInfo(mcName, displayName, twitchName, title, gameName, viewerCount));
-                }
             }
 
-            // Detect newly live streamers and announce
-            for (String twitchName : nowLive) {
-                if (!previouslyLive.contains(twitchName) && server != null) {
-                    StreamInfo info = newLiveStreams.get(twitchName);
-                    announceStream(info);
-                }
-            }
+            // Stream status shown via TAB list and name icons only — no chat announcement
 
             synchronized (liveStreams) {
                 liveStreams.clear();
@@ -285,30 +279,6 @@ public class StreamerManager {
         } catch (IOException | InterruptedException e) {
             MlkyMC.LOGGER.warn("Failed to poll Twitch streams: {}", e.getMessage());
         }
-    }
-
-    private void announceStream(StreamInfo info) {
-        if (server == null) return;
-        server.execute(() -> {
-            String twitchUrl = "https://twitch.tv/" + info.twitchName;
-
-            MutableComponent message = Component.literal("")
-                    .append(Component.literal("[LIVE] ").withStyle(s -> s.withColor(0xFF0000).withBold(true)))
-                    .append(Component.literal(info.displayName).withStyle(s -> s.withColor(0xFFFFFF).withBold(true)))
-                    .append(Component.literal(" is now streaming! ").withColor(0xAAAAAA))
-                    .append(Component.literal("[Watch]").withStyle(Style.EMPTY
-                            .withColor(0x9146FF)
-                            .withBold(true)
-                            .withUnderlined(true)
-                            .withClickEvent(new ClickEvent.OpenUrl(URI.create(twitchUrl)))));
-
-            if (!info.title.isEmpty()) {
-                message.append(Component.literal("\n  ").withColor(0xAAAAAA))
-                        .append(Component.literal(info.title).withColor(0xDDDDDD));
-            }
-
-            server.getPlayerList().broadcastSystemMessage(message, false);
-        });
     }
 
     public Component buildStreamListMessage() {

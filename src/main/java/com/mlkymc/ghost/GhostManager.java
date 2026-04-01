@@ -77,6 +77,19 @@ public class GhostManager {
         storage.save();
         removeGhostEffects(player);
 
+        // Force all nearby players to re-track this entity.
+        // The ghost was hidden via ClientboundRemoveEntitiesPacket — we need to
+        // force a full re-track by untracking and re-tracking the entity in the chunk map.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            // Temporarily remove from and re-add to the world to force full entity resync
+            sl.getServer().execute(() -> {
+                // Force all players to re-track by removing and re-adding the player entity
+                var chunkSource = sl.getChunkSource();
+                chunkSource.removeEntity(player);
+                chunkSource.addEntity(player);
+            });
+        }
+
         // Clear ghost data (SE, mimic state, haunt zones, etc.)
         var gdm = com.mlkymc.MlkyMC.getGhostDataManager();
         if (gdm != null) {

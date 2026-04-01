@@ -1,10 +1,18 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    "minecraft:golden_carrot",
-    "minecraft:golden_apple",
-    "minecraft:wheat",
-    "mlkymc:resonant_core"
+    {
+      "item": "minecraft:golden_carrot"
+    },
+    {
+      "item": "minecraft:golden_apple"
+    },
+    {
+      "item": "minecraft:wheat"
+    },
+    {
+      "item": "mlkymc:resonant_core"
+    }
   ],
   "result": {
     "id": "mlkymc:animal_feed",

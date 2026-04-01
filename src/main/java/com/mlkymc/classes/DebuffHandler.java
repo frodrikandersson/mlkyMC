@@ -45,13 +45,20 @@ public class DebuffHandler {
     public void onXpPickup(PlayerXpEvent.PickupXp event) {
         if (event.isCanceled()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        ClassData data = classManager.getOrCreate(player);
-        int level = data.getLevel(ProfessionType.CLERIC);
+        if (player.isCreative()) return;
 
         var orb = event.getOrb();
+        if (orb.getTags().contains("mlkymc_processed")) return;
+
+        ClassData data = classManager.getOrCreate(player);
         int value = orb.getValue();
 
-        // Debuff: reduce XP for everyone
+        // Curse of Unrest: double XP
+        if (PowerHandler.isCurseAuraActive(player.getUUID())) {
+            value *= 2;
+        }
+
+        // Debuff: reduce XP for everyone based on Cleric level
         double debuff = data.getDebuffPercent(ProfessionType.CLERIC);
         if (debuff > 0) {
             value = (int) Math.ceil(value * (1.0 - debuff));
@@ -59,11 +66,54 @@ public class DebuffHandler {
 
         // Cleric exclusive: bonus XP gain
         if (data.getChosenClass() == ClassType.CLERIC) {
-            double bonus = getClericXpBonus(level);
+            double bonus = getClericXpBonus(data.getLevel(ProfessionType.CLERIC));
             if (bonus > 0) {
                 value = (int) Math.ceil(value * (1.0 + bonus));
             }
+
+            // Soul Energy mode: convert to SE instead of giving XP
+            if (data.isSoulEnergyMode()) {
+                int seGain = Math.max(1, (int) Math.ceil(value * 1.4));
+
+                // Adaptive enchantment: redirect SE to altar first
+                if (PowerHandler.hasAdaptiveHelmet(player)) {
+                    var altarManager = com.mlkymc.MlkyMC.getSoulAltarManager();
+                    if (altarManager != null) {
+                        var altar = altarManager.getAltarByOwner(player.getUUID());
+                        if (altar != null && altar.storedSE < com.mlkymc.altar.SoulAltarManager.MAX_ALTAR_SE) {
+                            int altarSpace = com.mlkymc.altar.SoulAltarManager.MAX_ALTAR_SE - altar.storedSE;
+                            int toAltar = Math.min(seGain, altarSpace);
+                            altar.storedSE += toAltar;
+                            altar.highWaterSE = Math.max(altar.highWaterSE, altar.storedSE);
+                            altarManager.save();
+                            seGain -= toAltar;
+                            if (seGain <= 0) {
+                                orb.addTag("mlkymc_processed");
+                                event.setCanceled(true);
+                                orb.discard();
+                                classManager.sendSoulSync(player);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                int before = data.getSoulEnergy();
+                if (before < 100) {
+                    data.addSoulEnergy(seGain);
+                    classManager.sendSoulSync(player);
+                    orb.addTag("mlkymc_processed");
+                    event.setCanceled(true);
+                    orb.discard();
+                    return;
+                }
+                // SE full — fall through and give regular XP
+            }
         }
+
+        // Grant Cleric class XP from vanilla XP
+        int clericXp = Math.max(1, value / 3);
+        classManager.addXp(player, ProfessionType.CLERIC, clericXp);
 
         orb.setValue(Math.max(1, value));
     }
@@ -87,17 +137,34 @@ public class DebuffHandler {
 
         String blockId = event.getState().getBlock().getDescriptionId();
 
-        // Only apply to mining-related blocks (ores, stone, logs, wood)
-        boolean isMining = blockId.contains("ore") || blockId.contains("stone")
-                || blockId.contains("deepslate") || blockId.contains("log")
-                || blockId.contains("wood") || blockId.contains("coal")
-                || blockId.contains("copper") || blockId.contains("iron")
-                || blockId.contains("gold") || blockId.contains("diamond")
-                || blockId.contains("emerald") || blockId.contains("lapis")
-                || blockId.contains("redstone") || blockId.contains("quartz")
-                || blockId.contains("netherite") || blockId.contains("ancient_debris");
+        // Only apply to naturally occurring underground/terrain blocks
+        // Excludes crafted building materials (planks, bricks, slabs, stairs, walls)
+        boolean isCrafted = blockId.contains("brick") || blockId.contains("slab")
+                || blockId.contains("stair") || blockId.contains("wall")
+                || blockId.contains("button") || blockId.contains("pressure")
+                || blockId.contains("plank") || blockId.contains("fence")
+                || blockId.contains("door") || blockId.contains("trapdoor");
+        if (isCrafted) return;
+
+        boolean isMining = blockId.contains("ore")
+                || blockId.contains("ancient_debris")
+                || blockId.contains("deepslate")
+                || blockId.contains("stone")
+                || blockId.contains("log") || blockId.contains("wood")
+                || blockId.contains("granite") || blockId.contains("diorite")
+                || blockId.contains("andesite") || blockId.contains("tuff")
+                || blockId.contains("calcite") || blockId.contains("dripstone")
+                || blockId.contains("basalt") || blockId.contains("blackstone")
+                || blockId.contains("netherrack") || blockId.contains("end_stone")
+                || blockId.contains("obsidian")
+                || blockId.contains("gravel") || blockId.contains("clay")
+                || blockId.contains("sand") || blockId.contains("sandstone")
+                || blockId.contains("terracotta") || blockId.contains("dirt")
+                || blockId.contains("mud");
 
         if (!isMining) return;
+
+        // Placed ore cleanup is handled in SpecialEffectHandler (runs at HIGHEST priority)
 
         ClassData data = classManager.getOrCreate(player);
         double debuff = data.getDebuffPercent(ProfessionType.MINECRAFTER);

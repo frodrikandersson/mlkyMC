@@ -65,6 +65,20 @@ public class ClassData {
         return levels.getOrDefault(profession, 0);
     }
 
+    /**
+     * Halve all profession levels and reset XP within each level to 0.
+     * Used when an alive player sacrifices levels to resurrect a ghost at the statue.
+     */
+    public void halveLevels() {
+        for (ProfessionType prof : ProfessionType.values()) {
+            int lv = levels.getOrDefault(prof, 0);
+            if (lv > 0) {
+                levels.put(prof, lv / 2);
+                xp.put(prof, 0);
+            }
+        }
+    }
+
     public int getXp(ProfessionType profession) {
         return xp.getOrDefault(profession, 0);
     }

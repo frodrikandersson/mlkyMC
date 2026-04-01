@@ -6,9 +6,15 @@
     "SSS"
   ],
   "key": {
-    "S": "mlkymc:milky_star",
-    "L": "mlkymc:living_essence",
-    "M": "minecraft:feather"
+    "S": {
+      "item": "mlkymc:milky_star"
+    },
+    "L": {
+      "item": "mlkymc:living_essence"
+    },
+    "M": {
+      "item": "minecraft:feather"
+    }
   },
   "result": {
     "id": "minecraft:chicken_spawn_egg",

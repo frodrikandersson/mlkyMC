@@ -132,8 +132,7 @@ public class ModBlocks {
             id -> new SoulAltarCapstoneBlock(BlockBehaviour.Properties.of()
                     .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
                     .mapColor(MapColor.COLOR_PURPLE)
-                    .strength(50.0f, 1200.0f)
-                    .requiresCorrectToolForDrops()
+                    .strength(3.0f, 6.0f)
                     .sound(SoundType.AMETHYST)
                     .noOcclusion()
                     .lightLevel(state -> 7)));

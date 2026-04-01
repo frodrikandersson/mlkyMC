@@ -2,13 +2,19 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     "SSS",
-    "LML",
+    "LTL",
     "SSS"
   ],
   "key": {
-    "S": "mlkymc:milky_star",
-    "L": "mlkymc:living_essence",
-    "M": "minecraft:infested_stone"
+    "S": {
+      "item": "mlkymc:milky_star"
+    },
+    "L": {
+      "item": "mlkymc:living_essence"
+    },
+    "T": {
+      "item": "minecraft:tnt"
+    }
   },
   "result": {
     "id": "minecraft:silverfish_spawn_egg",

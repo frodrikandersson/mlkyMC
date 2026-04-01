@@ -5,6 +5,7 @@ import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.api.distmarker.Dist;
 import com.mlkymc.classes.ClassExpHandler;
 import com.mlkymc.classes.ClassManager;
+import com.mlkymc.classes.ItemBaseValues;
 import com.mlkymc.classes.DebuffHandler;
 import com.mlkymc.config.MlkyConfig;
 import com.mlkymc.registry.ModCreativeTabs;
@@ -70,6 +71,7 @@ public class MlkyMC {
     private final DimensionManager dimensionManager;
     private final ShopManager shopManager;
     private final SpawnerAgingManager spawnerAgingManager;
+    private SpawnerAgingListener spawnerAgingListener;
     private final RegionManager regionManager;
     private final MarketManager marketManager;
     private final com.mlkymc.grave.GraveManager graveManager;
@@ -82,6 +84,7 @@ public class MlkyMC {
     private static ClassManager classManagerInstance;
     private static com.mlkymc.altar.SoulAltarManager soulAltarManagerInstance;
     private static com.mlkymc.ghost.GhostDataManager ghostDataManagerInstance;
+    private static com.mlkymc.classes.PassiveSkillHandler passiveSkillHandlerInstance;
 
     // Commands (instance-based)
     private final ClassCommand classCommand;
@@ -119,14 +122,15 @@ public class MlkyMC {
         // Load config
         MlkyConfig.init(configDir);
 
-        // Initialize storage
+        // Initialize storage (data will be loaded on server start from world folder)
         storage = new JsonStorage(configDir);
-        storage.load();
+        // Don't load here — reload() in onServerStarting will load from the world folder
 
-        // Initialize managers
+        // Initialize managers (data loaded on server start via reload())
         classManager = new ClassManager(configDir);
         ghostManager = new GhostManager(storage);
         reviveManager = new ReviveManager(ghostManager, storage);
+        reviveManagerInstance = reviveManager;
         dimensionManager = new DimensionManager(configDir);
         shopManager = new ShopManager(configDir);
         spawnerAgingManager = new SpawnerAgingManager(configDir);
@@ -161,7 +165,10 @@ public class MlkyMC {
         IEventBus forgeBus = NeoForge.EVENT_BUS;
         forgeBus.register(this);
         forgeBus.register(new GhostListener(ghostManager));
-        forgeBus.register(new ReviveListener(ghostManager, reviveManager, classManager, graveManager));
+        forgeBus.register(new com.mlkymc.pvp.PvPTagManager());
+        var rl = new ReviveListener(ghostManager, reviveManager, classManager, graveManager);
+        reviveListenerInstance = rl;
+        forgeBus.register(rl);
         if (FMLEnvironment.getDist() == Dist.CLIENT) {
             forgeBus.register(new com.mlkymc.client.ModKeybinds());
             forgeBus.register(new com.mlkymc.client.ClientSyncHandler());
@@ -178,6 +185,7 @@ public class MlkyMC {
         forgeBus.register(new DebuffHandler(classManager));
         forgeBus.register(new ClassExpHandler(classManager));
         passiveSkillHandler = new com.mlkymc.classes.PassiveSkillHandler(classManager);
+        passiveSkillHandlerInstance = passiveSkillHandler;
         forgeBus.register(passiveSkillHandler);
         activeSkillHandler = new com.mlkymc.classes.ActiveSkillHandler(classManager);
         activeSkillHandlerInstance = activeSkillHandler;
@@ -190,9 +198,13 @@ public class MlkyMC {
         forgeBus.register(new com.mlkymc.classes.TrophyBuffHandler());
         forgeBus.register(new com.mlkymc.classes.ItemFunctionHandler());
         forgeBus.register(new com.mlkymc.classes.ClassLoginHandler(classManager));
+        forgeBus.register(new com.mlkymc.classes.IngredientBuffHandler(classManager));
+        forgeBus.register(new com.mlkymc.classes.IngredientBuffApplier());
+        forgeBus.register(new com.mlkymc.classes.SmithGambleListener(classManager));
         forgeBus.register(new DimensionListener(dimensionManager));
         forgeBus.register(new ShopListener(shopManager));
-        forgeBus.register(new SpawnerAgingListener(spawnerAgingManager));
+        spawnerAgingListener = new SpawnerAgingListener(spawnerAgingManager);
+        forgeBus.register(spawnerAgingListener);
         forgeBus.register(new RegionListener(regionManager));
         forgeBus.register(new MarketListener(marketManager));
         forgeBus.register(new WalletListener());
@@ -234,6 +246,20 @@ public class MlkyMC {
         return ghostDataManagerInstance;
     }
 
+    private static com.mlkymc.revive.ReviveManager reviveManagerInstance;
+    public static com.mlkymc.revive.ReviveManager getReviveManager() {
+        return reviveManagerInstance;
+    }
+
+    private static com.mlkymc.revive.ReviveListener reviveListenerInstance;
+    public static com.mlkymc.revive.ReviveListener getReviveListener() {
+        return reviveListenerInstance;
+    }
+
+    public static com.mlkymc.classes.PassiveSkillHandler getPassiveSkillHandler() {
+        return passiveSkillHandlerInstance;
+    }
+
     private static com.mlkymc.classes.ActiveSkillHandler activeSkillHandlerInstance;
     private final java.util.Map<java.util.UUID, String> lastBlockOwnerMsg = new java.util.HashMap<>();
     public static com.mlkymc.classes.ActiveSkillHandler getActiveSkillHandler() {
@@ -257,9 +283,28 @@ public class MlkyMC {
     public void onServerStarting(ServerStartingEvent event) {
         var server = event.getServer();
 
+        // Initialize item base values (must be after registries are frozen)
+        ItemBaseValues.init();
+
+        // World-specific data goes in the world save folder, not global config
+        Path worldDataDir = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+                .resolve("mlkymc");
+        worldDataDir.toFile().mkdirs();
+
+        // Relocate world-specific managers to use world save folder
+        classManager.reload(worldDataDir);
+        storage.reload(worldDataDir);
+        dimensionManager.reload(worldDataDir);
+        spawnerAgingManager.reload(worldDataDir);
+        regionManager.reload(worldDataDir);
+        marketManager.reload(worldDataDir);
+        soulAltarManager.reload(worldDataDir);
+        ghostDataManager.reload(worldDataDir);
+
         ghostManager.setServer(server);
         graveManager.setServer(server);
-        graveManager.load();
+        graveManager.reload(worldDataDir);
+        com.mlkymc.ghost.GhostListener.setPendingGhostsFile(worldDataDir.resolve("pending_ghosts.json"));
         shopManager.setServer(server);
         marketManager.setServer(server);
         twitchHandler.setServer(server);
@@ -312,6 +357,7 @@ public class MlkyMC {
 
     // Performance profiling — log slow ticks (cumulative ns over 30s window)
     private final long[] tickTimings = new long[12];
+    private boolean checkedExpiredSpawners = false;
 
     @SubscribeEvent
     public void onLevelTick(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
@@ -320,6 +366,13 @@ public class MlkyMC {
         if (!(level instanceof net.minecraft.server.level.ServerLevel sl)) return;
 
         long gameTime = sl.getGameTime();
+
+        // One-time check for expired spawners after server starts (wait 100 ticks for chunks to load)
+        if (!checkedExpiredSpawners && gameTime > 100
+                && sl.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+            checkedExpiredSpawners = true;
+            spawnerAgingManager.checkExpiredSpawners(sl.getServer());
+        }
         long t0;
 
         // Every-tick handlers (only if active state exists)
@@ -333,6 +386,7 @@ public class MlkyMC {
         if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
             ghostDataManager.tickMimicEntities(sl.getServer());
         }
+        // (spawner depletion is handled directly in SpawnerAgingListener.onMobSpawn)
         tickTimings[0] += System.nanoTime() - t0;
 
         // Every 2 ticks
@@ -363,8 +417,9 @@ public class MlkyMC {
             if (passiveSkillHandler != null) {
                 passiveSkillHandler.tickComposters(level);
             }
-            // Periodic block owner data save (dirty flag, max every 30s)
+            // Periodic data saves (dirty flag based)
             com.mlkymc.world.BlockOwnerData.get(sl.getServer()).tickSave();
+            com.mlkymc.world.PlacedOreTracker.get(sl.getServer()).saveIfDirty();
             tickTimings[2] += System.nanoTime() - t0;
         }
 
@@ -388,6 +443,9 @@ public class MlkyMC {
             ghostDataManager.tickSpectralEnergy(sl.getServer());
             ghostDataManager.tickHauntZones(sl.getServer());
             ghostDataManager.tickSpectralVision(sl.getServer());
+            if (reviveListenerInstance != null) {
+                reviveListenerInstance.tickPendingRevives(gameTime, sl.getServer());
+            }
         }
 
         // Block owner sync (every 5 ticks = 0.25s)
@@ -413,6 +471,41 @@ public class MlkyMC {
                         }
                     }
                 }
+                // Anyone looking at a grave head: show timer as action bar text
+                if (hitResult instanceof net.minecraft.world.phys.BlockHitResult blockHit2
+                        && hitResult.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                    var gravePos = blockHit2.getBlockPos();
+                    String graveDim = sl.dimension().identifier().toString();
+                    var grave = graveManager.getGrave(graveDim, gravePos);
+                    if (grave != null) {
+                        long elapsed = gameTime - grave.deathTime;
+                        long freeWindowTicks = 1200; // 60 seconds
+                        long graveLifeTicks = 72000; // 60 minutes
+
+                        String graveMsg;
+                        if (elapsed < freeWindowTicks) {
+                            // Within free revive window
+                            int freeRemaining = (int)((freeWindowTicks - elapsed) / 20);
+                            graveMsg = grave.ownerName + "'s Grave | Cleric free revive: " + freeRemaining + "s";
+                        } else {
+                            // After free window — show despawn timer
+                            long despawnRemaining = graveLifeTicks - elapsed;
+                            if (despawnRemaining > 0) {
+                                int mins = (int)(despawnRemaining / 20 / 60);
+                                int secs = (int)(despawnRemaining / 20 % 60);
+                                graveMsg = grave.ownerName + "'s Grave | Despawning in: " + mins + "m " + secs + "s";
+                            } else {
+                                graveMsg = grave.ownerName + "'s Grave | Expired";
+                            }
+                        }
+                        // Send as action bar (overrides block owner text when looking at grave)
+                        sp.displayClientMessage(
+                                net.minecraft.network.chat.Component.literal(graveMsg).withColor(0xFFAA00), true);
+                        // Skip the block owner CLEAR for this tick
+                        newMsg = null;
+                    }
+                }
+
                 if (newMsg == null) newMsg = "[MLKYMC_BLOCK_OWNERS:CLEAR]";
                 String lastMsg = lastBlockOwnerMsg.get(sp.getUUID());
                 if (!newMsg.equals(lastMsg)) {

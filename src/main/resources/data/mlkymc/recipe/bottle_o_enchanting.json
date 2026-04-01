@@ -6,8 +6,12 @@
     "LLL"
   ],
   "key": {
-    "L": "minecraft:lapis_lazuli",
-    "B": "minecraft:glass_bottle"
+    "L": {
+      "item": "minecraft:lapis_lazuli"
+    },
+    "B": {
+      "item": "minecraft:glass_bottle"
+    }
   },
   "result": {
     "id": "minecraft:experience_bottle",

@@ -19,8 +19,9 @@ public class DimensionCommand {
     public void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mlkymc").then(
                 Commands.literal("dimension")
-                        .executes(ctx -> showStatus(ctx.getSource()))
-                        .then(Commands.literal("status").executes(ctx -> showStatus(ctx.getSource())))
+                        .then(Commands.literal("status")
+                                .requires(src -> src.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER))
+                                .executes(ctx -> showStatus(ctx.getSource())))
                         .then(Commands.literal("contribute")
                                 .then(Commands.literal("nether")
                                         .then(Commands.argument("amount", IntegerArgumentType.integer(1))

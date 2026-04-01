@@ -6,11 +6,21 @@
     "ST "
   ],
   "key": {
-    "D": "minecraft:diamond_block",
-    "B": "minecraft:netherite_ingot",
-    "M": "mlkymc:milky_star",
-    "S": "minecraft:stick",
-    "T": "mlkymc:tempered_plate"
+    "D": {
+      "item": "minecraft:diamond_block"
+    },
+    "B": {
+      "item": "minecraft:netherite_ingot"
+    },
+    "M": {
+      "item": "mlkymc:milky_star"
+    },
+    "S": {
+      "item": "minecraft:stick"
+    },
+    "T": {
+      "item": "mlkymc:tempered_plate"
+    }
   },
   "result": {
     "id": "mlkymc:reinforced_axe",

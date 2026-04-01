@@ -3,6 +3,7 @@ package com.mlkymc.classes;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.ItemStack;
@@ -38,7 +39,7 @@ import java.util.UUID;
  * Adventurer: first-time block travel, killing mobs (scaled by difficulty)
  * Cleric: healing/resurrection (in ActiveSkillHandler), enchanting, brewing, vanilla XP orbs
  * Farmhand: breeding/killing neutrals, fishing, harvesting fully-grown crops
- * MineCrafter: mining, woodcutting, crafting (material-based via CraftingXpRegistry)
+ * MineCrafter: mining, woodcutting, crafting (ingredient-sum-based via ItemBaseValues)
  * Smith: smelting, anvil repair/enchant
  */
 public class ClassExpHandler {
@@ -95,14 +96,7 @@ public class ClassExpHandler {
             classManager.addXp(player, ProfessionType.FARMHAND, 5 * multiplier);
         }
 
-        // Cursed mobs also give double vanilla XP orbs
-        if (cursed && dead instanceof net.minecraft.world.entity.LivingEntity living) {
-            int vanillaXp = living.getExperienceReward((ServerLevel) player.level(), player);
-            if (vanillaXp > 0) {
-                net.minecraft.world.entity.ExperienceOrb.award((ServerLevel) player.level(),
-                        dead.position(), vanillaXp);
-            }
-        }
+        // Curse of Unrest XP doubling is now handled at pickup time (works with Clumps mod)
     }
 
     /**
@@ -191,12 +185,36 @@ public class ClassExpHandler {
 
         int orbValue = orb.getValue();
 
+        // Curse of Unrest active: double all XP orb values (works with Clumps mod)
+        ClassData data = classManager.getOrCreate(player);
+        boolean curseActive = PowerHandler.isCurseAuraActive(player.getUUID());
+        if (curseActive) {
+            orbValue *= 2;
+            // Also double the actual orb for vanilla XP when not in SE mode
+            if (!(data.getChosenClass() == ClassType.CLERIC && data.isSoulEnergyMode())) {
+                orb.setValue(orbValue);
+            }
+        }
+
         // Cleric in Soul Energy Mode: convert XP to Soul Energy instead
         // Spec: 1 xp level ≈ 10 SE. At low levels, 1 level ≈ 7 XP points.
-        // So ratio is ~1.4 SE per XP point. Use orbValue / 5 to keep it balanced.
-        ClassData data = classManager.getOrCreate(player);
+        // So ratio is ~1.4 SE per XP point. Round up to ensure every orb gives meaningful SE.
         if (data.getChosenClass() == ClassType.CLERIC && data.isSoulEnergyMode()) {
-            int seGain = Math.max(1, orbValue / 5);
+            // Skip orbs we already processed (tagged via addTag)
+            if (orb.getTags().contains("mlkymc_se_processed")) {
+                event.setCanceled(true);
+                return;
+            }
+
+            // Apply Cleric exclusive XP bonus to SE conversion too
+            double clericBonus = 1.0;
+            int clericLv = data.getLevel(ProfessionType.CLERIC);
+            if (clericLv >= 45) clericBonus = 2.0;      // +100%
+            else if (clericLv >= 35) clericBonus = 1.8;  // +80%
+            else if (clericLv >= 25) clericBonus = 1.6;  // +60%
+            else if (clericLv >= 15) clericBonus = 1.4;  // +40%
+            else if (clericLv >= 5)  clericBonus = 1.2;  // +20%
+            int seGain = Math.max(1, (int) Math.ceil(orbValue * 1.4 * clericBonus));
 
             // Adaptive enchantment: redirect SE to altar first
             if (PowerHandler.hasAdaptiveHelmet(player)) {
@@ -210,10 +228,14 @@ public class ClassExpHandler {
                         altar.highWaterSE = Math.max(altar.highWaterSE, altar.storedSE);
                         altarManager.save();
                         seGain -= toAltar;
-                        // If all SE went to altar, done
                         if (seGain <= 0) {
-                            orb.discard();
+                            orb.addTag("mlkymc_se_processed");
+                            // Discard after brief delay so pickup animation plays
+                            if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                                sl.getServer().execute(() -> orb.discard());
+                            }
                             event.setCanceled(true);
+                            classManager.sendSoulSync(player);
                             return;
                         }
                     }
@@ -224,13 +246,15 @@ public class ClassExpHandler {
             // If SE is already full, let the orb give normal XP instead
             if (before >= 100) return;
             data.addSoulEnergy(seGain);
-            int after = data.getSoulEnergy();
-            if (after != before) {
-                classManager.sendSoulSync(player);
-            }
-            // Remove the orb so it doesn't get picked up again
-            orb.discard();
+
+            // Tag orb as processed, cancel vanilla XP, discard after brief delay
+            orb.addTag("mlkymc_se_processed");
             event.setCanceled(true);
+            if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                sl.getServer().execute(() -> orb.discard());
+            }
+            // Always sync on SE change
+            classManager.sendSoulSync(player);
             return;
         }
 
@@ -238,6 +262,8 @@ public class ClassExpHandler {
         int clericXp = Math.max(1, orbValue / 3);
         classManager.addXp(player, ProfessionType.CLERIC, clericXp);
     }
+
+    // Clumps mod removed — all XP handling is now in DebuffHandler.onXpPickup
 
     // Track positions where experience bottles broke (to tag their orbs)
     private static final java.util.Map<String, Long> bottleBreakPositions = new java.util.HashMap<>();
@@ -312,19 +338,21 @@ public class ClassExpHandler {
         if (!(event.getBreaker() instanceof ServerPlayer player)) return;
 
         BlockState state = event.getState();
-        String blockId = state.getBlock().getDescriptionId();
+        Item blockItem = state.getBlock().asItem();
 
-        // Ores give more XP
-        if (blockId.contains("ore") || blockId.contains("ancient_debris")) {
-            classManager.addXp(player, ProfessionType.MINECRAFTER, 5);
-        } else if (blockId.contains("stone") || blockId.contains("deepslate")
-                || blockId.contains("coal") || blockId.contains("copper")) {
-            classManager.addXp(player, ProfessionType.MINECRAFTER, 1);
-        } else if (blockId.contains("log") || blockId.contains("wood")) {
-            classManager.addXp(player, ProfessionType.MINECRAFTER, 2);
+        // FAIL-SAFE: blocks that don't generate naturally never give mining XP
+        if (!ItemBaseValues.isNaturallyGenerated(blockItem)) {
+            // Still allow crop XP below (crops are planted by players but XP is valid)
+        } else {
+            // Mining XP based on the block's base value
+            int xp = ItemBaseValues.getBaseXp(blockItem);
+            if (xp > 0) {
+                classManager.addXp(player, ProfessionType.MINECRAFTER, xp);
+            }
         }
 
         // Crops = Farmhand XP (only fully grown CropBlock instances)
+        String blockId = state.getBlock().getDescriptionId();
         if (state.getBlock() instanceof CropBlock crop) {
             if (crop.isMaxAge(state)) {
                 classManager.addXp(player, ProfessionType.FARMHAND, 3);
@@ -414,6 +442,14 @@ public class ClassExpHandler {
             playerPlacedGrowables.add(event.getPos().asLong());
         }
 
+        // Track player-placed ores for silk touch exploit prevention
+        String placedBlockId = placed.getBlock().getDescriptionId();
+        if (com.mlkymc.world.PlacedOreTracker.isOre(placedBlockId)
+                && event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+            com.mlkymc.world.PlacedOreTracker.get(sl.getServer())
+                    .markPlaced(sl.dimension().identifier().toString(), event.getPos());
+        }
+
         // Only tag utility blocks relevant to the class system
         if (isOwnableBlock(placed) && event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
             com.mlkymc.world.BlockOwnerData.get(sl.getServer())
@@ -461,22 +497,40 @@ public class ClassExpHandler {
         if (event.getLevel().isClientSide()) return;
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
             com.mlkymc.world.BlockOwnerData.get(sl.getServer()).removeOwner(event.getPos());
+            // NOTE: placed ore cleanup is done in SpecialEffectHandler.onBlockDrop AFTER the drop check
+            // Do NOT call markBroken here — it would remove the entry before the drop handler checks it
         }
     }
 
     /**
-     * Crafting XP: awarded based on what was crafted.
-     * XP amount and profession determined by CraftingXpRegistry.
+     * Crafting XP: awarded based on SUM of ingredient base values.
+     * Profession determined by the OUTPUT item.
+     * Conversion recipes (9 diamonds → diamond block) give 0 XP.
      */
     @SubscribeEvent
     public void onItemCrafted(PlayerEvent.ItemCraftedEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.isCreative()) return;
 
-        var entry = CraftingXpRegistry.lookup(event.getCrafting());
-        if (entry.xp() > 0) {
-            classManager.addXp(player, entry.profession(), entry.xp());
+        var output = event.getCrafting();
+        // Skip conversion recipes entirely
+        if (ItemBaseValues.isConversionOutput(output.getItem())) return;
+
+        // Sum ingredient base values from the crafting grid
+        var grid = event.getInventory();
+        int totalXp = 0;
+        for (int i = 0; i < grid.getContainerSize(); i++) {
+            var slot = grid.getItem(i);
+            if (!slot.isEmpty()) {
+                totalXp += ItemBaseValues.getBaseXp(slot.getItem());
+            }
         }
+
+        if (totalXp <= 0) return;
+
+        // Profession comes from the OUTPUT item
+        ProfessionType profession = ItemBaseValues.getProfession(output.getItem());
+        classManager.addXp(player, profession, totalXp);
     }
 
     // =========================================================================
@@ -484,8 +538,8 @@ public class ClassExpHandler {
     // =========================================================================
 
     /**
-     * Smelting XP: routed by output type.
-     * Food -> FARMHAND only. Non-food -> SMITH + MINECRAFTER if applicable.
+     * Smelting XP: based on INPUT item's base value.
+     * Profession routed by output type: food → FARMHAND, other → SMITH.
      */
     @SubscribeEvent
     public void onItemSmelted(PlayerEvent.ItemSmeltedEvent event) {
@@ -493,29 +547,24 @@ public class ClassExpHandler {
         if (player.isCreative()) return;
 
         ItemStack result = event.getSmelting();
-        String id = result.getItem().toString();
-        int count = result.getCount(); // Scale XP with stack size
+        int count = result.getCount();
 
-        boolean isFood = id.contains("cooked_") || id.contains("baked_") || id.contains("dried_");
-
-        if (isFood) {
-            // Food smelting -> FARMHAND only
-            classManager.addXp(player, ProfessionType.FARMHAND, 3 * count);
+        // Look up what was smelted to produce this output
+        Item inputItem = ItemBaseValues.getSmeltingInput(result.getItem());
+        int xpPerItem;
+        if (inputItem != null) {
+            xpPerItem = ItemBaseValues.getBaseXp(inputItem);
         } else {
-            // Non-food smelting -> SMITH
-            classManager.addXp(player, ProfessionType.SMITH, 3 * count);
-
-            // Ingots/materials from ore smelting -> also MINECRAFTER
-            if (id.contains("_ingot") || id.equals("gold_nugget") || id.equals("iron_nugget")
-                    || id.contains("brick") || id.equals("glass") || id.equals("stone")
-                    || id.equals("smooth_stone") || id.contains("glazed_terracotta")
-                    || id.equals("sponge") || id.equals("netherite_scrap")
-                    || id.equals("quartz") || id.equals("popped_chorus_fruit")
-                    || id.equals("charcoal")) {
-                int xpPer = id.equals("netherite_scrap") ? 10 : 3;
-                classManager.addXp(player, ProfessionType.MINECRAFTER, xpPer * count);
-            }
+            // Fallback: use output item's base value
+            xpPerItem = ItemBaseValues.getBaseXp(result.getItem());
         }
+
+        if (xpPerItem <= 0) xpPerItem = 1; // minimum 1 XP per smelt
+
+        // Profession: food outputs → FARMHAND, everything else → SMITH
+        boolean isFood = result.has(net.minecraft.core.component.DataComponents.FOOD);
+        ProfessionType profession = isFood ? ProfessionType.FARMHAND : ProfessionType.SMITH;
+        classManager.addXp(player, profession, xpPerItem * count);
 
         // Smith Lv20 exclusive: low chance to get Milky Stars from smelting (per item)
         ClassData data = classManager.getOrCreate(player);

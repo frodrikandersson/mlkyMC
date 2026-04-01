@@ -27,7 +27,7 @@ import java.util.*;
  */
 public class GhostDataManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private final Path dataFile;
+    private Path dataFile;
     private final Map<UUID, GhostData> ghostData = new HashMap<>();
 
     // SE gain rates (per minute, checked every second)
@@ -43,7 +43,6 @@ public class GhostDataManager {
 
     public GhostDataManager(Path configDir) {
         this.dataFile = configDir.resolve("ghost_data.json");
-        load();
     }
 
     public GhostData getOrCreate(UUID uuid) {
@@ -493,5 +492,10 @@ public class GhostDataManager {
         } catch (IOException e) {
             MlkyMC.LOGGER.error("Failed to save ghost data", e);
         }
+    }
+
+    public void reload(Path dir) {
+        this.dataFile = dir.resolve("ghost_data.json");
+        load();
     }
 }

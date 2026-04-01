@@ -6,9 +6,15 @@
     "MMM"
   ],
   "key": {
-    "M": "mlkymc:milky_star",
-    "E": "minecraft:echo_shard",
-    "S": "minecraft:sculk_catalyst"
+    "M": {
+      "item": "mlkymc:milky_star"
+    },
+    "E": {
+      "item": "minecraft:echo_shard"
+    },
+    "S": {
+      "item": "minecraft:sculk_catalyst"
+    }
   },
   "result": {
     "id": "mlkymc:trophy_warden",

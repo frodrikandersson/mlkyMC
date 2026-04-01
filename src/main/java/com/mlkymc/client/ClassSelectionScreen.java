@@ -293,7 +293,7 @@ public class ClassSelectionScreen extends Screen {
                     {"  Soul Pillar", "99AABB"},
                     {"  Conduit Core", "99AABB"},
                     {"  Soul Altar Capstone", "99AABB"},
-                    {"  Tome of Soul Warden", "99AABB"},
+                    {"  Tome of the Soul Warden", "99AABB"},
                     {"  Totem of Resurrection", "99AABB"},
                     {"  Holy Water", "99AABB"},
                     {"  Enchanted Golden Apple", "99AABB"},
@@ -307,6 +307,8 @@ public class ClassSelectionScreen extends Screen {
                     {"  Toggle crop growth", "778899"},
                     {"  boost in 5-block", "778899"},
                     {"  radius (+50% base).", "778899"},
+                    {"  Costs 1 Milky Star", "778899"},
+                    {"  per 3s while active.", "778899"},
                     {"  Scales with level.", "778899"},
                     {"Secondary: Whisperer", "AABBCC"},
                     {"  Charm hostiles (10s).", "778899"},
@@ -316,7 +318,6 @@ public class ClassSelectionScreen extends Screen {
                     {"", ""},
                     {"SPECIAL EFFECTS:", "55FF55"},
                     {"  2x Farmhand EXP", "88CC88"},
-                    {"  Passive crop growth+", "88CC88"},
                     {"  Twin breeding chance", "88CC88"},
                     {"  Fish luck/lure +1", "88CC88"},
                     {"", ""},
@@ -779,7 +780,7 @@ public class ClassSelectionScreen extends Screen {
             // Second click: actually select the class
             ClassType chosen = CLASSES[selectedClass];
             if (this.minecraft != null && this.minecraft.player != null) {
-                this.minecraft.player.connection.sendCommand("mlkymc class select " + chosen.name().toLowerCase());
+                this.minecraft.player.connection.sendChat("[MLKYMC_CLASS_SELECT:" + chosen.name() + "]");
                 this.onClose();
             }
         }

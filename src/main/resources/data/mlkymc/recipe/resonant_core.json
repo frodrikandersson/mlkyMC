@@ -1,9 +1,15 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    "minecraft:redstone_block",
-    "minecraft:amethyst_shard",
-    "minecraft:iron_ingot"
+    {
+      "item": "minecraft:redstone_block"
+    },
+    {
+      "item": "minecraft:amethyst_shard"
+    },
+    {
+      "item": "minecraft:iron_ingot"
+    }
   ],
   "result": {
     "id": "mlkymc:resonant_core",

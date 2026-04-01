@@ -32,6 +32,50 @@ public class GhostListener {
 
     private final GhostManager ghostManager;
 
+    // Players who died and are waiting to press Respawn to become ghosts
+    // Persisted to disk so it survives server restarts
+    private static final java.util.Set<java.util.UUID> pendingGhosts =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static java.nio.file.Path pendingGhostsFile;
+
+    public static void setPendingGhostsFile(java.nio.file.Path file) {
+        pendingGhostsFile = file;
+        loadPendingGhosts();
+    }
+
+    public static boolean isPendingGhost(java.util.UUID uuid) {
+        return pendingGhosts.contains(uuid);
+    }
+
+    private static void savePendingGhosts() {
+        if (pendingGhostsFile == null) return;
+        try {
+            var list = new java.util.ArrayList<String>();
+            for (var uuid : pendingGhosts) list.add(uuid.toString());
+            java.nio.file.Files.writeString(pendingGhostsFile,
+                    new com.google.gson.Gson().toJson(list));
+        } catch (Exception e) {
+            com.mlkymc.MlkyMC.LOGGER.warn("Failed to save pending_ghosts.json", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void loadPendingGhosts() {
+        if (pendingGhostsFile == null || !java.nio.file.Files.exists(pendingGhostsFile)) return;
+        try {
+            String json = java.nio.file.Files.readString(pendingGhostsFile);
+            var list = new com.google.gson.Gson().fromJson(json,
+                    new com.google.gson.reflect.TypeToken<java.util.List<String>>(){}.getType());
+            if (list != null) {
+                for (String s : (java.util.List<String>) list) {
+                    pendingGhosts.add(java.util.UUID.fromString(s));
+                }
+            }
+        } catch (Exception e) {
+            com.mlkymc.MlkyMC.LOGGER.warn("Failed to load pending_ghosts.json", e);
+        }
+    }
+
     public GhostListener(GhostManager ghostManager) {
         this.ghostManager = ghostManager;
     }
@@ -51,86 +95,100 @@ public class GhostListener {
             return; // Player survived via Devoted Life, don't become ghost
         }
 
-        event.setCanceled(true);
-
-        // Create grave BEFORE becoming a ghost (captures inventory)
+        // Don't cancel death — let the player see the death screen and press Respawn
+        // Create grave NOW (captures inventory before vanilla drops it)
         if (player.level() instanceof ServerLevel level) {
             try {
                 com.mlkymc.grave.GraveManager gm = com.mlkymc.MlkyMC.getGraveManager();
                 if (gm != null) {
-                    com.mlkymc.grave.GraveData grave = gm.createGrave(player, level);
-                    if (grave != null) {
-                        // Notify all online players for Cleric resurrection countdown HUD
-                        String deathSync = "[MLKYMC_DEATH:" + player.getName().getString() + "]";
-                        for (ServerPlayer online : level.getServer().getPlayerList().getPlayers()) {
-                            online.sendSystemMessage(Component.literal(deathSync).withColor(0x000000));
-                        }
-                    }
+                    gm.createGrave(player, level);
                 }
             } catch (Exception e) {
                 com.mlkymc.MlkyMC.LOGGER.error("Failed to create grave", e);
             }
         }
 
-        ghostManager.makeGhost(player);
+        // Mark player as pending ghost — they'll become a ghost when they press Respawn
+        pendingGhosts.add(player.getUUID());
+        savePendingGhosts();
 
-        // Create ghost data entry
-        var ghostDataManager = com.mlkymc.MlkyMC.getGhostDataManager();
-        if (ghostDataManager != null) {
-            ghostDataManager.getOrCreate(player.getUUID());
-            ghostDataManager.save();
-        }
-
-        // Broadcast to other players
-        Component broadcastMsg = Component.literal(player.getName().getString() + " has become a ghost!")
-                .withColor(0xAAAAAA);
-        for (ServerPlayer online : player.level().getServer().getPlayerList().getPlayers()) {
-            if (online != player) online.sendSystemMessage(broadcastMsg);
-        }
-
-        // Single consolidated message to the dead player
+        // Show grave location on death screen
         var gm = com.mlkymc.MlkyMC.getGraveManager();
         var grave = gm != null ? gm.getGraveByOwner(player.getUUID()) : null;
-        StringBuilder msg = new StringBuilder("You are now a ghost.");
         if (grave != null) {
-            msg.append(" Grave at ").append(grave.pos.getX()).append(", ")
-               .append(grave.pos.getY()).append(", ").append(grave.pos.getZ()).append(".");
+            player.sendSystemMessage(Component.literal(
+                    "Your items are in a grave at " + grave.pos.getX() + ", " + grave.pos.getY() + ", " + grave.pos.getZ())
+                    .withColor(0xFFAA00));
         }
-
-        // Find nearest Cleric
-        ServerPlayer nearestCleric = null;
-        double nearestDist = Double.MAX_VALUE;
-        for (ServerPlayer online : player.level().getServer().getPlayerList().getPlayers()) {
-            if (online == player || ghostManager.isGhost(online.getUUID())) continue;
-            var classData = com.mlkymc.MlkyMC.getClassManager().getOrCreate(online);
-            if (classData.getChosenClass() == com.mlkymc.classes.ClassType.CLERIC) {
-                double dist = player.distanceTo(online);
-                if (dist < nearestDist) {
-                    nearestDist = dist;
-                    nearestCleric = online;
-                }
-            }
-        }
-        if (nearestCleric != null) {
-            msg.append(" Nearest Cleric: ").append(nearestCleric.getName().getString())
-               .append(" (~").append((int) nearestDist).append(" blocks)");
-        } else {
-            msg.append(" No Cleric online — find a Soul Altar.");
-        }
-
-        player.sendSystemMessage(Component.literal(msg.toString()).withColor(0xFFAA00));
-
-        // Ghost ability guide
-        player.sendSystemMessage(Component.literal("--- Ghost Abilities ---").withColor(0x55FFFF));
-        player.sendSystemMessage(Component.literal("You gain Spectral Energy passively (+3/min near living players).").withColor(0xAAAAAA));
-        player.sendSystemMessage(Component.literal("Secondary: Select Mimic form (Bat/Creeper/Enderman) | Crouch+Secondary: Haunt Zone").withColor(0xAAAAAA));
-        player.sendSystemMessage(Component.literal("Primary: Confirm Mimic / use Mimic ability").withColor(0xAAAAAA));
-        player.sendSystemMessage(Component.literal("Find a Cleric or Soul Altar to get revived!").withColor(0x55FF55));
+        player.sendSystemMessage(Component.literal("Press Respawn to become a ghost.").withColor(0xAAAAAA));
     }
 
     @SubscribeEvent
     public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        // Player pressed Respawn after dying — convert to ghost now
+        if (pendingGhosts.remove(player.getUUID())) {
+            savePendingGhosts();
+            player.level().getServer().execute(() -> {
+                ghostManager.makeGhost(player);
+
+                // Create ghost data entry
+                var ghostDataManager = com.mlkymc.MlkyMC.getGhostDataManager();
+                if (ghostDataManager != null) {
+                    ghostDataManager.getOrCreate(player.getUUID());
+                    ghostDataManager.save();
+                }
+
+                // Broadcast
+                Component broadcastMsg = Component.literal(player.getName().getString() + " has become a ghost!")
+                        .withColor(0xAAAAAA);
+                for (ServerPlayer online : player.level().getServer().getPlayerList().getPlayers()) {
+                    if (online != player) online.sendSystemMessage(broadcastMsg);
+                }
+
+                // Death message and ghost guide
+                player.sendSystemMessage(Component.literal("You are now a ghost. Find someone to revive you!")
+                        .withColor(0xFF5555));
+
+                // Ghost ability guide
+                player.sendSystemMessage(Component.literal("--- Ghost Abilities ---").withColor(0x55FFFF));
+                player.sendSystemMessage(Component.literal("You gain Spectral Energy passively (+3/min near living players).").withColor(0xAAAAAA));
+                player.sendSystemMessage(Component.literal("Secondary: Select Mimic form (Bat/Creeper/Enderman) | Crouch+Secondary: Haunt Zone").withColor(0xAAAAAA));
+                player.sendSystemMessage(Component.literal("Primary: Confirm Mimic / use Mimic ability").withColor(0xAAAAAA));
+                player.sendSystemMessage(Component.literal("Find a Cleric or Soul Altar to get revived!").withColor(0x55FF55));
+
+                // Direction to nearest Cleric
+                var cm = com.mlkymc.MlkyMC.getClassManager();
+                if (cm != null && player.level() instanceof ServerLevel sl) {
+                    ServerPlayer nearestCleric = null;
+                    double nearestDist = Double.MAX_VALUE;
+                    for (ServerPlayer online : sl.getServer().getPlayerList().getPlayers()) {
+                        if (online == player) continue;
+                        var cd = cm.getOrCreate(online);
+                        if (cd.getChosenClass() == com.mlkymc.classes.ClassType.CLERIC) {
+                            double dist = online.distanceToSqr(player);
+                            if (dist < nearestDist) {
+                                nearestDist = dist;
+                                nearestCleric = online;
+                            }
+                        }
+                    }
+                    if (nearestCleric != null) {
+                        int dist = (int) Math.sqrt(nearestDist);
+                        player.sendSystemMessage(Component.literal(
+                                "Nearest Cleric: " + nearestCleric.getName().getString() + " (" + dist + " blocks away)")
+                                .withColor(0xAA55FF));
+                    } else {
+                        player.sendSystemMessage(Component.literal(
+                                "No Cleric is online. Find a Soul Altar to connect with one.")
+                                .withColor(0xAAAAAA));
+                    }
+                }
+            });
+            return;
+        }
+
         if (ghostManager.isGhost(player.getUUID())) {
             // Re-apply ghost effects after respawn with a 1 tick delay
             player.level().getServer().execute(() -> ghostManager.applyGhostEffects(player));
@@ -149,9 +207,36 @@ public class GhostListener {
                 gdm.sendSpectralSync(player, data);
             }
         } else {
-            // Not a ghost — tell client to reset ghost HUDs
-            player.sendSystemMessage(Component.literal("[MLKYMC_REVIVED:" + player.getName().getString() + "]")
-                    .withColor(0x000000));
+            // Check if player was pending ghost (died before server restart, never pressed Respawn)
+            if (pendingGhosts.contains(player.getUUID())) {
+                // They died before restart — convert to ghost now
+                pendingGhosts.remove(player.getUUID());
+                savePendingGhosts();
+                player.level().getServer().execute(() -> {
+                    ghostManager.makeGhost(player);
+                    var ghostDataManager = com.mlkymc.MlkyMC.getGhostDataManager();
+                    if (ghostDataManager != null) {
+                        ghostDataManager.getOrCreate(player.getUUID());
+                        ghostDataManager.save();
+                    }
+                    player.sendSystemMessage(Component.literal(
+                            "You died before the server restarted. You are now a ghost — find someone to revive you!")
+                            .withColor(0xFF5555));
+                    var gm = com.mlkymc.MlkyMC.getGraveManager();
+                    if (gm != null) {
+                        var grave = gm.getGraveByOwner(player.getUUID());
+                        if (grave != null) {
+                            player.sendSystemMessage(Component.literal(
+                                    "Your grave is at " + grave.pos.getX() + ", " + grave.pos.getY() + ", " + grave.pos.getZ())
+                                    .withColor(0xFFAA00));
+                        }
+                    }
+                });
+            } else {
+                // Not a ghost, not pending — tell client to reset ghost HUDs
+                player.sendSystemMessage(Component.literal("[MLKYMC_REVIVED:" + player.getName().getString() + "]")
+                        .withColor(0x000000));
+            }
         }
     }
 
@@ -167,15 +252,30 @@ public class GhostListener {
     public void onPlayerInteractBlock(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (ghostManager.isGhost(player.getUUID())) {
-            // Allow doors, trapdoors, fence gates, and Soul Altar Capstone
+            // Allow doors, trapdoors, fence gates, Soul Altar Capstone, and ghost statue
             BlockState state = event.getLevel().getBlockState(event.getPos());
             if (state.getBlock() instanceof DoorBlock
                     || state.getBlock() instanceof TrapDoorBlock
                     || state.getBlock() instanceof FenceGateBlock
                     || state.getBlock() instanceof com.mlkymc.registry.SoulAltarCapstoneBlock) {
-                // Force un-cancel in case another handler cancelled it
                 event.setCanceled(false);
-                return; // Allow interaction
+                return;
+            }
+            // Check if this is the ghost statue position
+            var rm = com.mlkymc.MlkyMC.getReviveManager();
+            if (rm != null) {
+                var statueLoc = rm.getStatueLocation();
+                if (statueLoc != null) {
+                    BlockPos statuePos = new BlockPos(
+                            (int) Math.floor(statueLoc.x),
+                            (int) Math.floor(statueLoc.y),
+                            (int) Math.floor(statueLoc.z));
+                    // Check within 2 blocks to account for coordinate rounding
+                    if (event.getPos().distManhattan(statuePos) <= 2) {
+                        event.setCanceled(false);
+                        return;
+                    }
+                }
             }
             event.setCanceled(true);
         }
@@ -250,14 +350,26 @@ public class GhostListener {
         }
     }
 
+    // Ghost UUIDs temporarily allowed to open the next container menu
+    private static final java.util.Set<java.util.UUID> ghostMenuAllowlist =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Allow a ghost to open the next container menu (call before openMenu). */
+    public static void allowNextMenu(java.util.UUID ghostUuid) {
+        ghostMenuAllowlist.add(ghostUuid);
+    }
+
     @SubscribeEvent
     public void onContainerOpen(PlayerContainerEvent.Open event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (ghostManager.isGhost(player.getUUID())) {
-            // Allow ghost-specific menus
-            var menu = event.getContainer();
-            if (menu instanceof com.mlkymc.altar.GhostDonationMenu) {
-                return; // Allow these menus for ghosts
+            // Check one-time allowlist (set before openMenu calls)
+            if (ghostMenuAllowlist.remove(player.getUUID())) {
+                return; // Allowed
+            }
+            // Always allow ghost donation menu
+            if (event.getContainer() instanceof com.mlkymc.altar.GhostDonationMenu) {
+                return;
             }
             player.closeContainer();
         }

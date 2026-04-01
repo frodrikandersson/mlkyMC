@@ -6,8 +6,12 @@
     "MMM"
   ],
   "key": {
-    "M": "mlkymc:milky_star",
-    "C": "minecraft:creeper_head"
+    "M": {
+      "item": "mlkymc:milky_star"
+    },
+    "C": {
+      "item": "minecraft:creeper_head"
+    }
   },
   "result": {
     "id": "mlkymc:trophy_creeper",

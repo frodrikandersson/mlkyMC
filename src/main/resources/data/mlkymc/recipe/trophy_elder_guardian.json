@@ -6,9 +6,15 @@
     "MMM"
   ],
   "key": {
-    "M": "mlkymc:milky_star",
-    "P": "minecraft:prismarine_shard",
-    "S": "minecraft:sponge"
+    "M": {
+      "item": "mlkymc:milky_star"
+    },
+    "P": {
+      "item": "minecraft:prismarine_shard"
+    },
+    "S": {
+      "item": "minecraft:sponge"
+    }
   },
   "result": {
     "id": "mlkymc:trophy_elder_guardian",

@@ -18,7 +18,7 @@ public class RegionManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Type DATA_TYPE = new TypeToken<Map<String, Region>>() {}.getType();
 
-    private final Path dataFile;
+    private Path dataFile;
     private Map<String, Region> regions = new HashMap<>();
 
     // Per-player selection state (pos1/pos2 for wand)
@@ -28,7 +28,6 @@ public class RegionManager {
 
     public RegionManager(Path configDir) {
         this.dataFile = configDir.resolve("regions.json");
-        load();
     }
 
     public Region getRegion(String name) {
@@ -121,6 +120,72 @@ public class RegionManager {
             }
         } catch (IOException e) {
             MlkyMC.LOGGER.error("Failed to save regions.json", e);
+        }
+    }
+
+    public void reload(Path dir) {
+        this.dataFile = dir.resolve("regions.json");
+        load();
+        loadSpawn(dir);
+    }
+
+    // --- Exact spawn point ---
+    private double spawnX, spawnY, spawnZ;
+    private float spawnYaw, spawnPitch;
+    private boolean hasExactSpawn = false;
+    private Path spawnFile;
+
+    public void setExactSpawn(double x, double y, double z, float yaw, float pitch) {
+        this.spawnX = x;
+        this.spawnY = y;
+        this.spawnZ = z;
+        this.spawnYaw = yaw;
+        this.spawnPitch = pitch;
+        this.hasExactSpawn = true;
+        saveSpawn();
+    }
+
+    public boolean hasExactSpawn() { return hasExactSpawn; }
+    public double getSpawnX() { return spawnX; }
+    public double getSpawnY() { return spawnY; }
+    public double getSpawnZ() { return spawnZ; }
+    public float getSpawnYaw() { return spawnYaw; }
+    public float getSpawnPitch() { return spawnPitch; }
+
+    private void loadSpawn(Path dir) {
+        spawnFile = dir.resolve("spawn.json");
+        if (Files.exists(spawnFile)) {
+            try (Reader reader = Files.newBufferedReader(spawnFile)) {
+                var data = new Gson().fromJson(reader, com.google.gson.JsonObject.class);
+                if (data != null && data.has("x")) {
+                    spawnX = data.get("x").getAsDouble();
+                    spawnY = data.get("y").getAsDouble();
+                    spawnZ = data.get("z").getAsDouble();
+                    spawnYaw = data.has("yaw") ? data.get("yaw").getAsFloat() : 0;
+                    spawnPitch = data.has("pitch") ? data.get("pitch").getAsFloat() : 0;
+                    hasExactSpawn = true;
+                }
+            } catch (Exception e) {
+                MlkyMC.LOGGER.warn("Failed to load spawn.json", e);
+            }
+        }
+    }
+
+    private void saveSpawn() {
+        if (spawnFile == null) return;
+        try {
+            Files.createDirectories(spawnFile.getParent());
+            var obj = new com.google.gson.JsonObject();
+            obj.addProperty("x", spawnX);
+            obj.addProperty("y", spawnY);
+            obj.addProperty("z", spawnZ);
+            obj.addProperty("yaw", spawnYaw);
+            obj.addProperty("pitch", spawnPitch);
+            try (Writer writer = Files.newBufferedWriter(spawnFile)) {
+                GSON.toJson(obj, writer);
+            }
+        } catch (Exception e) {
+            MlkyMC.LOGGER.warn("Failed to save spawn.json", e);
         }
     }
 }

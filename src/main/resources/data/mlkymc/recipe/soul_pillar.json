@@ -6,8 +6,12 @@
     "B"
   ],
   "key": {
-    "B": "mlkymc:soulstone_brick",
-    "S": "minecraft:soul_sand"
+    "B": {
+      "item": "mlkymc:soulstone_brick"
+    },
+    "S": {
+      "item": "minecraft:soul_sand"
+    }
   },
   "result": {
     "id": "mlkymc:soul_pillar",

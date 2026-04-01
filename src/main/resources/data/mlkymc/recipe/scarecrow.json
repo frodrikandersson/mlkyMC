@@ -6,10 +6,18 @@
     " S "
   ],
   "key": {
-    "P": "minecraft:carved_pumpkin",
-    "S": "minecraft:stick",
-    "H": "minecraft:hay_block",
-    "E": "mlkymc:blessed_ember"
+    "P": {
+      "item": "minecraft:carved_pumpkin"
+    },
+    "S": {
+      "item": "minecraft:stick"
+    },
+    "H": {
+      "item": "minecraft:hay_block"
+    },
+    "E": {
+      "item": "mlkymc:blessed_ember"
+    }
   },
   "result": {
     "id": "mlkymc:scarecrow",

@@ -43,8 +43,8 @@ public class ModItems {
             ITEMS.registerSimpleItem("tempered_plate", () -> new Item.Properties().stacksTo(64));
 
     // --- Cleric Soul Altar Items ---
-    public static final DeferredItem<Item> TOME_OF_SOUL_WARDEN =
-            ITEMS.registerSimpleItem("tome_of_soul_warden", () -> new Item.Properties().stacksTo(1));
+    public static final DeferredItem<Item> TOME_OF_THE_SOUL_WARDEN =
+            ITEMS.registerSimpleItem("tome_of_the_soul_warden", () -> new Item.Properties().stacksTo(1));
 
     // --- Adventurer Items ---
     public static final DeferredItem<Item> WAYFINDER_COMPASS =
@@ -96,8 +96,8 @@ public class ModItems {
     public static final DeferredItem<Item> BUILDERS_WAND =
             ITEMS.registerSimpleItem("builders_wand", () -> new Item.Properties().stacksTo(1).durability(256));
 
-    public static final DeferredItem<Item> ENDER_CHEST_BACKPACK =
-            ITEMS.registerSimpleItem("ender_chest_backpack", () -> new Item.Properties().stacksTo(1));
+    public static final DeferredItem<Item> ENDER_POUCH =
+            ITEMS.registerSimpleItem("ender_pouch", () -> new Item.Properties().stacksTo(1));
 
     // --- Smith Items ---
     public static final DeferredItem<Item> WHETSTONE =
@@ -116,4 +116,12 @@ public class ModItems {
     // --- Utility Items ---
     public static final DeferredItem<Item> DIMENSION_COMPASS =
             ITEMS.registerSimpleItem("dimension_compass", () -> new Item.Properties().stacksTo(1));
+
+    // --- Farmhand Exclusive ---
+    public static final DeferredItem<Item> SANDWICH =
+            ITEMS.register("sandwich", id -> new SandwichItem(new Item.Properties()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ITEM, id))
+                    .stacksTo(16)
+                    .food(new net.minecraft.world.food.FoodProperties.Builder()
+                            .nutrition(8).saturationModifier(0.8f).build())));
 }

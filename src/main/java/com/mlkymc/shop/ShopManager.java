@@ -28,7 +28,7 @@ public class ShopManager {
 
     public ShopManager(Path configDir) {
         this.dataFile = configDir.resolve("shops.json");
-        load();
+        load(); // Shops are global config, not per-world
     }
 
     public void setServer(MinecraftServer server) {

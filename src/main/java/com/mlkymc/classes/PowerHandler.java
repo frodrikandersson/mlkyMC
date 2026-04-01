@@ -131,7 +131,7 @@ public class PowerHandler {
         player.level().playSound(null, player.blockPosition(),
                 net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP,
                 net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.5f);
-        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("+20 Soul Energy").withColor(0xAA55FF));
+        player.displayClientMessage(net.minecraft.network.chat.Component.literal("+20 Soul Energy").withColor(0xAA55FF), true);
         event.setCanceled(true);
     }
 
@@ -145,6 +145,13 @@ public class PowerHandler {
         } else if (raw.equals("[MLKYMC_SECONDARY]")) {
             event.setCanceled(true);
             handleSecondary(event.getPlayer());
+        } else if (raw.startsWith("[MLKYMC_CLASS_SELECT:") && raw.endsWith("]")) {
+            event.setCanceled(true);
+            String className = raw.substring(21, raw.length() - 1);
+            try {
+                ClassType classType = ClassType.valueOf(className);
+                classManager.selectClass(event.getPlayer(), classType);
+            } catch (IllegalArgumentException ignored) {}
         }
 
         // Ghost mimic form selection via chat
@@ -214,7 +221,7 @@ public class PowerHandler {
                 }
                 sl.playSound(null, player.blockPosition(), SoundEvents.GENERIC_EXPLODE.value(),
                         SoundSource.PLAYERS, 1.0f, 1.0f);
-                player.sendSystemMessage(Component.literal("Creeper blast! Knockback!").withColor(0x55FF55));
+                player.displayClientMessage(Component.literal("Creeper blast! Knockback!").withColor(0x55FF55), true);
             }
             gdm.endMimic(player, data, false); // ends mimic, sets 60s cooldown
             return;
@@ -366,23 +373,29 @@ public class PowerHandler {
         boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
         double radius = 8.0 + (isCleric && level >= 10 ? 6.0 : 0);
 
-        var nearbyPlayers = serverLevel.getEntitiesOfClass(ServerPlayer.class,
-                player.getBoundingBox().inflate(radius));
+        var nearbyPlayers = new java.util.ArrayList<>(serverLevel.getEntitiesOfClass(ServerPlayer.class,
+                player.getBoundingBox().inflate(radius)));
+        // Filter out PvP-tagged players (except caster)
+        nearbyPlayers.removeIf(p -> !p.getUUID().equals(player.getUUID())
+                && com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
+        int othersHealed = 0;
         for (var nearby : nearbyPlayers) {
             nearby.heal(6.0f); // 3 hearts
             if (!nearby.getUUID().equals(player.getUUID())) {
+                othersHealed++;
                 nearby.sendSystemMessage(Component.literal("Healed by " +
                         player.getName().getString() + "'s Heal!").withColor(0x55FF55));
             }
         }
 
-        player.sendSystemMessage(Component.literal("Heal! Healed " +
-                nearbyPlayers.size() + " player(s) for 3 hearts").withColor(0xAA55FF));
+        if (othersHealed > 0) {
+            player.displayClientMessage(Component.literal("Heal! Healed " +
+                    othersHealed + " player(s) for 3 hearts").withColor(0xAA55FF), true);
+        } else {
+            player.displayClientMessage(Component.literal("Heal! (no nearby allies)").withColor(0xAA55FF), true);
+        }
         serverLevel.playSound(null, player.blockPosition(),
                 SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.5f);
-
-        int othersHealed = (int) nearbyPlayers.stream()
-                .filter(p -> !p.getUUID().equals(player.getUUID())).count();
         classManager.addXp(player, ProfessionType.CLERIC, 3 + othersHealed * 8);
     }
 
@@ -438,13 +451,22 @@ public class PowerHandler {
     // --- Tier 1: Enhanced Heal (80 SE, 5 hearts, 14 blocks) ---
     private void altarEnhancedHeal(ServerPlayer player, ClassData data, ServerLevel level) {
         if (!spendSE(player, data, 80)) return;
-        var nearby = level.getEntitiesOfClass(ServerPlayer.class, player.getBoundingBox().inflate(14));
+        var nearby = new java.util.ArrayList<>(level.getEntitiesOfClass(ServerPlayer.class, player.getBoundingBox().inflate(14)));
+        nearby.removeIf(p -> !p.getUUID().equals(player.getUUID())
+                && com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
+        int ehCount = 0;
         for (var p : nearby) {
             p.heal(10.0f); // 5 hearts
-            if (!p.getUUID().equals(player.getUUID()))
+            if (!p.getUUID().equals(player.getUUID())) {
+                ehCount++;
                 p.sendSystemMessage(Component.literal("Healed by " + player.getName().getString() + "!").withColor(0x55FF55));
+            }
         }
-        player.sendSystemMessage(Component.literal("Enhanced Heal! " + nearby.size() + " player(s), 5 hearts").withColor(0xAA55FF));
+        if (ehCount > 0) {
+            player.displayClientMessage(Component.literal("Enhanced Heal! " + ehCount + " player(s), 5 hearts").withColor(0xAA55FF), true);
+        } else {
+            player.displayClientMessage(Component.literal("Enhanced Heal! (no nearby allies)").withColor(0xAA55FF), true);
+        }
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 1.2f);
         classManager.addXp(player, ProfessionType.CLERIC, 10 + nearby.size() * 12);
     }
@@ -477,9 +499,9 @@ public class PowerHandler {
         // Set up spawn suppression aura for 3 minutes
         spiritWardExpiry.put(player.getUUID(), System.currentTimeMillis() + 180_000); // 3 min
         spiritWardPos.put(player.getUUID(), player.blockPosition());
-        player.sendSystemMessage(Component.literal(
+        player.displayClientMessage(Component.literal(
                 "Spirit Ward! Weakened " + mobs.size() + " mobs + spawn suppression for 3 min (30 blocks)")
-                .withColor(0xAA55FF));
+                .withColor(0xAA55FF), true);
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 0.6f);
         classManager.addXp(player, ProfessionType.CLERIC, 15);
     }
@@ -487,13 +509,14 @@ public class PowerHandler {
     // --- Tier 2: Soul Mend (60 SE, HoT 10s, 2 hearts/2s on target) ---
     private void altarSoulMend(ServerPlayer player, ClassData data, ServerLevel level) {
         if (!spendSE(player, data, 60)) return;
-        // Apply Regeneration II for 10 seconds (heals ~2 hearts/2s)
-        var nearby = level.getEntitiesOfClass(ServerPlayer.class, player.getBoundingBox().inflate(8));
+        var nearby = new java.util.ArrayList<>(level.getEntitiesOfClass(ServerPlayer.class, player.getBoundingBox().inflate(8)));
+        nearby.removeIf(p -> !p.getUUID().equals(player.getUUID())
+                && com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
         for (var p : nearby) {
             p.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.REGENERATION, 200, 1)); // Regen II, 10s
         }
-        player.sendSystemMessage(Component.literal("Soul Mend! Regen II for 10s on " + nearby.size() + " players").withColor(0xAA55FF));
+        player.displayClientMessage(Component.literal("Soul Mend! Regen II for 10s on " + nearby.size() + " players").withColor(0xAA55FF), true);
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.5f);
         classManager.addXp(player, ProfessionType.CLERIC, 8);
     }
@@ -519,21 +542,23 @@ public class PowerHandler {
             player.sendSystemMessage(Component.literal("Death Sense: " + ghostConn.name + " is at " +
                     ghostPlayer.blockPosition().toShortString()).withColor(0x55FFFF));
         }
-        player.sendSystemMessage(Component.literal("Death Sense active for 15s!").withColor(0xAA55FF));
+        player.displayClientMessage(Component.literal("Death Sense active for 15s!").withColor(0xAA55FF), true);
         classManager.addXp(player, ProfessionType.CLERIC, 5);
     }
 
     // --- Tier 3: Aura of Protection (200 SE, Resistance I + Absorption I, 20 blocks, 30s) ---
     private void altarAuraOfProtection(ServerPlayer player, ClassData data, ServerLevel level) {
         if (!spendSE(player, data, 200)) return;
-        var nearby = level.getEntitiesOfClass(ServerPlayer.class, player.getBoundingBox().inflate(20));
+        var nearby = new java.util.ArrayList<>(level.getEntitiesOfClass(ServerPlayer.class, player.getBoundingBox().inflate(20)));
+        nearby.removeIf(p -> !p.getUUID().equals(player.getUUID())
+                && com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
         for (var p : nearby) {
             p.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.RESISTANCE, 600, 0)); // Resistance I, 30s
             p.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.ABSORPTION, 600, 0)); // Absorption I, 30s
         }
-        player.sendSystemMessage(Component.literal("Aura of Protection! " + nearby.size() + " players buffed for 30s").withColor(0xAA55FF));
+        player.displayClientMessage(Component.literal("Aura of Protection! " + nearby.size() + " players buffed for 30s").withColor(0xAA55FF), true);
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 2.0f, 0.8f);
         classManager.addXp(player, ProfessionType.CLERIC, 20);
     }
@@ -548,6 +573,11 @@ public class PowerHandler {
 
     public static void removeCursedMob(int entityId) {
         cursedMobIds.remove(entityId);
+    }
+
+    public static boolean isCurseAuraActive(java.util.UUID playerUuid) {
+        Long expiry = curseAuraExpiry.get(playerUuid);
+        return expiry != null && expiry > 0;
     }
 
     /** Called from tick handler to apply curse to nearby mobs and cleanup expired auras */
@@ -613,9 +643,9 @@ public class PowerHandler {
         if (!spendSE(player, data, 80)) return;
         // Activate 1-minute aura
         curseAuraExpiry.put(player.getUUID(), level.getGameTime() + 1200); // 60 seconds
-        player.sendSystemMessage(Component.literal(
-                "Curse of Unrest activated! Nearby hostile mobs are cursed for 60s. Kills give double XP.")
-                .withColor(0xAA55FF));
+        player.displayClientMessage(Component.literal(
+                "Curse of Unrest activated! Nearby mobs cursed 60s. Double XP!")
+                .withColor(0xAA55FF), true);
         // #1: Level-up style sound
         level.playSound(null, player.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 0.5f);
         classManager.addXp(player, ProfessionType.CLERIC, 10);
@@ -741,12 +771,30 @@ public class PowerHandler {
         // Find the dead player
         ServerPlayer deadPlayer = level.getServer().getPlayerList().getPlayer(grave.ownerUUID);
 
+        // Don't resurrect if they haven't pressed Respawn yet (still on death screen)
+        if (deadPlayer != null && com.mlkymc.ghost.GhostListener.isPendingGhost(deadPlayer.getUUID())) {
+            player.sendSystemMessage(Component.literal(
+                    grave.ownerName + " hasn't respawned yet — wait for them to press Respawn.").withColor(0xFF5555));
+            return;
+        }
+
+        // Dead player must be online to resurrect
+        if (deadPlayer == null) {
+            player.sendSystemMessage(Component.literal(
+                    grave.ownerName + " is offline — can't resurrect.").withColor(0xFF5555));
+            return;
+        }
+
         // Give items back
-        ServerPlayer recipient = deadPlayer != null ? deadPlayer : player;
-        graveManager.claimGrave(recipient, grave, level);
+        graveManager.claimGrave(deadPlayer, grave, level);
 
         if (deadPlayer != null) {
-            // Resurrect with half health
+            // Revive from ghost state if they're a ghost
+            var gm = com.mlkymc.MlkyMC.getGhostManager();
+            if (gm != null && gm.isGhost(deadPlayer.getUUID())) {
+                gm.revivePlayer(deadPlayer);
+            }
+            // Set health to half
             deadPlayer.setHealth(deadPlayer.getMaxHealth() * 0.5f);
             deadPlayer.sendSystemMessage(Component.literal("You were resurrected by " +
                     player.getName().getString() + "!").withColor(0x55FF55));
@@ -783,7 +831,7 @@ public class PowerHandler {
         UUID uuid = player.getUUID();
         if (naturesCallActive.contains(uuid)) {
             naturesCallActive.remove(uuid);
-            player.sendSystemMessage(Component.literal("Nature's Call: OFF").withColor(0xFF5555));
+            player.displayClientMessage(Component.literal("Nature's Call: OFF").withColor(0xFF5555), true);
         } else {
             // Adaptive enchantment: no Milky Star cost (but half growth in tick handler)
             if (!hasAdaptiveHelmet(player) && MilkyStar.count(player) < 1) {
@@ -791,7 +839,7 @@ public class PowerHandler {
                 return;
             }
             naturesCallActive.add(uuid);
-            player.sendSystemMessage(Component.literal("Nature's Call: ON").withColor(0x55FF55));
+            player.displayClientMessage(Component.literal("Nature's Call: ON").withColor(0x55FF55), true);
             if (player.level() instanceof ServerLevel sl) {
                 sl.playSound(null, player.blockPosition(),
                         SoundEvents.FLOWERING_AZALEA_PLACE, SoundSource.PLAYERS, 1.0f, 0.8f);
@@ -822,7 +870,7 @@ public class PowerHandler {
             if (!adaptiveNature && serverLevel.getGameTime() % 60 == 0) {
                 if (!MilkyStar.remove(sp, 1)) {
                     naturesCallActive.remove(sp.getUUID());
-                    sp.sendSystemMessage(Component.literal("Nature's Call: Out of Milky Stars!").withColor(0xFF5555));
+                    sp.displayClientMessage(Component.literal("Nature's Call: Out of Milky Stars!").withColor(0xFF5555), true);
                     continue;
                 }
             }
@@ -932,7 +980,7 @@ public class PowerHandler {
         }
 
         if (affected > 0) {
-            player.sendSystemMessage(Component.literal("Whisperer: Calmed " + affected + " creatures!").withColor(0x55FF55));
+            player.displayClientMessage(Component.literal("Whisperer: Calmed " + affected + " creatures!").withColor(0x55FF55), true);
             serverLevel.playSound(null, player.blockPosition(),
                     SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 1.5f, 0.8f);
             whispererCooldown.put(player.getUUID(), player.level().getGameTime() + 1200);
@@ -1064,7 +1112,7 @@ public class PowerHandler {
         // Track expiry in game ticks
         jackhammerExpiryTick.put(player.getUUID(), player.level().getGameTime() + durationTicks);
 
-        player.sendSystemMessage(Component.literal("Jackhammer: " + (durationTicks / 20) + "s!").withColor(0x55FFFF));
+        player.displayClientMessage(Component.literal("Jackhammer: " + (durationTicks / 20) + "s!").withColor(0x55FFFF), true);
         if (player.level() instanceof ServerLevel sl) {
             sl.playSound(null, player.blockPosition(),
                     SoundEvents.ANVIL_USE, SoundSource.PLAYERS, 0.8f, 1.5f);
@@ -1148,7 +1196,7 @@ public class PowerHandler {
         if (autoSmeltActive.contains(uuid)) {
             autoSmeltActive.remove(uuid);
             player.removeEffect(net.minecraft.world.effect.MobEffects.GLOWING);
-            player.sendSystemMessage(Component.literal("Auto-Smelt: OFF").withColor(0xFF5555));
+            player.displayClientMessage(Component.literal("Auto-Smelt: OFF").withColor(0xFF5555), true);
         } else {
             // Check for coal
             if (!hasCoal(player)) {
@@ -1159,7 +1207,7 @@ public class PowerHandler {
             consumeCoal(player);
             autoSmeltActive.add(uuid);
             autoSmeltNextCoalTick.put(uuid, player.level().getGameTime() + 1600); // next coal in 80s
-            player.sendSystemMessage(Component.literal("Auto-Smelt: ON (uses 1 coal/80s)").withColor(0x55FF55));
+            player.displayClientMessage(Component.literal("Auto-Smelt: ON (uses 1 coal/80s)").withColor(0x55FF55), true);
             // Apply glow/light effect
             player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false, false));
@@ -1234,6 +1282,7 @@ public class PowerHandler {
         boolean isSmeltableStone = false;
         if (hasAdaptiveHelmet(player)) {
             isSmeltableStone = blockId.contains("cobblestone") || blockId.contains("cobbled_deepslate")
+                    || blockId.contains("stone") || blockId.contains("deepslate")
                     || blockId.contains("clay_ball") || blockId.contains("clay")
                     || blockId.contains("netherrack") || blockId.contains("stone_bricks")
                     || blockId.contains("basalt");
@@ -1301,17 +1350,18 @@ public class PowerHandler {
         long now = System.currentTimeMillis();
         temperedMindExpiry.put(player.getUUID(), now + durationMs);
 
-        player.sendSystemMessage(Component.literal("Tempered Mind: No durability loss for 20s!").withColor(0xFFAA00));
+        player.displayClientMessage(Component.literal("Tempered Mind: No durability loss for 20s!").withColor(0xFFAA00), true);
         if (player.level() instanceof ServerLevel sl) {
             sl.playSound(null, player.blockPosition(),
                     SoundEvents.ANVIL_USE, SoundSource.PLAYERS, 0.6f, 1.2f);
         }
 
-        // Lv30 exclusive: AoE — nearby players also get the buff
+        // Lv30 exclusive: AoE — nearby players also get the buff (skip PvP-tagged)
         if (isSmith && level >= 30 && player.level() instanceof ServerLevel sl2) {
             var nearby = sl2.getEntitiesOfClass(ServerPlayer.class,
                     player.getBoundingBox().inflate(10),
-                    p -> !p.getUUID().equals(player.getUUID()));
+                    p -> !p.getUUID().equals(player.getUUID())
+                            && !com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
             for (var ally : nearby) {
                 temperedMindExpiry.put(ally.getUUID(), now + durationMs);
                 ally.sendSystemMessage(Component.literal(
@@ -1360,18 +1410,19 @@ public class PowerHandler {
         } else {
             // Normal: Extinguish self instantly
             player.extinguishFire();
-            player.sendSystemMessage(Component.literal("Tempered Body: Fire extinguished!").withColor(0xFFAA00));
+            player.displayClientMessage(Component.literal("Tempered Body: Fire extinguished!").withColor(0xFFAA00), true);
 
             if (player.level() instanceof ServerLevel sl) {
                 sl.playSound(null, player.blockPosition(),
                         SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 1.0f);
             }
 
-            // Lv30 exclusive: AoE extinguish for nearby players too
+            // Lv30 exclusive: AoE extinguish for nearby players too (skip PvP-tagged)
             if (isSmith && level >= 30 && player.level() instanceof ServerLevel sl2) {
                 var nearby = sl2.getEntitiesOfClass(ServerPlayer.class,
                         player.getBoundingBox().inflate(10),
-                        p -> !p.getUUID().equals(player.getUUID()));
+                        p -> !p.getUUID().equals(player.getUUID())
+                                && !com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
                 for (var ally : nearby) {
                     ally.extinguishFire();
                     ally.sendSystemMessage(Component.literal(
@@ -1415,6 +1466,19 @@ public class PowerHandler {
                     // Pressure aura: 5% chance per tick cycle to "crush" the mob
                     if (serverLevel.random.nextFloat() < 0.05f) {
                         crushMob(serverLevel, mob);
+                    }
+                }
+
+                // Also affect PvP-tagged players (slow + crush)
+                var pvpPlayers = serverLevel.getEntitiesOfClass(ServerPlayer.class,
+                        sp.getBoundingBox().inflate(10),
+                        p -> !p.getUUID().equals(sp.getUUID())
+                                && com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
+                for (var target : pvpPlayers) {
+                    target.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            net.minecraft.world.effect.MobEffects.SLOWNESS, 60, 1, false, false, false));
+                    if (serverLevel.random.nextFloat() < 0.05f) {
+                        crushPlayer(serverLevel, target);
                     }
                 }
             }
@@ -1567,6 +1631,20 @@ public class PowerHandler {
                     net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
 
             // Track for restoration after 10 ticks
+            crushedMobs.put(target.getId(), level.getGameTime() + 10);
+        }
+    }
+
+    private void crushPlayer(ServerLevel level, ServerPlayer target) {
+        target.hurtServer(level, level.damageSources().generic(), 4.0f);
+        level.playSound(null, target.getX(), target.getY(), target.getZ(),
+                SoundEvents.PLAYER_BIG_FALL, SoundSource.HOSTILE, 0.8f, 0.8f);
+        var scaleAttr = target.getAttribute(
+                net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
+        if (scaleAttr != null && scaleAttr.getModifier(CRUSH_SCALE_ID) == null) {
+            scaleAttr.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                    CRUSH_SCALE_ID, -0.2,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
             crushedMobs.put(target.getId(), level.getGameTime() + 10);
         }
     }

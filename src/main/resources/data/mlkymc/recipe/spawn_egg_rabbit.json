@@ -6,9 +6,15 @@
     "SSS"
   ],
   "key": {
-    "S": "mlkymc:milky_star",
-    "L": "mlkymc:living_essence",
-    "M": "minecraft:rabbit_hide"
+    "S": {
+      "item": "mlkymc:milky_star"
+    },
+    "L": {
+      "item": "mlkymc:living_essence"
+    },
+    "M": {
+      "item": "minecraft:rabbit_hide"
+    }
   },
   "result": {
     "id": "minecraft:rabbit_spawn_egg",

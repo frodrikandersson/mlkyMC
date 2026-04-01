@@ -20,8 +20,26 @@ public class ResurrectionCountdownHud {
     public void onChatReceived(ClientChatReceivedEvent event) {
         String msg = event.getMessage().getString();
         if (msg.startsWith("[MLKYMC_DEATH:") && msg.endsWith("]")) {
-            deadPlayerName = msg.substring(14, msg.length() - 1);
-            countdownEndTimeMs = System.currentTimeMillis() + COUNTDOWN_SECONDS * 1000L;
+            String data = msg.substring(14, msg.length() - 1);
+            // Format: "PlayerName:elapsedSeconds" or just "PlayerName"
+            int lastColon = data.lastIndexOf(':');
+            int elapsedSec = 0;
+            if (lastColon > 0) {
+                try {
+                    elapsedSec = Integer.parseInt(data.substring(lastColon + 1));
+                    deadPlayerName = data.substring(0, lastColon);
+                } catch (NumberFormatException e) {
+                    deadPlayerName = data;
+                }
+            } else {
+                deadPlayerName = data;
+            }
+            long remainingSec = Math.max(0, COUNTDOWN_SECONDS - elapsedSec);
+            if (remainingSec > 0) {
+                countdownEndTimeMs = System.currentTimeMillis() + remainingSec * 1000L;
+            } else {
+                countdownEndTimeMs = -1; // Already expired
+            }
             event.setCanceled(true);
         }
         // Cancel countdown when ghost is revived

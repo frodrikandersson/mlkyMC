@@ -29,7 +29,7 @@ public class MarketManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("mlkymc");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private final Path dataFile;
+    private Path dataFile;
     private MarketData data = new MarketData();
     private MinecraftServer server;
 
@@ -38,7 +38,6 @@ public class MarketManager {
 
     public MarketManager(Path configDir) {
         this.dataFile = configDir.resolve("market.json");
-        load();
     }
 
     public void setServer(MinecraftServer server) {
@@ -201,6 +200,17 @@ public class MarketManager {
 
     public void spawnAllVillagers() {
         if (server == null) return;
+
+        // Kill any existing stall villagers from world save to prevent duplicates on restart
+        for (var level : server.getAllLevels()) {
+            var existing = level.getEntities(
+                    net.minecraft.world.entity.EntityType.VILLAGER,
+                    e -> e.getTags().contains(STALL_TAG));
+            for (var entity : existing) {
+                entity.discard();
+            }
+        }
+
         for (Map.Entry<String, StallData> entry : data.stalls.entrySet()) {
             spawnStallVillager(entry.getKey(), entry.getValue());
         }
@@ -475,7 +485,7 @@ public class MarketManager {
     }
 
     /** Restore an ItemStack from a listing's saved NBT, falling back to basic item if no NBT. */
-    private ItemStack restoreItemStack(MarketListing listing) {
+    public ItemStack restoreItemStack(MarketListing listing) {
         if (listing.getItemNbt() != null && !listing.getItemNbt().isEmpty() && server != null) {
             try {
                 net.minecraft.nbt.CompoundTag tag = net.minecraft.nbt.TagParser.parseCompoundFully(listing.getItemNbt());
@@ -525,6 +535,11 @@ public class MarketManager {
         } catch (IOException e) {
             MlkyMC.LOGGER.error("Failed to save market.json", e);
         }
+    }
+
+    public void reload(Path dir) {
+        this.dataFile = dir.resolve("market.json");
+        load();
     }
 
     // ==== DATA CLASSES ====

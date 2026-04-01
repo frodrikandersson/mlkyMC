@@ -48,7 +48,7 @@ public class CraftRestrictionHandler {
         restrict(ModItems.BLESSING_SCROLL, ClassType.CLERIC);
         restrictVanilla(net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, ClassType.CLERIC);
         restrictVanilla(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, ClassType.CLERIC);
-        restrict(ModItems.TOME_OF_SOUL_WARDEN, ClassType.CLERIC);
+        restrict(ModItems.TOME_OF_THE_SOUL_WARDEN, ClassType.CLERIC);
         restrictBlock(ModBlocks.SOULSTONE_BRICK_ITEM, ClassType.CLERIC);
         restrictBlock(ModBlocks.SOUL_PILLAR_ITEM, ClassType.CLERIC);
         restrictBlock(ModBlocks.CONDUIT_CORE_ITEM, ClassType.CLERIC);
@@ -58,13 +58,14 @@ public class CraftRestrictionHandler {
         restrict(ModItems.LIVING_ESSENCE, ClassType.FARMHAND);
         restrict(ModItems.GROWTH_FERTILIZER, ClassType.FARMHAND);
         restrict(ModItems.ANIMAL_FEED, ClassType.FARMHAND);
+        restrict(ModItems.SANDWICH, ClassType.FARMHAND);
 
         // MineCrafter crafts
         restrict(ModItems.RESONANT_CORE, ClassType.MINECRAFTER);
         restrict(ModItems.REINFORCED_PICKAXE, ClassType.MINECRAFTER);
         restrict(ModItems.REINFORCED_AXE, ClassType.MINECRAFTER);
         restrict(ModItems.BUILDERS_WAND, ClassType.MINECRAFTER);
-        restrict(ModItems.ENDER_CHEST_BACKPACK, ClassType.MINECRAFTER);
+        restrict(ModItems.ENDER_POUCH, ClassType.MINECRAFTER);
         restrictVanilla(net.minecraft.world.item.Items.LODESTONE, ClassType.MINECRAFTER);
 
         // Smith crafts

@@ -29,28 +29,7 @@ public class ClassCommand {
     public void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mlkymc")
                 .then(Commands.literal("class")
-                        // /mlkymc class select <class>
-                        .then(Commands.literal("select")
-                                .then(Commands.argument("class", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> {
-                                            for (ClassType ct : ClassType.values()) {
-                                                if (ct != ClassType.NONE) {
-                                                    builder.suggest(ct.name().toLowerCase());
-                                                }
-                                            }
-                                            return builder.buildFuture();
-                                        })
-                                        .executes(ctx -> {
-                                            ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                            String className = StringArgumentType.getString(ctx, "class").toUpperCase();
-                                            try {
-                                                ClassType classType = ClassType.valueOf(className);
-                                                classManager.selectClass(player, classType);
-                                            } catch (IllegalArgumentException e) {
-                                                player.sendSystemMessage(Component.literal("Unknown class: " + className + ". Valid: adventurer, cleric, farmhand, minecrafter, smith"));
-                                            }
-                                            return 1;
-                                        })))
+                        // class select now handled via [MLKYMC_CLASS_SELECT:] chat message from GUI
                         // /mlkymc class info
                         .then(Commands.literal("info")
                                 .executes(ctx -> {
@@ -136,6 +115,9 @@ public class ClassCommand {
                                             if (ph != null) ph.clearAllStates(target);
                                             // Sync full reset to client (all zeros)
                                             classManager.sendLevelSync(target);
+                                            // Hide Devoted Life HUD
+                                            var psh = com.mlkymc.MlkyMC.getPassiveSkillHandler();
+                                            if (psh != null) psh.sendDevotedLifeNone(target);
                                             target.sendSystemMessage(Component.literal("Your class has been reset. Press [K] to choose a new class.").withColor(0xFFFF55));
                                             ctx.getSource().sendSuccess(() -> Component.literal(
                                                     "Reset " + target.getName().getString() + "'s class data. They must choose again."), true);
@@ -173,7 +155,7 @@ public class ClassCommand {
                                             return 1;
                                         })))
                 )
-                // /mlkymc mimic <form> — ghost mimic activation (used by clickable chat)
+                // /mlkymc mimic <form> — ghost mimic activation (used by mimic selection GUI)
                 .then(Commands.literal("mimic")
                         .then(Commands.argument("form", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {

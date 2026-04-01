@@ -81,21 +81,33 @@ public class SpecialEffectHandler {
     // block drops in BlockDropsEvent (already in PassiveSkillHandler via
     // the Milky Star ore drop chance).
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.HIGHEST)
     public void onBlockDrop(BlockDropsEvent event) {
         if (!(event.getBreaker() instanceof ServerPlayer player)) return;
+
+        String blockId = event.getState().getBlock().getDescriptionId();
+
+        // Clean up placed ore tracking for ANY player breaking an ore
+        boolean isOre = blockId.contains("ore") || blockId.contains("ancient_debris");
+        boolean isPlayerPlacedOre = false;
+        if (isOre && player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            var tracker = com.mlkymc.world.PlacedOreTracker.get(sl.getServer());
+            String dim = sl.dimension().identifier().toString();
+            if (tracker.isPlayerPlaced(dim, event.getPos())) {
+                isPlayerPlacedOre = true;
+                tracker.markBroken(dim, event.getPos());
+            }
+        }
 
         ClassData data = classManager.getOrCreate(player);
         if (data.getChosenClass() != ClassType.MINECRAFTER) return;
 
         int level = data.getLevel(ProfessionType.MINECRAFTER);
-        String blockId = event.getState().getBlock().getDescriptionId();
-        boolean isMiningBlock = blockId.contains("ore") || blockId.contains("ancient_debris")
+        boolean isMiningBlock = isOre
                 || blockId.contains("stone") || blockId.contains("deepslate")
                 || blockId.contains("log") || blockId.contains("wood");
 
-        // Fortune +1 base (special effect), +1 at Lv20 excl, +1 at Lv40 excl
-        if (blockId.contains("ore") || blockId.contains("ancient_debris")) {
+        if (isOre && !isPlayerPlacedOre) {
             int fortuneBonus = 1; // Base +1 for MineCrafter class
             if (level >= 20) fortuneBonus = 2; // Lv20 exclusive: +1 more
             if (level >= 40) fortuneBonus = 3; // Lv40 exclusive: +1 more
@@ -110,7 +122,8 @@ public class SpecialEffectHandler {
         }
 
         // Exclusive drop bonus: +20/40/60/80/100% at Lv5/15/25/35/45
-        if (isMiningBlock) {
+        // Skip on player-placed ores
+        if (isMiningBlock && !(isOre && isPlayerPlacedOre)) {
             double bonusPercent = getMinecrafterDropBonus(level);
             if (bonusPercent > 0) {
                 var random = player.level().random;

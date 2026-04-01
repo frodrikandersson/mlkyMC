@@ -6,9 +6,15 @@
     "SSS"
   ],
   "key": {
-    "S": "mlkymc:milky_star",
-    "L": "mlkymc:living_essence",
-    "M": "minecraft:sweet_berries"
+    "S": {
+      "item": "mlkymc:milky_star"
+    },
+    "L": {
+      "item": "mlkymc:living_essence"
+    },
+    "M": {
+      "item": "minecraft:sweet_berries"
+    }
   },
   "result": {
     "id": "minecraft:fox_spawn_egg",

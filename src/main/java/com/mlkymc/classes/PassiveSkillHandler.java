@@ -585,6 +585,9 @@ public class PassiveSkillHandler {
     public void onCraft(PlayerEvent.ItemCraftedEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
+        // Skip conversion recipes — no bonus output, no ingredient return
+        if (ItemBaseValues.isConversionOutput(event.getCrafting().getItem())) return;
+
         ClassData data = classManager.getOrCreate(player);
         int mcLevel = data.getLevel(ProfessionType.MINECRAFTER);
 
@@ -671,7 +674,6 @@ public class PassiveSkillHandler {
                             "[MLKYMC_DEVOTED:READY]").withColor(0x000000));
                 }
             }
-            // Don't spam NONE to players without Devoted Life — they don't need the HUD
         }
 
         if (clericLevel < 10) return;
@@ -681,6 +683,14 @@ public class PassiveSkillHandler {
             // Heal 0.5 HP per second (vanilla natural regen is ~0.5 HP per 4s at full food)
             player.heal(0.5f);
         }
+    }
+
+    /**
+     * Send Devoted Life HUD hide message. Called on class reset, class change, and login.
+     */
+    public void sendDevotedLifeNone(ServerPlayer player) {
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                "[MLKYMC_DEVOTED:NONE]").withColor(0x000000));
     }
 
     /**
@@ -776,7 +786,8 @@ public class PassiveSkillHandler {
         double radius = 8.0;
         var nearby = player.level().getEntitiesOfClass(ServerPlayer.class,
                 player.getBoundingBox().inflate(radius),
-                p -> !p.getUUID().equals(player.getUUID()));
+                p -> !p.getUUID().equals(player.getUUID())
+                        && !com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID()));
 
         if (!nearby.isEmpty()) {
             sharingPotion = true;
@@ -1717,7 +1728,8 @@ public class PassiveSkillHandler {
             for (java.util.UUID smithId : onlineSmithLv10) {
                 ServerPlayer smith = sl.getServer().getPlayerList().getPlayer(smithId);
                 if (smith != null && smith.level() == player.level()
-                        && smith.distanceToSqr(player) <= 100) { // 10 blocks squared
+                        && smith.distanceToSqr(player) <= 100
+                        && !com.mlkymc.pvp.PvPTagManager.isPvPTagged(player.getUUID())) { // 10 blocks, skip PvP
                     if (ThreadLocalRandom.current().nextDouble() < 0.10) {
                         for (net.minecraft.world.entity.EquipmentSlot slot : net.minecraft.world.entity.EquipmentSlot.values()) {
                             if (slot.getType() == net.minecraft.world.entity.EquipmentSlot.Type.HUMANOID_ARMOR) {
@@ -1740,7 +1752,14 @@ public class PassiveSkillHandler {
 
     @SubscribeEvent
     public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        // The tick handler will pick up and reapply all attribute modifiers next cycle
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        ClassData data = classManager.getOrCreate(sp);
+        int clericLv = data.getLevel(ProfessionType.CLERIC);
+        boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
+        boolean hasDevoted = (isCleric && clericLv >= 10) || (!isCleric && clericLv >= 30);
+        if (!hasDevoted) {
+            sendDevotedLifeNone(sp);
+        }
     }
 
     @SubscribeEvent

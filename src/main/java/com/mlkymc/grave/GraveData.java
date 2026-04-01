@@ -34,7 +34,7 @@ public class GraveData {
      * Only after 10 minutes (12000 ticks).
      */
     public boolean canOtherPlayerAccess(long currentTime) {
-        return currentTime - deathTime >= 1200; // 60 seconds
+        return currentTime - deathTime >= 12000; // 10 minutes
     }
 
     /**

@@ -6,9 +6,15 @@
     "EME"
   ],
   "key": {
-    "E": "minecraft:ender_pearl",
-    "M": "mlkymc:milky_star",
-    "C": "minecraft:compass"
+    "E": {
+      "item": "minecraft:ender_pearl"
+    },
+    "M": {
+      "item": "mlkymc:milky_star"
+    },
+    "C": {
+      "item": "minecraft:compass"
+    }
   },
   "result": {
     "id": "mlkymc:wayfinder_compass",

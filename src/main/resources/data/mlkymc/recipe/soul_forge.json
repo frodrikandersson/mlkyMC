@@ -6,11 +6,21 @@
     "NCN"
   ],
   "key": {
-    "N": "minecraft:netherite_scrap",
-    "C": "minecraft:crying_obsidian",
-    "E": "mlkymc:blessed_ember",
-    "A": "minecraft:anvil",
-    "M": "mlkymc:milky_star"
+    "N": {
+      "item": "minecraft:netherite_scrap"
+    },
+    "C": {
+      "item": "minecraft:crying_obsidian"
+    },
+    "E": {
+      "item": "mlkymc:blessed_ember"
+    },
+    "A": {
+      "item": "minecraft:anvil"
+    },
+    "M": {
+      "item": "mlkymc:milky_star"
+    }
   },
   "result": {
     "id": "mlkymc:soul_forge",

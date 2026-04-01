@@ -209,12 +209,11 @@ public class RegionCommand {
         int z = (int) Math.floor(player.getZ());
         float angle = player.getYRot();
 
-        var server = player.level().getServer();
-        String cmd = "setworldspawn " + x + " " + y + " " + z + " " + angle;
-        server.getCommands().performPrefixedCommand(source, cmd);
+        // Store exact spawn in region manager (used to teleport players on join/respawn)
+        manager.setExactSpawn(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
 
         player.sendSystemMessage(Component.literal(
-                "World spawn set to " + x + ", " + y + ", " + z + " (angle " + String.format("%.1f", angle) + ")").withColor(0x55FF55));
+                "Spawn set to " + x + ", " + y + ", " + z + " (angle " + String.format("%.1f", angle) + ")").withColor(0x55FF55));
         return 1;
     }
 

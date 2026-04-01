@@ -52,7 +52,7 @@ public class ItemFunctionHandler {
         ItemStack held = player.getMainHandItem();
 
         // Tome of the Soul Warden — open as a written book
-        if (held.is(ModItems.TOME_OF_SOUL_WARDEN.get())
+        if (held.is(ModItems.TOME_OF_THE_SOUL_WARDEN.get())
                 && held.has(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT)) {
             // Create a temporary vanilla written book with the same content to open the book GUI
             var content = held.get(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT);
@@ -74,7 +74,7 @@ public class ItemFunctionHandler {
         }
 
         // Ender Chest Backpack
-        if (held.is(ModItems.ENDER_CHEST_BACKPACK.get())) {
+        if (held.is(ModItems.ENDER_POUCH.get())) {
             player.openMenu(new net.minecraft.world.SimpleMenuProvider(
                     (id, inv, p) -> net.minecraft.world.inventory.ChestMenu.threeRows(id, inv, player.getEnderChestInventory()),
                     Component.literal("Ender Chest")
@@ -640,9 +640,15 @@ public class ItemFunctionHandler {
             }
         }
 
-        // Heal + invulnerability for all nearby players
+        // Heal + invulnerability for all nearby players (skip PvP-tagged except thrower)
+        java.util.UUID throwerUUID = null;
+        if (event.getEntity() instanceof net.minecraft.world.entity.projectile.Projectile proj && proj.getOwner() instanceof ServerPlayer sp) {
+            throwerUUID = sp.getUUID();
+        }
         for (var nearby : sl.getEntitiesOfClass(ServerPlayer.class,
                 event.getEntity().getBoundingBox().inflate(radius))) {
+            if (throwerUUID != null && !nearby.getUUID().equals(throwerUUID)
+                    && com.mlkymc.pvp.PvPTagManager.isPvPTagged(nearby.getUUID())) continue;
             nearby.heal(nearby.getMaxHealth());
             nearby.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.ABSORPTION, 400, 4, false, true, true));

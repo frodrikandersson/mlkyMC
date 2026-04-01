@@ -1,8 +1,12 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    "minecraft:phantom_membrane",
-    "mlkymc:milky_star"
+    {
+      "item": "minecraft:phantom_membrane"
+    },
+    {
+      "item": "mlkymc:milky_star"
+    }
   ],
   "result": {
     "id": "mlkymc:trophy_phantom",

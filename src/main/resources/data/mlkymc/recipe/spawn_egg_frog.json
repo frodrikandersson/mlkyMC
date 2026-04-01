@@ -6,9 +6,15 @@
     "SSS"
   ],
   "key": {
-    "S": "mlkymc:milky_star",
-    "L": "mlkymc:living_essence",
-    "M": "minecraft:slime_ball"
+    "S": {
+      "item": "mlkymc:milky_star"
+    },
+    "L": {
+      "item": "mlkymc:living_essence"
+    },
+    "M": {
+      "item": "minecraft:slime_ball"
+    }
   },
   "result": {
     "id": "minecraft:frog_spawn_egg",

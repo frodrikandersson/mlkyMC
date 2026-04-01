@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " L ",
+    "LCL",
+    "LML"
+  ],
+  "key": {
+    "L": {
+      "item": "minecraft:leather"
+    },
+    "C": {
+      "item": "minecraft:ender_chest"
+    },
+    "M": {
+      "item": "mlkymc:milky_star"
+    }
+  },
+  "result": {
+    "id": "mlkymc:ender_pouch",
+    "count": 1
+  }
+}

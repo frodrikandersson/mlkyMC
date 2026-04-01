@@ -38,21 +38,80 @@ public class SoulEnergyHud {
      */
     @SubscribeEvent
     public void onRenderHudPre(RenderGuiLayerEvent.Pre event) {
-        if (SpectralEnergyHud.isGhost()) return; // Ghost HUD takes priority
-        if (ClientClassData.getChosenClass() != ClassType.CLERIC) return;
-        if (!ClientClassData.isSoulEnergyMode()) return;
-
         var layerName = event.getName();
-        if (layerName.equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.EXPERIENCE_LEVEL)
-                || layerName.equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.CONTEXTUAL_INFO_BAR)
+
+        // Always cancel vanilla contextual bar (XP bar + locator) — we render our own XP bar
+        if (layerName.equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.CONTEXTUAL_INFO_BAR)
                 || layerName.equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.CONTEXTUAL_INFO_BAR_BACKGROUND)) {
+            event.setCanceled(true);
+            return;
+        }
+
+        // Always cancel vanilla XP level text — we render our own (repositioned)
+        if (layerName.equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.EXPERIENCE_LEVEL)) {
             event.setCanceled(true);
         }
     }
 
+    private static final net.minecraft.resources.Identifier XP_BAR_BG =
+            net.minecraft.resources.Identifier.withDefaultNamespace("hud/experience_bar_background");
+    private static final net.minecraft.resources.Identifier XP_BAR_FILL =
+            net.minecraft.resources.Identifier.withDefaultNamespace("hud/experience_bar_progress");
+
+    /**
+     * Render custom XP bar + level text (without locator dots).
+     */
+    @SubscribeEvent
+    public void onRenderXpBar(RenderGuiLayerEvent.Post event) {
+        // Render after health/food/armor bars on a layer that always fires
+        if (!event.getName().equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.SELECTED_ITEM_NAME)) return;
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || !mc.gameMode.hasExperience()) return;
+        if (SpectralEnergyHud.isGhost()) return;
+        if (ClientClassData.getChosenClass() == ClassType.CLERIC && ClientClassData.isSoulEnergyMode()) return;
+
+        GuiGraphics g = event.getGuiGraphics();
+        int screenW = mc.getWindow().getGuiScaledWidth();
+        int screenH = mc.getWindow().getGuiScaledHeight();
+        int barX = (screenW - 182) / 2;
+        int barY = screenH - 24 - 5;
+
+        int xpNeeded = mc.player.getXpNeededForNextLevel();
+        if (xpNeeded > 0) {
+            int filled = (int) (mc.player.experienceProgress * 183.0f);
+            g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                    XP_BAR_BG, barX, barY, 182, 5);
+            if (filled > 0) {
+                g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
+                        XP_BAR_FILL, 182, 5, 0, 0, barX, barY, filled, 5);
+            }
+        }
+
+        // Render XP level number (repositioned 3px higher than vanilla)
+        int level = mc.player.experienceLevel;
+        if (level > 0) {
+            net.minecraft.network.chat.Component levelComp =
+                    net.minecraft.network.chat.Component.translatable("gui.experience.level", level);
+            String levelStr = levelComp.getString();
+            int textW = mc.font.width(levelStr);
+            int textX = (screenW - textW) / 2;
+            int textY = screenH - 24 - 5 - 9; // same as vanilla
+            // Draw with black outline using drawString with shadow-like offsets
+            g.drawString(mc.font, levelStr, textX + 1, textY, 0xFF000000, false);
+            g.drawString(mc.font, levelStr, textX - 1, textY, 0xFF000000, false);
+            g.drawString(mc.font, levelStr, textX, textY + 1, 0xFF000000, false);
+            g.drawString(mc.font, levelStr, textX, textY - 1, 0xFF000000, false);
+            g.drawString(mc.font, levelStr, textX, textY, 0xFF80FF20, false); // green text
+        }
+    }
+
+    /**
+     * Render Soul Energy bar for Clerics in SE mode.
+     */
     @SubscribeEvent
     public void onRenderHud(RenderGuiLayerEvent.Post event) {
-        if (SpectralEnergyHud.isGhost()) return; // Ghost HUD takes priority
+        if (SpectralEnergyHud.isGhost()) return;
         if (ClientClassData.getChosenClass() != ClassType.CLERIC) return;
         if (!ClientClassData.isSoulEnergyMode()) return;
 

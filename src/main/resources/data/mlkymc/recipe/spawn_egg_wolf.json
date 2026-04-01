@@ -2,13 +2,19 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     "SSS",
-    "LML",
+    "LBL",
     "SSS"
   ],
   "key": {
-    "S": "mlkymc:milky_star",
-    "L": "mlkymc:living_essence",
-    "M": "minecraft:raw_beef"
+    "S": {
+      "item": "mlkymc:milky_star"
+    },
+    "L": {
+      "item": "mlkymc:living_essence"
+    },
+    "B": {
+      "item": "minecraft:beef"
+    }
   },
   "result": {
     "id": "minecraft:wolf_spawn_egg",

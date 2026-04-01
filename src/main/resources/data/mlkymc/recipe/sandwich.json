@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    {"item": "minecraft:bread"},
+    {"item": "mlkymc:milky_star"},
+    {"tag": "c:foods"},
+    {"tag": "c:foods"},
+    {"tag": "c:foods"}
+  ],
+  "result": {
+    "id": "mlkymc:sandwich",
+    "count": 1
+  }
+}

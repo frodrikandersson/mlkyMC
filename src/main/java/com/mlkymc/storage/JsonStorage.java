@@ -16,7 +16,7 @@ import java.util.UUID;
 public class JsonStorage {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private final Path dataFile;
+    private Path dataFile;
     private StorageData data = new StorageData();
 
     public JsonStorage(Path configDir) {
@@ -79,5 +79,10 @@ public class JsonStorage {
             this.yaw = yaw;
             this.pitch = pitch;
         }
+    }
+
+    public void reload(Path dir) {
+        this.dataFile = dir.resolve("data.json");
+        load();
     }
 }

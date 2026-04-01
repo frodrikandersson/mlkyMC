@@ -89,13 +89,7 @@ public class MarketCommand {
                         // /mlkymc stall listings - view your stall listings
                         .then(Commands.literal("listings")
                                 .executes(ctx -> stallListings(ctx.getSource())))
-                        // /mlkymc stall create <name>
-                        .then(Commands.literal("create")
-                                .then(Commands.argument("name", StringArgumentType.greedyString())
-                                        .executes(ctx -> stallCreate(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "name")
-                                        ))))
+                        // stall create removed — use Stall Deed item instead
                         // /mlkymc stall remove
                         .then(Commands.literal("remove")
                                 .executes(ctx -> stallRemove(ctx.getSource())))
@@ -377,23 +371,6 @@ public class MarketCommand {
                     .withColor(0xFFFF55), false);
         }
 
-        return 1;
-    }
-
-    private int stallCreate(CommandSourceStack source, String name) {
-        if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(Component.literal("Players only."));
-            return 0;
-        }
-
-        if (!marketManager.createStall(player, name)) {
-            source.sendFailure(Component.literal("You already have a stall! Use /mlkymc stall remove first."));
-            return 0;
-        }
-
-        source.sendSuccess(() -> Component.literal(
-                "Created your stall '" + name + "'! Other players can right-click it to browse your items.")
-                .withColor(0x55FF55), false);
         return 1;
     }
 

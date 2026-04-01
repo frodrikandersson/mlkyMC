@@ -188,4 +188,45 @@ public class RegionListener {
     private boolean canBypass(ServerPlayer player) {
         return player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
     }
+
+    /**
+     * Teleport new players (first join) to the exact spawn point.
+     */
+    @SubscribeEvent
+    public void onPlayerLogin(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!manager.hasExactSpawn()) return;
+
+        // Only teleport if the player has no bed/respawn point set (first join or bed destroyed)
+        if (player.getRespawnConfig() != null) return;
+
+        player.level().getServer().execute(() -> {
+            player.teleportTo(
+                    (ServerLevel) player.level(),
+                    manager.getSpawnX(), manager.getSpawnY(), manager.getSpawnZ(),
+                    java.util.Set.of(), manager.getSpawnYaw(), manager.getSpawnPitch(), false);
+        });
+    }
+
+    /**
+     * Teleport players to exact spawn on respawn (when they have no bed).
+     */
+    @SubscribeEvent
+    public void onPlayerRespawn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerRespawnEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!manager.hasExactSpawn()) return;
+
+        // Only override if they respawned at world spawn (no bed)
+        // Check if they're near the world spawn (within 32 blocks = vanilla spawn area)
+        var worldSpawn = player.level().getServer().overworld().getLevelData().getRespawnData().pos();
+        double distSq = player.blockPosition().distSqr(worldSpawn);
+        if (distSq > 1024) return; // They respawned at a bed, don't override
+
+        player.level().getServer().execute(() -> {
+            player.teleportTo(
+                    player.level().getServer().overworld(),
+                    manager.getSpawnX(), manager.getSpawnY(), manager.getSpawnZ(),
+                    java.util.Set.of(), manager.getSpawnYaw(), manager.getSpawnPitch(), false);
+        });
+    }
 }

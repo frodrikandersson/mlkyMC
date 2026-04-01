@@ -23,13 +23,13 @@ import java.util.UUID;
  */
 public class ClassManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private final Path dataFile;
+    private Path dataFile;
     private final Map<UUID, ClassData> playerData = new HashMap<>();
     private final Map<UUID, Long> lastSyncTick = new HashMap<>();
 
     public ClassManager(Path configDir) {
         this.dataFile = configDir.resolve("class_data.json");
-        load();
+        // Don't load here — reload() on server start will load from world folder
     }
 
     // --- Data Access ---
@@ -53,7 +53,7 @@ public class ClassManager {
         if (data.hasChosenClass()) {
             player.sendSystemMessage(Component.literal("You have already chosen the ")
                     .append(data.getChosenClass().getColoredName())
-                    .append(Component.literal(" class. This choice is permanent.")));
+                    .append(Component.literal(" class. Visit the Star Statue in town to reset.")));
             return false;
         }
         if (classType == ClassType.NONE) {
@@ -67,7 +67,9 @@ public class ClassManager {
             player.sendSystemMessage(Component.literal("[MLKYMC_SYNC:" + classType.name() + "]").withColor(0x000000));
             player.sendSystemMessage(Component.literal("You have chosen the ")
                     .append(classType.getColoredName())
-                    .append(Component.literal(" class! This choice is permanent.")));
+                    .append(Component.literal(" class!")));
+            player.sendSystemMessage(Component.literal("You can reset your levels and class at the Star Statue in town.")
+                    .withStyle(style -> style.withColor(0xFFAA00)));
             player.sendSystemMessage(Component.literal("Press [K] to open your Skill Tree and view your class progression.")
                     .withStyle(style -> style.withColor(0x55FFFF)));
 
@@ -220,11 +222,11 @@ public class ClassManager {
         );
 
         var tome = new net.minecraft.world.item.ItemStack(
-                com.mlkymc.registry.ModItems.TOME_OF_SOUL_WARDEN.get());
+                com.mlkymc.registry.ModItems.TOME_OF_THE_SOUL_WARDEN.get());
         tome.set(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT, bookContent);
 
         // Remove any existing Tome of the Soul Warden before adding the new one
-        var tomeItem = com.mlkymc.registry.ModItems.TOME_OF_SOUL_WARDEN.get();
+        var tomeItem = com.mlkymc.registry.ModItems.TOME_OF_THE_SOUL_WARDEN.get();
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             var existing = player.getInventory().getItem(i);
             if (!existing.isEmpty() && existing.getItem() == tomeItem) {
@@ -281,8 +283,8 @@ public class ClassManager {
         data.setSoulEnergyMode(newMode);
         sendSoulSync(player);
         save();
-        player.sendSystemMessage(Component.literal("Soul Energy Mode: " + (newMode ? "ON" : "OFF"))
-                .withColor(newMode ? 0xAA55FF : 0xAAAAAA));
+        player.displayClientMessage(Component.literal("Soul Energy Mode: " + (newMode ? "ON" : "OFF"))
+                .withColor(newMode ? 0xAA55FF : 0xAAAAAA), true);
     }
 
     public int getLevel(UUID uuid, ProfessionType profession) {
@@ -338,5 +340,10 @@ public class ClassManager {
         } catch (IOException e) {
             MlkyMC.LOGGER.error("Failed to save class data", e);
         }
+    }
+
+    public void reload(Path dir) {
+        this.dataFile = dir.resolve("class_data.json");
+        load();
     }
 }

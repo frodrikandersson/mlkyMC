@@ -58,10 +58,14 @@ public class GraveManager {
         }
 
         // Always create a grave, even with no items — it serves as the death marker
-        // Remove any existing grave for this player first
-        GraveData oldGrave = getGraveByOwner(player.getUUID());
-        if (oldGrave != null) {
-            // Remove old grave block from world
+        // Remove ALL existing graves for this player first
+        List<GraveData> oldGraves = new ArrayList<>();
+        for (GraveData g : graves.values()) {
+            if (g.ownerUUID.equals(player.getUUID())) {
+                oldGraves.add(g);
+            }
+        }
+        for (GraveData oldGrave : oldGraves) {
             var oldLevel = level.getServer().getLevel(
                     net.minecraft.resources.ResourceKey.create(
                             net.minecraft.core.registries.Registries.DIMENSION,
@@ -282,9 +286,17 @@ public class GraveManager {
         }
     }
 
+    private Path savePathOverride;
+
     private Path getSavePath() {
+        if (savePathOverride != null) return savePathOverride;
         return server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
                 .resolve("mlkymc_graves.dat");
+    }
+
+    public void reload(Path dir) {
+        this.savePathOverride = dir.resolve("mlkymc_graves.dat");
+        load();
     }
 
     private BlockPos findGravePosition(ServerLevel level, BlockPos deathPos) {

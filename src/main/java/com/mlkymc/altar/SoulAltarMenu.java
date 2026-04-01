@@ -118,7 +118,7 @@ public class SoulAltarMenu extends AbstractContainerMenu {
         // Row 1: Deposit/Channel buttons
         fillPane(9, 17, Items.BLACK_STAINED_GLASS_PANE, "");
 
-        int looseStars = MilkyStar.countLoose(viewer);
+        int looseStars = MilkyStar.count(viewer);
         container.setItem(DEPOSIT_1_STAR, makeButton(ModItems.MILKY_STAR.get(), 1,
                 "Deposit 1 Star (+30 SE)", 0x55FF55));
         container.setItem(DEPOSIT_10_STARS, makeButton(ModItems.MILKY_STAR.get(), 10,
@@ -225,7 +225,7 @@ public class SoulAltarMenu extends AbstractContainerMenu {
         switch (slotId) {
             case DEPOSIT_1_STAR -> doDepositStars(sp, 1);
             case DEPOSIT_10_STARS -> doDepositStars(sp, 10);
-            case DEPOSIT_ALL_STARS -> doDepositStars(sp, MilkyStar.countLoose(sp));
+            case DEPOSIT_ALL_STARS -> doDepositStars(sp, MilkyStar.count(sp));
             case CHANNEL_10_SE -> { if (isOwner) doChannelSE(sp, 10); }
             case CHANNEL_ALL_SE -> { if (isOwner) doChannelSE(sp, MlkyMC.getClassManager().getOrCreate(sp).getSoulEnergy()); }
             case GHOST_1_DISCONNECT -> { if (isOwner && altar.connectedGhosts.size() > 0) doDisconnectGhost(0); }
@@ -263,7 +263,7 @@ public class SoulAltarMenu extends AbstractContainerMenu {
 
     private void doDepositStars(ServerPlayer player, int amount) {
         if (amount <= 0) return;
-        int available = MilkyStar.countLoose(player);
+        int available = MilkyStar.count(player);
         int spaceLeft = SoulAltarManager.MAX_ALTAR_SE - altar.storedSE;
         if (spaceLeft <= 0) {
             player.sendSystemMessage(Component.literal("Altar is full! (100,000 SE)").withColor(0xFF5555));
@@ -275,11 +275,10 @@ public class SoulAltarMenu extends AbstractContainerMenu {
             player.sendSystemMessage(Component.literal("No Milky Stars to deposit.").withColor(0xFF5555));
             return;
         }
-        if (MilkyStar.removeLoose(player, toDeposit)) {
-            int gained = MlkyMC.getSoulAltarManager().depositMilkyStars(altar, player.getName().getString(), toDeposit);
-            player.sendSystemMessage(Component.literal("Deposited " + toDeposit + " Stars (+" + gained + " SE)")
-                    .withColor(0x55FF55));
-        }
+        MilkyStar.remove(player, toDeposit);
+        int gained = MlkyMC.getSoulAltarManager().depositMilkyStars(altar, player.getName().getString(), toDeposit);
+        player.sendSystemMessage(Component.literal("Deposited " + toDeposit + " Stars (+" + gained + " SE)")
+                .withColor(0x55FF55));
         refreshDisplay();
         broadcastChanges();
     }

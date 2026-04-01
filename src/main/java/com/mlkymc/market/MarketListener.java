@@ -90,6 +90,11 @@ public class MarketListener {
             return;
         }
 
+        // Show pickup hint to owner
+        if (stallOwner.equals(player.getStringUUID())) {
+            player.displayClientMessage(Component.literal("Crouch + RMB to pick up your stall").withColor(0xAAAAAA), true);
+        }
+
         MarketManager.StallData stall = marketManager.getStall(stallOwner);
         String title = stall != null ? stall.stallName : "Player Stall";
         player.openMenu(new SimpleMenuProvider(

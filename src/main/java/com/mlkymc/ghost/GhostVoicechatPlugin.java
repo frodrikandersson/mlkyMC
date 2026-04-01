@@ -126,8 +126,37 @@ public class GhostVoicechatPlugin implements VoicechatPlugin {
             }
         }
 
-        // Apply ghostly echo effect to the audio
+        // Cancel the default transmission and manually send as locational sound
+        // This ensures the modified audio actually reaches nearby players
+        event.cancel();
+
+        var packet = event.getPacket();
         applyGhostEcho(event, player.getUUID());
+
+        // Send as locational sound to all nearby living players
+        try {
+            var serverApi = (de.maxhenkel.voicechat.api.VoicechatServerApi) event.getVoicechat();
+            var pos = api.createPosition(player.getX(), player.getY() + 1.0, player.getZ());
+            var locPacket = packet.locationalSoundPacketBuilder()
+                    .opusEncodedData(packet.getOpusEncodedData())
+                    .position(pos)
+                    .distance(15.0f) // 15 block range
+                    .build();
+
+            // Send to all connected non-ghost players
+            for (var sp : player.level().getServer().getPlayerList().getPlayers()) {
+                if (sp.getUUID().equals(player.getUUID())) continue;
+                var ghostMgr = MlkyMC.getGhostManager();
+                if (ghostMgr != null && ghostMgr.isGhost(sp.getUUID())) continue;
+
+                var conn = serverApi.getConnectionOf(sp.getUUID());
+                if (conn != null) {
+                    serverApi.sendLocationalSoundPacketTo(conn, locPacket);
+                }
+            }
+        } catch (Exception e) {
+            MlkyMC.LOGGER.debug("Ghost voice send failed: {}", e.getMessage());
+        }
     }
 
     /**

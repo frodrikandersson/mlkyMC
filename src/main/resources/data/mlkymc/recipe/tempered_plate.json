@@ -1,9 +1,15 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    "minecraft:iron_block",
-    "minecraft:netherite_scrap",
-    "minecraft:coal_block"
+    {
+      "item": "minecraft:iron_block"
+    },
+    {
+      "item": "minecraft:netherite_scrap"
+    },
+    {
+      "item": "minecraft:coal_block"
+    }
   ],
   "result": {
     "id": "mlkymc:tempered_plate",

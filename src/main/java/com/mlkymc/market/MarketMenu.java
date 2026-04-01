@@ -378,11 +378,14 @@ public class MarketMenu extends AbstractContainerMenu {
     }
 
     private ItemStack createListingDisplay(MarketListing listing) {
-        Identifier itemId = Identifier.parse(listing.getItemId());
-        Item item = BuiltInRegistries.ITEM.get(itemId).map(Holder.Reference::value).orElse(null);
-        if (item == null) return new ItemStack(Items.BARRIER);
-
-        ItemStack stack = new ItemStack(item, listing.getAmount());
+        // Restore full item from stored NBT (preserves damage, enchantments, custom data)
+        ItemStack stack = manager.restoreItemStack(listing);
+        if (stack == null || stack.isEmpty()) {
+            Identifier itemId = Identifier.parse(listing.getItemId());
+            Item item = BuiltInRegistries.ITEM.get(itemId).map(Holder.Reference::value).orElse(null);
+            if (item == null) return new ItemStack(Items.BARRIER);
+            stack = new ItemStack(item, listing.getAmount());
+        }
         boolean isOwn = listing.getSellerUuid().equals(viewer.getStringUUID());
         String displayName = manager.getItemDisplayName(listing);
 
@@ -392,7 +395,15 @@ public class MarketMenu extends AbstractContainerMenu {
                         " - " + listing.getPrice() + " Milky Stars")
                         .withColor(isOwn ? 0xFF5555 : 0xFFD700));
 
+        // Show durability if item is damaged
         List<Component> lore = new ArrayList<>();
+        if (stack.isDamageableItem() && stack.getDamageValue() > 0) {
+            int maxDur = stack.getMaxDamage();
+            int remaining = maxDur - stack.getDamageValue();
+            int percent = (int) ((remaining / (float) maxDur) * 100);
+            int color = percent > 50 ? 0x55FF55 : percent > 25 ? 0xFFAA00 : 0xFF5555;
+            lore.add(Component.literal("Durability: " + remaining + "/" + maxDur + " (" + percent + "%)").withColor(color));
+        }
         if (isOwn) {
             lore.add(Component.literal("Your listing").withColor(0xAAAAAA));
             lore.add(Component.literal("Price: " + listing.getPrice() + " Milky Stars").withColor(0x55FF55));

@@ -298,7 +298,7 @@ public class CraftingXpRegistry {
         put(ModItems.REINFORCED_PICKAXE.get(), 25, ProfessionType.MINECRAFTER);
         put(ModItems.REINFORCED_AXE.get(), 25, ProfessionType.MINECRAFTER);
         put(ModItems.BUILDERS_WAND.get(), 15, ProfessionType.MINECRAFTER);
-        put(ModItems.ENDER_CHEST_BACKPACK.get(), 12, ProfessionType.MINECRAFTER);
+        put(ModItems.ENDER_POUCH.get(), 12, ProfessionType.MINECRAFTER);
 
         // Smith
         put(ModItems.TEMPERED_PLATE.get(), 5, ProfessionType.SMITH);
@@ -311,10 +311,10 @@ public class CraftingXpRegistry {
         put(ModItems.MARKET_CATALOG.get(), 0, ProfessionType.MINECRAFTER);
 
         // Ingot/nugget conversions (low XP to prevent exploits)
-        put(Items.IRON_NUGGET, 0, ProfessionType.SMITH);
-        put(Items.GOLD_NUGGET, 0, ProfessionType.SMITH);
-        put(Items.IRON_INGOT, 0, ProfessionType.SMITH);
-        put(Items.GOLD_INGOT, 0, ProfessionType.SMITH);
+        put(Items.IRON_NUGGET, 0, ProfessionType.MINECRAFTER);
+        put(Items.GOLD_NUGGET, 0, ProfessionType.MINECRAFTER);
+        put(Items.IRON_INGOT, 0, ProfessionType.MINECRAFTER);
+        put(Items.GOLD_INGOT, 0, ProfessionType.MINECRAFTER);
         put(Items.COPPER_INGOT, 0, ProfessionType.MINECRAFTER);
 
         // Block <-> ingot conversions (0 XP to prevent exploits)

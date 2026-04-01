@@ -47,7 +47,7 @@ public class ItemTooltipHandler {
         classRestrictions.put(ModItems.TOTEM_OF_RESURRECTION.get(), "Cleric");
         classRestrictions.put(ModItems.HOLY_WATER.get(), "Cleric");
         classRestrictions.put(ModItems.BLESSING_SCROLL.get(), "Cleric");
-        classRestrictions.put(ModItems.TOME_OF_SOUL_WARDEN.get(), "Cleric");
+        classRestrictions.put(ModItems.TOME_OF_THE_SOUL_WARDEN.get(), "Cleric");
         classRestrictions.put(Items.ENCHANTED_GOLDEN_APPLE, "Cleric");
         classRestrictions.put(Items.EXPERIENCE_BOTTLE, "Cleric");
         classRestrictions.put(ModBlocks.SOULSTONE_BRICK_ITEM.get(), "Cleric");
@@ -60,13 +60,37 @@ public class ItemTooltipHandler {
         classRestrictions.put(ModItems.GROWTH_FERTILIZER.get(), "Farmhand");
         classRestrictions.put(ModItems.ANIMAL_FEED.get(), "Farmhand");
         classRestrictions.put(ModBlocks.SCARECROW_ITEM.get(), "Farmhand");
+        // Farmhand spawn eggs
+        classRestrictions.put(Items.ZOMBIE_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.SKELETON_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.SPIDER_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.CAVE_SPIDER_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.BLAZE_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.SILVERFISH_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.MAGMA_CUBE_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.COW_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.SHEEP_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.CHICKEN_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.PIG_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.RABBIT_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.WOLF_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.CAT_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.BEE_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.HORSE_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.DONKEY_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.FOX_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.FROG_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.GOAT_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.IRON_GOLEM_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.LLAMA_SPAWN_EGG, "Farmhand");
+        classRestrictions.put(Items.TURTLE_SPAWN_EGG, "Farmhand");
 
         // MineCrafter
         classRestrictions.put(ModItems.RESONANT_CORE.get(), "MineCrafter");
         classRestrictions.put(ModItems.REINFORCED_PICKAXE.get(), "MineCrafter");
         classRestrictions.put(ModItems.REINFORCED_AXE.get(), "MineCrafter");
         classRestrictions.put(ModItems.BUILDERS_WAND.get(), "MineCrafter");
-        classRestrictions.put(ModItems.ENDER_CHEST_BACKPACK.get(), "MineCrafter");
+        classRestrictions.put(ModItems.ENDER_POUCH.get(), "MineCrafter");
         classRestrictions.put(Items.LODESTONE, "MineCrafter");
 
         // Smith
@@ -87,6 +111,24 @@ public class ItemTooltipHandler {
     public void onItemTooltip(ItemTooltipEvent event) {
         ItemStack stack = event.getItemStack();
         if (stack.isEmpty()) return;
+
+        // Show Soul Energy on Soul Altar Capstone
+        if (stack.is(ModBlocks.SOUL_ALTAR_CAPSTONE_ITEM.get())) {
+            var capData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
+            if (capData != null) {
+                var capNbt = capData.copyTag();
+                int se = capNbt.getIntOr("mlkymc_altar_se", 0);
+                int hw = capNbt.getIntOr("mlkymc_altar_hw", 0);
+                if (se > 0 || hw > 0) {
+                    event.getToolTip().add(Component.literal("Soul Energy: " + se).withColor(0xAA55FF));
+                    event.getToolTip().add(Component.literal("Highest SE: " + hw).withColor(0x777777));
+                } else {
+                    event.getToolTip().add(Component.literal("Soul Energy: 0").withColor(0x777777));
+                }
+            } else {
+                event.getToolTip().add(Component.literal("Soul Energy: 0").withColor(0x777777));
+            }
+        }
 
         // Check for Farmhand-blessed food tag (applies to any item, not just mlkymc namespace)
         var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
@@ -229,7 +271,7 @@ public class ItemTooltipHandler {
         } else if (stack.is(ModItems.BUILDERS_WAND.get())) {
             tooltip.add(Component.literal("Extend placed blocks in facing direction").withColor(0xAAAAAA));
             tooltip.add(Component.literal("Consumes blocks from inventory").withColor(0xAAAAAA));
-        } else if (stack.is(ModItems.ENDER_CHEST_BACKPACK.get())) {
+        } else if (stack.is(ModItems.ENDER_POUCH.get())) {
             tooltip.add(Component.literal("Right-click for portable ender chest").withColor(0xAA00FF));
         }
 

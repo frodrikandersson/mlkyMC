@@ -6,8 +6,12 @@
     " G "
   ],
   "key": {
-    "G": "minecraft:gold_nugget",
-    "B": "minecraft:book"
+    "G": {
+      "item": "minecraft:gold_nugget"
+    },
+    "B": {
+      "item": "minecraft:book"
+    }
   },
   "result": {
     "id": "mlkymc:market_catalog",
