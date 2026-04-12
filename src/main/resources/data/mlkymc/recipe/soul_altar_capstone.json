@@ -6,18 +6,10 @@
     "BOB"
   ],
   "key": {
-    "C": {
-      "item": "minecraft:crying_obsidian"
-    },
-    "A": {
-      "item": "minecraft:amethyst_block"
-    },
-    "B": {
-      "item": "mlkymc:soulstone_brick"
-    },
-    "O": {
-      "item": "mlkymc:conduit_core"
-    }
+    "C": "minecraft:crying_obsidian",
+    "A": "minecraft:amethyst_block",
+    "B": "mlkymc:soulstone_brick",
+    "O": "mlkymc:conduit_core"
   },
   "result": {
     "id": "mlkymc:soul_altar_capstone",

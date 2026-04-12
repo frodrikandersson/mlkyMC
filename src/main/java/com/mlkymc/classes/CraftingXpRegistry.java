@@ -275,39 +275,38 @@ public class CraftingXpRegistry {
 
         // --- mlkyMC mod items ---
         // Adventurer
-        put(ModItems.WAYSTONE_SHARD.get(), 5, ProfessionType.ADVENTURER);
-        put(ModItems.WAYFINDER_COMPASS.get(), 10, ProfessionType.ADVENTURER);
-        put(ModItems.WARP_STONE.get(), 8, ProfessionType.ADVENTURER);
-        put(ModItems.GRAPPLING_HOOK.get(), 12, ProfessionType.ADVENTURER);
+        put(ModItems.WAYSTONE_SHARD.get(), 2, ProfessionType.ADVENTURER);
+        put(ModItems.WAYFINDER_COMPASS.get(), 2, ProfessionType.ADVENTURER);
+        put(ModItems.WARP_STONE.get(), 2, ProfessionType.ADVENTURER);
+        put(ModItems.GRAPPLING_HOOK.get(), 2, ProfessionType.ADVENTURER);
         put(ModItems.GRAPPLING_HOOK_AMMO.get(), 2, ProfessionType.ADVENTURER);
-        put(ModItems.DIMENSION_COMPASS.get(), 15, ProfessionType.ADVENTURER);
+        put(ModItems.DIMENSION_COMPASS.get(), 2, ProfessionType.ADVENTURER);
 
         // Cleric
-        put(ModItems.BLESSED_EMBER.get(), 5, ProfessionType.CLERIC);
-        put(ModItems.TOTEM_OF_RESURRECTION.get(), 20, ProfessionType.CLERIC);
-        put(ModItems.HOLY_WATER.get(), 8, ProfessionType.CLERIC);
-        put(ModItems.BLESSING_SCROLL.get(), 6, ProfessionType.CLERIC);
+        put(ModItems.BLESSED_EMBER.get(), 2, ProfessionType.CLERIC);
+        put(ModItems.TOTEM_OF_RESURRECTION.get(), 2, ProfessionType.CLERIC);
+        put(ModItems.BLESSING_SCROLL.get(), 2, ProfessionType.CLERIC);
 
         // Farmhand
-        put(ModItems.LIVING_ESSENCE.get(), 5, ProfessionType.FARMHAND);
-        put(ModItems.GROWTH_FERTILIZER.get(), 3, ProfessionType.FARMHAND);
-        put(ModItems.ANIMAL_FEED.get(), 4, ProfessionType.FARMHAND);
+        put(ModItems.LIVING_ESSENCE.get(), 2, ProfessionType.FARMHAND);
+        put(ModItems.GROWTH_FERTILIZER.get(), 2, ProfessionType.FARMHAND);
+        put(ModItems.ANIMAL_FEED.get(), 2, ProfessionType.FARMHAND);
 
         // MineCrafter
-        put(ModItems.RESONANT_CORE.get(), 5, ProfessionType.MINECRAFTER);
-        put(ModItems.REINFORCED_PICKAXE.get(), 25, ProfessionType.MINECRAFTER);
-        put(ModItems.REINFORCED_AXE.get(), 25, ProfessionType.MINECRAFTER);
-        put(ModItems.BUILDERS_WAND.get(), 15, ProfessionType.MINECRAFTER);
-        put(ModItems.ENDER_POUCH.get(), 12, ProfessionType.MINECRAFTER);
+        put(ModItems.RESONANT_CORE.get(), 2, ProfessionType.MINECRAFTER);
+        put(ModItems.REINFORCED_PICKAXE.get(), 2, ProfessionType.MINECRAFTER);
+        put(ModItems.REINFORCED_AXE.get(), 2, ProfessionType.MINECRAFTER);
+        put(ModItems.BUILDERS_WAND.get(), 2, ProfessionType.MINECRAFTER);
+        put(ModItems.ENDER_POUCH.get(), 2, ProfessionType.MINECRAFTER);
 
         // Smith
-        put(ModItems.TEMPERED_PLATE.get(), 5, ProfessionType.SMITH);
-        put(ModItems.WHETSTONE.get(), 6, ProfessionType.SMITH);
-        put(ModItems.ARMOR_PLATING.get(), 8, ProfessionType.SMITH);
+        put(ModItems.TEMPERED_PLATE.get(), 2, ProfessionType.SMITH);
+        put(ModItems.WHETSTONE.get(), 2, ProfessionType.SMITH);
+        put(ModItems.ARMOR_PLATING.get(), 2, ProfessionType.SMITH);
 
         // Economy (no class XP for currency items)
         put(ModItems.MILKY_STAR.get(), 0, ProfessionType.MINECRAFTER);
-        put(ModItems.STALL_DEED.get(), 0, ProfessionType.MINECRAFTER);
+        put(com.mlkymc.registry.ModBlocks.STALL_DEED_ITEM.get(), 0, ProfessionType.MINECRAFTER);
         put(ModItems.MARKET_CATALOG.get(), 0, ProfessionType.MINECRAFTER);
 
         // Ingot/nugget conversions (low XP to prevent exploits)

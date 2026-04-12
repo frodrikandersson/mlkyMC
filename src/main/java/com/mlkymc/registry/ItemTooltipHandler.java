@@ -45,7 +45,6 @@ public class ItemTooltipHandler {
         // Cleric
         classRestrictions.put(ModItems.BLESSED_EMBER.get(), "Cleric");
         classRestrictions.put(ModItems.TOTEM_OF_RESURRECTION.get(), "Cleric");
-        classRestrictions.put(ModItems.HOLY_WATER.get(), "Cleric");
         classRestrictions.put(ModItems.BLESSING_SCROLL.get(), "Cleric");
         classRestrictions.put(ModItems.TOME_OF_THE_SOUL_WARDEN.get(), "Cleric");
         classRestrictions.put(Items.ENCHANTED_GOLDEN_APPLE, "Cleric");
@@ -59,6 +58,7 @@ public class ItemTooltipHandler {
         classRestrictions.put(ModItems.LIVING_ESSENCE.get(), "Farmhand");
         classRestrictions.put(ModItems.GROWTH_FERTILIZER.get(), "Farmhand");
         classRestrictions.put(ModItems.ANIMAL_FEED.get(), "Farmhand");
+        classRestrictions.put(ModItems.SANDWICH.get(), "Farmhand");
         classRestrictions.put(ModBlocks.SCARECROW_ITEM.get(), "Farmhand");
         // Farmhand spawn eggs
         classRestrictions.put(Items.ZOMBIE_SPAWN_EGG, "Farmhand");
@@ -144,6 +144,26 @@ public class ItemTooltipHandler {
             }
         }
 
+        // Radio block descriptions
+        if (stack.is(ModBlocks.MICROPHONE_ITEM.get())) {
+            event.getToolTip().add(Component.literal("Captures nearby voice and").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("broadcasts to Speakers on").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("the same frequency.").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("Right-click to toggle ON/OFF").withColor(0x55FF55));
+        }
+        if (stack.is(ModBlocks.SPEAKER_ITEM.get())) {
+            event.getToolTip().add(Component.literal("Plays audio received from").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("Microphones on the same").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("frequency. Place anywhere!").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("Right-click to view settings").withColor(0x55FFFF));
+        }
+        if (stack.is(ModBlocks.RADIO_ITEM.get())) {
+            event.getToolTip().add(Component.literal("Portable radio receiver.").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("Plays audio from Microphones").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("on the same frequency.").withColor(0xAAAAAA));
+            event.getToolTip().add(Component.literal("Right-click to view settings").withColor(0x55FFFF));
+        }
+
         // Show class restriction for any restricted item (mlkymc or vanilla)
         String className = getClassRestriction(stack.getItem());
         if (className != null) {
@@ -162,9 +182,9 @@ public class ItemTooltipHandler {
                 if (holder != null && stack.getTagEnchantments().getLevel(holder) > 0) {
                     event.getToolTip().add(Component.literal("Class effect varies:").withColor(0xAAAAAA));
                     event.getToolTip().add(Component.literal(" Cleric: SE fills Altar first").withColor(0x777777));
-                    event.getToolTip().add(Component.literal(" Adventurer: 2x dash distance").withColor(0x777777));
-                    event.getToolTip().add(Component.literal(" Farmhand: Free Nature's Call, half growth").withColor(0x777777));
-                    event.getToolTip().add(Component.literal(" MineCrafter: Smelt stone variants").withColor(0x777777));
+                    event.getToolTip().add(Component.literal(" Adventurer: Air Dash (1x mid-air)").withColor(0x777777));
+                    event.getToolTip().add(Component.literal(" Farmhand: Free Nature's Call (no bonemeal), half growth").withColor(0x777777));
+                    event.getToolTip().add(Component.literal(" MineCrafter: Ore Scan sees through walls (5 blk)").withColor(0x777777));
                     event.getToolTip().add(Component.literal(" Smith: Ignite nearby on Tempered Body").withColor(0x777777));
                 }
             }
@@ -240,13 +260,10 @@ public class ItemTooltipHandler {
 
         // --- Cleric ---
         else if (stack.is(ModItems.TOTEM_OF_RESURRECTION.get())) {
-            tooltip.add(Component.literal("Consumed to resurrect a fallen player").withColor(0xFFD700));
-            tooltip.add(Component.literal("Used after 60s death window expires").withColor(0xAAAAAA));
-        } else if (stack.is(ModItems.HOLY_WATER.get())) {
-            tooltip.add(Component.literal("Throw to deal massive damage").withColor(0xFFFFAA));
-            tooltip.add(Component.literal("to undead mobs in the area").withColor(0xFFFFAA));
-            tooltip.add(Component.literal("Heals + 20s invulnerability").withColor(0x55FF55));
-            tooltip.add(Component.literal("for all nearby players").withColor(0x55FF55));
+            tooltip.add(Component.literal("Does NOT revive you on death!").withColor(0xFF5555));
+            tooltip.add(Component.literal("Used by a Cleric to resurrect").withColor(0xFFD700));
+            tooltip.add(Component.literal("another player's ghost.").withColor(0xFFD700));
+            tooltip.add(Component.literal("Required after 5min death window").withColor(0xAAAAAA));
         } else if (stack.is(ModItems.BLESSING_SCROLL.get())) {
             tooltip.add(Component.literal("Choose any enchantment").withColor(0xAAAAAA));
             tooltip.add(Component.literal("Converts to enchanted book").withColor(0xAAAAAA));
@@ -263,16 +280,15 @@ public class ItemTooltipHandler {
 
         // --- MineCrafter ---
         else if (stack.is(ModItems.REINFORCED_PICKAXE.get())) {
-            tooltip.add(Component.literal("Unbreaking III + Efficiency IV").withColor(0x55FFFF));
             tooltip.add(Component.literal("Grants Vein Mine to any class").withColor(0xFFAA00));
         } else if (stack.is(ModItems.REINFORCED_AXE.get())) {
-            tooltip.add(Component.literal("Unbreaking III + Efficiency IV").withColor(0x55FFFF));
             tooltip.add(Component.literal("Grants Timber to any class").withColor(0xFFAA00));
         } else if (stack.is(ModItems.BUILDERS_WAND.get())) {
             tooltip.add(Component.literal("Extend placed blocks in facing direction").withColor(0xAAAAAA));
             tooltip.add(Component.literal("Consumes blocks from inventory").withColor(0xAAAAAA));
         } else if (stack.is(ModItems.ENDER_POUCH.get())) {
             tooltip.add(Component.literal("Right-click for portable ender chest").withColor(0xAA00FF));
+            tooltip.add(Component.literal("A compact pouch linked to your ender chest").withColor(0xAAAAAA));
         }
 
         // --- Smith ---
@@ -288,7 +304,7 @@ public class ItemTooltipHandler {
         else if (stack.is(ModItems.MARKET_CATALOG.get())) {
             tooltip.add(Component.literal("Browse all market listings").withColor(0xFFAA00));
             tooltip.add(Component.literal("Read-only marketplace view").withColor(0xAAAAAA));
-        } else if (stack.is(ModItems.STALL_DEED.get())) {
+        } else if (stack.is(ModBlocks.STALL_DEED_ITEM.get())) {
             tooltip.add(Component.literal("Place to create a market stall").withColor(0x55FF55));
             tooltip.add(Component.literal("Summons a villager for trading").withColor(0xAAAAAA));
         }

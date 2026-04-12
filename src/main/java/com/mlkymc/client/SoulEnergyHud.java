@@ -38,11 +38,22 @@ public class SoulEnergyHud {
      */
     @SubscribeEvent
     public void onRenderHudPre(RenderGuiLayerEvent.Pre event) {
+        if (net.minecraft.client.Minecraft.getInstance().options.hideGui) return;
         var layerName = event.getName();
 
-        // Always cancel vanilla contextual bar (XP bar + locator) — we render our own XP bar
+        // Cancel vanilla contextual bar (XP bar) — we render our own. BUT: the
+        // contextual bar layer also renders the horse jump bar and the camel dash bar
+        // when the player is riding. If we cancel it while mounted, those bars vanish.
+        // Only suppress while NOT riding a living entity with a jump bar.
         if (layerName.equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.CONTEXTUAL_INFO_BAR)
                 || layerName.equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.CONTEXTUAL_INFO_BAR_BACKGROUND)) {
+            var mc = net.minecraft.client.Minecraft.getInstance();
+            if (mc.player != null
+                    && mc.player.getVehicle() instanceof net.minecraft.world.entity.PlayerRideableJumping) {
+                // Mounted on a jumpable entity (horse, camel, etc.) — let vanilla
+                // render the jump bar instead of our custom XP bar.
+                return;
+            }
             event.setCanceled(true);
             return;
         }
@@ -63,6 +74,7 @@ public class SoulEnergyHud {
      */
     @SubscribeEvent
     public void onRenderXpBar(RenderGuiLayerEvent.Post event) {
+        if (net.minecraft.client.Minecraft.getInstance().options.hideGui) return;
         // Render after health/food/armor bars on a layer that always fires
         if (!event.getName().equals(net.neoforged.neoforge.client.gui.VanillaGuiLayers.SELECTED_ITEM_NAME)) return;
 
@@ -70,6 +82,11 @@ public class SoulEnergyHud {
         if (mc.player == null || !mc.gameMode.hasExperience()) return;
         if (SpectralEnergyHud.isGhost()) return;
         if (ClientClassData.getChosenClass() == ClassType.CLERIC && ClientClassData.isSoulEnergyMode()) return;
+
+        // Don't draw our custom XP bar while riding a jumpable entity — vanilla's
+        // contextual info bar is rendering the horse jump / camel dash bar in the
+        // same screen position and our bar would paint over it.
+        if (mc.player.getVehicle() instanceof net.minecraft.world.entity.PlayerRideableJumping) return;
 
         GuiGraphics g = event.getGuiGraphics();
         int screenW = mc.getWindow().getGuiScaledWidth();
@@ -111,6 +128,7 @@ public class SoulEnergyHud {
      */
     @SubscribeEvent
     public void onRenderHud(RenderGuiLayerEvent.Post event) {
+        if (net.minecraft.client.Minecraft.getInstance().options.hideGui) return;
         if (SpectralEnergyHud.isGhost()) return;
         if (ClientClassData.getChosenClass() != ClassType.CLERIC) return;
         if (!ClientClassData.isSoulEnergyMode()) return;

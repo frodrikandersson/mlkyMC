@@ -31,10 +31,10 @@ public class GhostVoicechatPlugin implements VoicechatPlugin {
 
     // Echo effect parameters
     private static final int ECHO_DELAY_SAMPLES = 4800;  // ~100ms at 48kHz
-    private static final float ECHO_DECAY = 0.45f;       // echo volume (45% of original)
+    private static final float ECHO_DECAY = 0.25f;       // echo volume (25% of original)
     private static final float ECHO_DECAY_2 = 0.2f;      // second echo (20%)
-    private static final int ECHO_DELAY_2_SAMPLES = 9600; // ~200ms second echo
-    private static final float VOLUME_REDUCTION = 0.75f;  // slightly quieter overall
+    private static final int ECHO_DELAY_2_SAMPLES = 4800; // ~100ms second echo
+    private static final float VOLUME_REDUCTION = 0.90f;  // slightly quieter overall
 
     private final Map<UUID, Long> lastCostTime = new HashMap<>();
     private final Map<UUID, short[]> echoBuffers = new HashMap<>();

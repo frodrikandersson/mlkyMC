@@ -6,12 +6,8 @@
     "MMM"
   ],
   "key": {
-    "M": {
-      "item": "mlkymc:milky_star"
-    },
-    "B": {
-      "item": "minecraft:blaze_rod"
-    }
+    "M": "mlkymc:milky_star",
+    "B": "minecraft:blaze_rod"
   },
   "result": {
     "id": "mlkymc:trophy_blaze",

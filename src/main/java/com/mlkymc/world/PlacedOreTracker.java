@@ -75,6 +75,43 @@ public class PlacedOreTracker {
         return blockId.contains("ore") || blockId.contains("ancient_debris");
     }
 
+    /**
+     * Check if a block should be tracked as player-placed to prevent the
+     * "place then mine for XP / debuff farming" exploit. Must stay in sync with the
+     * isMining substring list in DebuffHandler.onBlockDrop — any block that can roll
+     * the MineCrafter debuff on break must also be trackable on place.
+     */
+    public static boolean isTrackedBlock(String blockId) {
+        return blockId.contains("ore")
+                || blockId.contains("ancient_debris")
+                || blockId.contains("deepslate")
+                || blockId.contains("stone")
+                || blockId.contains("log") || blockId.contains("wood")
+                || blockId.contains("stem") || blockId.contains("hyphae")
+                || blockId.contains("granite") || blockId.contains("diorite")
+                || blockId.contains("andesite") || blockId.contains("tuff")
+                || blockId.contains("calcite") || blockId.contains("dripstone")
+                || blockId.contains("basalt") || blockId.contains("blackstone")
+                || blockId.contains("netherrack") || blockId.contains("end_stone")
+                || blockId.contains("obsidian") || blockId.contains("sandstone")
+                || blockId.contains("terracotta")
+                || blockId.contains("sugar_cane")
+                || blockId.contains("carved_pumpkin");
+    }
+
+    /**
+     * Check if a block ID represents a natural stone block (not ores, not crafted variants).
+     */
+    public static boolean isStone(String blockId) {
+        return blockId.equals("block.minecraft.stone")
+                || blockId.equals("block.minecraft.deepslate")
+                || blockId.equals("block.minecraft.granite")
+                || blockId.equals("block.minecraft.diorite")
+                || blockId.equals("block.minecraft.andesite")
+                || blockId.equals("block.minecraft.tuff")
+                || blockId.equals("block.minecraft.calcite");
+    }
+
     public void saveIfDirty() {
         if (dirty) {
             save();

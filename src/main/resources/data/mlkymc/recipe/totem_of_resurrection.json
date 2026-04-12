@@ -6,18 +6,10 @@
     "GMG"
   ],
   "key": {
-    "G": {
-      "item": "minecraft:golden_apple"
-    },
-    "M": {
-      "item": "mlkymc:milky_star"
-    },
-    "T": {
-      "item": "minecraft:totem_of_undying"
-    },
-    "E": {
-      "item": "mlkymc:living_essence"
-    }
+    "G": "minecraft:golden_apple",
+    "M": "mlkymc:milky_star",
+    "T": "minecraft:totem_of_undying",
+    "E": "mlkymc:living_essence"
   },
   "result": {
     "id": "mlkymc:totem_of_resurrection",

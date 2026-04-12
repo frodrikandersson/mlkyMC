@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:blaze_powder"
-    },
-    {
-      "item": "minecraft:gold_ingot"
-    },
-    {
-      "item": "minecraft:lapis_block"
-    }
+    "mlkymc:milky_star",
+    "minecraft:experience_bottle",
+    "minecraft:lapis_lazuli"
   ],
   "result": {
     "id": "mlkymc:blessed_ember",

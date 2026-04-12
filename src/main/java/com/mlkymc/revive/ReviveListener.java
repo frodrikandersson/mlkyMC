@@ -226,9 +226,9 @@ public class ReviveListener {
         // Revive from ghost state
         ghostManager.revivePlayer(ghost);
 
-        // Reset ALL class levels
+        // Reset ALL class levels and XP
         classManager.resetPlayer(ghost.getUUID());
-        ghost.sendSystemMessage(Component.literal("[MLKYMC_SYNC:NONE]").withColor(0x000000));
+        classManager.sendLevelSync(ghost);
 
         // Teleport to statue
         var statueLoc = reviveManager.getStatueLocation();
@@ -258,20 +258,15 @@ public class ReviveListener {
         SimpleContainer container = new SimpleContainer(9);
 
         // Slot 2: Resurrect a Ghost button
-        boolean hasTotem = findTotemSlot(player) != -1;
         List<ServerPlayer> ghosts = ghostManager.getOnlineGhosts();
-        ItemStack resurrectBtn = new ItemStack(hasTotem && !ghosts.isEmpty() ? Items.TOTEM_OF_UNDYING : Items.GRAY_WOOL);
+        ItemStack resurrectBtn = new ItemStack(!ghosts.isEmpty() ? Items.TOTEM_OF_UNDYING : Items.GRAY_WOOL);
         resurrectBtn.set(DataComponents.CUSTOM_NAME,
-                Component.literal("Resurrect a Ghost").withColor(hasTotem && !ghosts.isEmpty() ? 0x55FF55 : 0xAAAAAA));
+                Component.literal("Resurrect a Ghost").withColor(!ghosts.isEmpty() ? 0x55FF55 : 0xAAAAAA));
         List<Component> resurrectLore = new java.util.ArrayList<>();
-        if (!hasTotem) {
-            resurrectLore.add(Component.literal("Requires: Totem of Resurrection").withColor(0xFF5555));
-        }
         if (ghosts.isEmpty()) {
             resurrectLore.add(Component.literal("No ghosts online").withColor(0xFF5555));
         } else {
-            resurrectLore.add(Component.literal("Cost: 1 Totem of Resurrection").withColor(0xFFAA00));
-            resurrectLore.add(Component.literal("+ 50% of your class levels").withColor(0xFFAA00));
+            resurrectLore.add(Component.literal("Cost: 50% of your class levels").withColor(0xFFAA00));
             resurrectLore.add(Component.literal("+ 50% of the ghost's class levels").withColor(0xFFAA00));
             resurrectLore.add(Component.literal(ghosts.size() + " ghost(s) available").withColor(0xAAAAAA));
         }
@@ -283,12 +278,11 @@ public class ReviveListener {
         info.set(DataComponents.CUSTOM_NAME, Component.literal("Resurrection Altar").withColor(0xFFAA00));
         info.set(DataComponents.LORE, new ItemLore(List.of(
                 Component.literal("Resurrect a ghost:").withColor(0xAAAAAA),
-                Component.literal("  Requires a Totem of Resurrection.").withColor(0xFFAA00),
                 Component.literal("  Both you and the ghost lose").withColor(0xFFAA00),
                 Component.literal("  50% of all class levels.").withColor(0xFFAA00),
                 Component.empty(),
                 Component.literal("Reset your class:").withColor(0xAAAAAA),
-                Component.literal("  No totem needed.").withColor(0x55FF55),
+                Component.literal("  Choose a new class.").withColor(0x55FF55),
                 Component.literal("  Resets ALL levels to 0.").withColor(0xFF5555)
         )));
         container.setItem(4, info);
@@ -318,12 +312,7 @@ public class ReviveListener {
                         long now = sp.level().getGameTime();
 
                         if (slotId == 2) {
-                            // Resurrect a ghost
-                            if (findTotemSlot(sp) == -1) {
-                                sp.sendSystemMessage(Component.literal(
-                                        "You need a Totem of Resurrection!").withColor(0xFF5555));
-                                return;
-                            }
+                            // Resurrect a ghost (no totem needed — cost is halving levels)
                             if (ghostList.isEmpty()) {
                                 sp.sendSystemMessage(Component.literal("No ghosts online.").withColor(0xAAAAAA));
                                 return;
@@ -381,7 +370,7 @@ public class ReviveListener {
                     Component.literal(ghost.getName().getString()).withColor(0xAAAAAA));
             head.set(DataComponents.LORE, new ItemLore(List.of(
                     Component.literal("Click to select").withColor(0x55FF55),
-                    Component.literal("Cost: 1 Totem + half your class levels").withColor(0xFFAA00)
+                    Component.literal("Cost: half your class levels").withColor(0xFFAA00)
             )));
             container.setItem(i, head);
         }
@@ -412,15 +401,9 @@ public class ReviveListener {
                         String confirmKey = "revive_" + ghostToRevive.getUUID();
 
                         if (confirmKey.equals(pending) && expiry != null && now <= expiry) {
-                            // Confirmed! Verify totem exists (don't consume yet — consumed on ghost accept)
+                            // Confirmed! No totem needed — cost is halving levels
                             pendingConfirm.remove(uuid);
                             confirmExpiry.remove(uuid);
-
-                            if (findTotemSlot(sp) == -1) {
-                                sp.sendSystemMessage(Component.literal("Totem not found!").withColor(0xFF5555));
-                                sp.closeContainer();
-                                return;
-                            }
 
                             // Store pending revive (20 second timeout = 400 ticks)
                             pendingRevives.put(ghostToRevive.getUUID(),
@@ -448,7 +431,6 @@ public class ReviveListener {
                             ClassData reviverData = classManager.getOrCreate(sp);
                             List<Component> costLore = new java.util.ArrayList<>();
                             costLore.add(Component.literal("You will lose:").withColor(0xFF5555));
-                            costLore.add(Component.literal("  - 1 Totem of Resurrection").withColor(0xFFAA00));
                             for (ProfessionType prof : ProfessionType.values()) {
                                 int lv = reviverData.getLevel(prof);
                                 if (lv > 0) {
@@ -517,7 +499,7 @@ public class ReviveListener {
         deny.set(DataComponents.CUSTOM_NAME, Component.literal("DENY").withColor(0xFF5555));
         List<Component> denyLore = new ArrayList<>();
         denyLore.add(Component.literal("Deny resurrection").withColor(0xAAAAAA));
-        denyLore.add(Component.literal("Nothing happens, totem refunded.").withColor(0xAAAAAA));
+        denyLore.add(Component.literal("Nothing happens.").withColor(0xAAAAAA));
         deny.set(DataComponents.LORE, new ItemLore(denyLore));
         container.setItem(6, deny);
 
@@ -554,13 +536,7 @@ public class ReviveListener {
             return;
         }
 
-        // Consume totem now that the ghost accepted
-        int totemSlot = findTotemSlot(reviver);
-        if (totemSlot == -1) {
-            reviver.sendSystemMessage(Component.literal("Totem not found! Revive cancelled.").withColor(0xFF5555));
-            return;
-        }
-        reviver.getInventory().getItem(totemSlot).shrink(1);
+        // No totem required — the cost is halving both players' levels
 
         // Halve ALL class levels for the reviver
         ClassData reviverData = classManager.getOrCreate(reviver);
@@ -602,7 +578,7 @@ public class ReviveListener {
         }
 
         // Cleric XP for reviving
-        classManager.addXp(reviver, ProfessionType.CLERIC, 50);
+        classManager.addXp(reviver, ProfessionType.CLERIC, 50, "revive player");
     }
 
     private void executeSelfReset(ServerPlayer player) {

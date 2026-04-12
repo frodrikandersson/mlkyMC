@@ -6,15 +6,9 @@
     "SSS"
   ],
   "key": {
-    "S": {
-      "item": "mlkymc:milky_star"
-    },
-    "L": {
-      "item": "mlkymc:living_essence"
-    },
-    "M": {
-      "tag": "minecraft:wool"
-    }
+    "S": "mlkymc:milky_star",
+    "L": "mlkymc:living_essence",
+    "M": "#minecraft:wool"
   },
   "result": {
     "id": "minecraft:sheep_spawn_egg",

@@ -11,5 +11,8 @@ public class ClientEntityRenderers {
         // Also replace vanilla fishing hook renderer so we can conditionally swap texture
         // (in case player switches from grappling hook to fishing rod mid-cast)
         event.registerEntityRenderer(EntityType.FISHING_BOBBER, GrapplingHookRenderer::new);
+        // Concoction thrown entity — renders as the item texture (like vanilla thrown potions)
+        event.registerEntityRenderer(ModEntities.THROWN_CONCOCTION.get(),
+                net.minecraft.client.renderer.entity.ThrownItemRenderer::new);
     }
 }

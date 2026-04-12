@@ -1,6 +1,5 @@
 package com.mlkymc.classes;
 
-import com.mlkymc.economy.MilkyStar;
 import com.mlkymc.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -13,7 +12,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.ServerChatEvent;
-import net.neoforged.neoforge.event.level.BlockDropsEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -67,41 +65,56 @@ public class PowerHandler {
     }
 
     /**
-     * Clear all active power states for a player (auto-smelt, nature's call, jackhammer, etc).
+     * Clear all active power states for a player (ore scan, nature's call, jackhammer, etc).
      * Called on class reset.
      */
     public void clearAllStates(ServerPlayer player) {
         UUID uuid = player.getUUID();
-        autoSmeltActive.remove(uuid);
-        autoSmeltNextCoalTick.remove(uuid);
+        oreScanActive.remove(uuid);
+        oreScanNextCoalTick.remove(uuid);
+        clearOreMarkers(uuid);
         naturesCallActive.remove(uuid);
         jackhammerExpiryTick.remove(uuid);
 
         // Remove lingering effects
         player.removeEffect(net.minecraft.world.effect.MobEffects.GLOWING);
 
-        // Remove jackhammer speed modifier
+        // Remove jackhammer modifiers
         var breakAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.BLOCK_BREAK_SPEED);
         if (breakAttr != null) {
             breakAttr.removeModifier(JACKHAMMER_SPEED_ID);
         }
+        var dmgAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        if (dmgAttr != null) {
+            dmgAttr.removeModifier(JACKHAMMER_DAMAGE_ID);
+        }
     }
 
     /**
-     * On login: clear stale auto-smelt glowing effect (state is lost on relog).
+     * On login: clear stale ore scan glowing effect (state is lost on relog).
      */
     @SubscribeEvent
     public void onPlayerLogin(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         UUID uuid = player.getUUID();
 
-        // Auto-smelt state is in-memory only — always OFF after relog
-        if (autoSmeltActive.remove(uuid)) {
-            autoSmeltNextCoalTick.remove(uuid);
+        // Ore scan state is in-memory only — always OFF after relog
+        if (oreScanActive.remove(uuid)) {
+            oreScanNextCoalTick.remove(uuid);
+            clearOreMarkers(uuid);
         }
         // Remove stale Glowing effect from previous session
         if (player.hasEffect(net.minecraft.world.effect.MobEffects.GLOWING)) {
             player.removeEffect(net.minecraft.world.effect.MobEffects.GLOWING);
+        }
+        // Clean up any stale ore scan markers near the player (chunks now loaded)
+        if (player.level() instanceof ServerLevel sl) {
+            var stale = sl.getEntitiesOfClass(net.minecraft.world.entity.monster.Shulker.class,
+                    player.getBoundingBox().inflate(30),
+                    e -> e.getTags().contains("mlkymc_ore_marker"));
+            for (var marker : stale) {
+                marker.discard();
+            }
         }
         // Clear pending ghost mimic on relog
         ghostPendingMimic.remove(uuid);
@@ -298,7 +311,7 @@ public class PowerHandler {
         if (!data.hasChosenClass()) return;
 
         switch (data.getChosenClass()) {
-            // Adventurer secondary (minimap) is handled client-side only
+            case ADVENTURER -> adventurerSecondary(player, data);
             case CLERIC -> clericSecondary(player, data);
             case FARMHAND -> farmhandSecondary(player, data);
             case MINECRAFTER -> minecrafterSecondary(player, data);
@@ -322,30 +335,111 @@ public class PowerHandler {
     }
 
     // =========================================================================
-    // ADVENTURER PRIMARY: Weapon Dash
+    // ADVENTURER SECONDARY: Lifesteal
+    // Active for 10s, 60s cooldown. Siphons 20% of damage dealt as healing.
+    // Minimum 1 HP (half heart) per hit to prevent punch-spam exploit.
     // =========================================================================
 
-    private void adventurerPrimary(ServerPlayer player, ClassData data, int chargePercent) {
-        if (chargePercent < 10) return;
-        if (!player.onGround()) {
-            player.sendSystemMessage(Component.literal("Must be on solid ground to dash!").withColor(0xFF5555));
+    private final Map<UUID, Long> lifestealCooldown = new HashMap<>();
+    private static final Map<UUID, Long> lifestealExpiry = new HashMap<>();
+
+    public static boolean isLifestealActive(UUID uuid) {
+        Long expiry = lifestealExpiry.get(uuid);
+        return expiry != null && System.currentTimeMillis() < expiry;
+    }
+
+    private void adventurerSecondary(ServerPlayer player, ClassData data) {
+        if (isOnCooldown(lifestealCooldown, player)) {
+            player.sendSystemMessage(Component.literal("Lifesteal on cooldown! " +
+                    getCooldownRemaining(lifestealCooldown, player) + "s").withColor(0xFF5555));
             return;
         }
 
-        double power = 0.5 + (chargePercent / 100.0) * 2.0;
+        lifestealExpiry.put(player.getUUID(), System.currentTimeMillis() + 10_000); // 10s duration
+        lifestealCooldown.put(player.getUUID(), player.level().getGameTime() + 1200); // 60s cooldown
 
-        // Adaptive enchantment: double distance, 6s cooldown
+        player.displayClientMessage(Component.literal("Lifesteal: Active for 10s!").withColor(0xFF5555), true);
+        if (player.level() instanceof ServerLevel sl) {
+            sl.playSound(null, player.blockPosition(),
+                    SoundEvents.WITHER_SPAWN, SoundSource.PLAYERS, 0.3f, 1.8f);
+        }
+    }
+
+    /**
+     * Lifesteal healing on damage dealt. Called from damage event.
+     */
+    @SubscribeEvent
+    public void onLifestealHit(net.neoforged.neoforge.event.entity.living.LivingDamageEvent.Post event) {
+        var source = event.getSource().getEntity();
+        if (!(source instanceof ServerPlayer player)) return;
+        if (!isLifestealActive(player.getUUID())) return;
+
+        // Use original damage (before armor reduction) so Sharpness etc. is reflected
+        float damage = event.getOriginalDamage();
+        if (damage <= 0) return;
+
+        // 20% of pre-armor damage, minimum 1 HP (half heart)
+        float heal = Math.max(1.0f, damage * 0.2f);
+        player.heal(heal);
+    }
+
+    // =========================================================================
+    // ADVENTURER PRIMARY: Dash
+    // Adaptive enchantment: allows one air dash (resets on landing)
+    // =========================================================================
+
+    private final java.util.Set<UUID> airDashUsed = new java.util.HashSet<>();
+
+    private void adventurerPrimary(ServerPlayer player, ClassData data, int chargePercent) {
+        if (chargePercent < 10) return;
+
         boolean adaptive = hasAdaptiveHelmet(player);
-        if (adaptive) power *= 2.0;
+
+        if (!player.onGround()) {
+            if (adaptive && !airDashUsed.contains(player.getUUID())) {
+                // Air dash — allowed once
+                airDashUsed.add(player.getUUID());
+            } else {
+                player.sendSystemMessage(Component.literal(
+                        adaptive ? "Air dash already used! Land to reset." : "Must be on solid ground to dash!")
+                        .withColor(0xFF5555));
+                return;
+            }
+        }
+
+        double power = 0.5 + (chargePercent / 100.0) * 2.0;
 
         // Dash in the full look direction (including up/down)
         Vec3 look = player.getLookAngle();
         player.push(look.x * power, look.y * power, look.z * power);
         player.hurtMarked = true;
 
+        // Reset fall distance on air dash to prevent fall damage from the dash itself
+        if (!player.onGround()) {
+            player.fallDistance = 0;
+        }
+
         float pitch = 1.0f + (chargePercent / 100f) * 0.5f;
         player.level().playSound(null, player.blockPosition(),
                 SoundEvents.ENDER_DRAGON_FLAP, SoundSource.PLAYERS, 0.5f, pitch);
+    }
+
+    /**
+     * Reset air dash when player lands. Called from server tick.
+     */
+    public void tickAirDashReset(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        if (serverLevel.getGameTime() % 5 != 0) return; // Check every 5 ticks
+
+        var toReset = new java.util.ArrayList<UUID>();
+        for (UUID uuid : airDashUsed) {
+            ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
+            if (player == null || player.onGround()) {
+                toReset.add(uuid);
+            }
+        }
+        toReset.forEach(airDashUsed::remove);
     }
 
     // =========================================================================
@@ -369,9 +463,7 @@ public class PowerHandler {
         int seCost = 40;
         if (!spendSE(player, data, seCost)) return;
 
-        int level = data.getLevel(ProfessionType.CLERIC);
-        boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
-        double radius = 8.0 + (isCleric && level >= 10 ? 6.0 : 0);
+        double radius = 8.0;
 
         var nearbyPlayers = new java.util.ArrayList<>(serverLevel.getEntitiesOfClass(ServerPlayer.class,
                 player.getBoundingBox().inflate(radius)));
@@ -396,7 +488,7 @@ public class PowerHandler {
         }
         serverLevel.playSound(null, player.blockPosition(),
                 SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.5f);
-        classManager.addXp(player, ProfessionType.CLERIC, 3 + othersHealed * 8);
+        classManager.addXp(player, ProfessionType.CLERIC, 3 + othersHealed * 8, "heal pulse");
     }
 
     /**
@@ -408,6 +500,7 @@ public class PowerHandler {
         if (personal >= cost) {
             data.addSoulEnergy(-cost);
             classManager.sendSoulSync(player);
+            awardLapisFromSE(player, cost);
             return true;
         }
 
@@ -422,6 +515,7 @@ public class PowerHandler {
                 if (altarManager.spendAltarSE(altar, fromAltar)) {
                     data.addSoulEnergy(-fromPersonal);
                     classManager.sendSoulSync(player);
+                    awardLapisFromSE(player, cost); // counts altar SE too
                     return true;
                 }
             }
@@ -430,6 +524,27 @@ public class PowerHandler {
         player.sendSystemMessage(Component.literal("Need " + cost + " Soul Energy! (Current: " +
                 personal + ")").withColor(0xFF5555));
         return false;
+    }
+
+    /**
+     * Cleric chance to gain lapis lazuli when spending Soul Energy.
+     * 4% chance per 1 SE spent. Does NOT count for channeling SE into altar.
+     */
+    private void awardLapisFromSE(ServerPlayer player, int seSpent) {
+        int lapisGained = 0;
+
+        for (int i = 0; i < seSpent; i++) {
+            if (player.level().random.nextFloat() < 0.04f) {
+                lapisGained++;
+            }
+        }
+        if (lapisGained > 0) {
+            var lapis = new net.minecraft.world.item.ItemStack(
+                    net.minecraft.world.item.Items.LAPIS_LAZULI, lapisGained);
+            if (!player.getInventory().add(lapis)) {
+                player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), lapis);
+            }
+        }
     }
 
     /**
@@ -468,7 +583,7 @@ public class PowerHandler {
             player.displayClientMessage(Component.literal("Enhanced Heal! (no nearby allies)").withColor(0xAA55FF), true);
         }
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 1.2f);
-        classManager.addXp(player, ProfessionType.CLERIC, 10 + nearby.size() * 12);
+        classManager.addXp(player, ProfessionType.CLERIC, 10 + nearby.size() * 12, "enhanced heal");
     }
 
     // --- Tier 1: Spirit Ward (120 SE, reduce mob spawns 30 blocks, 3 min) ---
@@ -503,7 +618,7 @@ public class PowerHandler {
                 "Spirit Ward! Weakened " + mobs.size() + " mobs + spawn suppression for 3 min (30 blocks)")
                 .withColor(0xAA55FF), true);
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 0.6f);
-        classManager.addXp(player, ProfessionType.CLERIC, 15);
+        classManager.addXp(player, ProfessionType.CLERIC, 15, "spirit ward");
     }
 
     // --- Tier 2: Soul Mend (60 SE, HoT 10s, 2 hearts/2s on target) ---
@@ -518,7 +633,7 @@ public class PowerHandler {
         }
         player.displayClientMessage(Component.literal("Soul Mend! Regen II for 10s on " + nearby.size() + " players").withColor(0xAA55FF), true);
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.5f);
-        classManager.addXp(player, ProfessionType.CLERIC, 8);
+        classManager.addXp(player, ProfessionType.CLERIC, 8, "soul mend");
     }
 
     // --- Tier 2: Death Sense (50 SE, see through ghost's eyes 15s) ---
@@ -543,7 +658,7 @@ public class PowerHandler {
                     ghostPlayer.blockPosition().toShortString()).withColor(0x55FFFF));
         }
         player.displayClientMessage(Component.literal("Death Sense active for 15s!").withColor(0xAA55FF), true);
-        classManager.addXp(player, ProfessionType.CLERIC, 5);
+        classManager.addXp(player, ProfessionType.CLERIC, 5, "death sense");
     }
 
     // --- Tier 3: Aura of Protection (200 SE, Resistance I + Absorption I, 20 blocks, 30s) ---
@@ -560,7 +675,7 @@ public class PowerHandler {
         }
         player.displayClientMessage(Component.literal("Aura of Protection! " + nearby.size() + " players buffed for 30s").withColor(0xAA55FF), true);
         level.playSound(null, player.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 2.0f, 0.8f);
-        classManager.addXp(player, ProfessionType.CLERIC, 20);
+        classManager.addXp(player, ProfessionType.CLERIC, 20, "aura of protection");
     }
 
     // --- Tier 3: Curse of Unrest (80 SE, 1-minute aura that tags nearby hostile mobs for double XP) ---
@@ -648,7 +763,7 @@ public class PowerHandler {
                 .withColor(0xAA55FF), true);
         // #1: Level-up style sound
         level.playSound(null, player.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 0.5f);
-        classManager.addXp(player, ProfessionType.CLERIC, 10);
+        classManager.addXp(player, ProfessionType.CLERIC, 10, "curse of unrest");
     }
 
     // --- Tier 4: Resurrection (full altar wipe, revive connected ghost at altar) ---
@@ -705,14 +820,14 @@ public class PowerHandler {
 
         player.sendSystemMessage(Component.literal("Altar Resurrection complete! " + ghostConn.name + " revived. Altar SE wiped.").withColor(0xAA55FF));
         level.playSound(null, altar.capstonePos, SoundEvents.TOTEM_USE, SoundSource.PLAYERS, 2.0f, 1.0f);
-        classManager.addXp(player, ProfessionType.CLERIC, 100);
+        classManager.addXp(player, ProfessionType.CLERIC, 100, "altar resurrection");
     }
 
     public java.util.Set<Integer> getCursedMobIds() { return cursedMobIds; }
 
     // =========================================================================
     // CLERIC SECONDARY: Resurrection
-    // Activate while looking at a grave. Within 60s = free, after = needs Totem.
+    // Activate while looking at a grave. Within 5min = free, after = needs Totem.
     // 10min cooldown (halved at Lv50 exclusive).
     // =========================================================================
 
@@ -751,9 +866,9 @@ public class PowerHandler {
         boolean withinWindow = grave.isWithinResurrectionWindow(currentTime);
 
         if (withinWindow) {
-            // Free resurrection within 60s (no cost)
+            // Free resurrection within 5min (no cost)
         } else {
-            // After 60s: costs 1 Totem of Resurrection
+            // After 5min: costs 1 Totem of Resurrection
             boolean hasTotem = false;
             for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
                 if (player.getInventory().getItem(i).is(ModItems.TOTEM_OF_RESURRECTION.get())) {
@@ -763,7 +878,7 @@ public class PowerHandler {
                 }
             }
             if (!hasTotem) {
-                player.sendSystemMessage(Component.literal("Need a Totem of Resurrection! (60s window passed)").withColor(0xFF5555));
+                player.sendSystemMessage(Component.literal("Need a Totem of Resurrection! (5min window passed)").withColor(0xFF5555));
                 return;
             }
         }
@@ -785,10 +900,25 @@ public class PowerHandler {
             return;
         }
 
+        // Don't resurrect if the player is already alive (not a ghost). Their grave
+        // head may still exist in the world but they've already been revived via
+        // Devoted Life, Soul Altar, or another Cleric. Don't waste the skill or
+        // consume a totem on an already-alive player.
+        var ghostCheck = com.mlkymc.MlkyMC.getGhostManager();
+        if (ghostCheck != null && !ghostCheck.isGhost(deadPlayer.getUUID())) {
+            player.sendSystemMessage(Component.literal(
+                    grave.ownerName + " is already alive! They can reclaim their grave themselves.").withColor(0xFFAA00));
+            return;
+        }
+
         // Give items back
         graveManager.claimGrave(deadPlayer, grave, level);
 
         if (deadPlayer != null) {
+            // Teleport revived player to the Cleric's location
+            deadPlayer.teleportTo(level, player.getX(), player.getY(), player.getZ(),
+                    java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+
             // Revive from ghost state if they're a ghost
             var gm = com.mlkymc.MlkyMC.getGhostManager();
             if (gm != null && gm.isGhost(deadPlayer.getUUID())) {
@@ -796,16 +926,54 @@ public class PowerHandler {
             }
             // Set health to half
             deadPlayer.setHealth(deadPlayer.getMaxHealth() * 0.5f);
+            // 15s invisibility so the revived player doesn't get targeted by mobs immediately
+            deadPlayer.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.INVISIBILITY, 300, 0, false, true, true));
             deadPlayer.sendSystemMessage(Component.literal("You were resurrected by " +
-                    player.getName().getString() + "!").withColor(0x55FF55));
+                    player.getName().getString() + "! (15s invisibility)").withColor(0x55FF55));
+
+            // Soul Fracture: applied ONLY on the free (<5min) resurrection. Totem-consumed
+            // resurrections skip this — the totem cost is already the price for late revival.
+            // Stacks are persistent and only cleared via the Cauldron Transmutation ritual
+            // (64 Milky Stars per stack), not by time or sleep.
+            if (withinWindow) {
+                ClassData revivedData = classManager.getOrCreate(deadPlayer);
+                int newStacks = revivedData.addSoulFractureStack();
+                classManager.save();
+                deadPlayer.displayClientMessage(Component.literal(
+                        "Soul Fracture: " + newStacks + "/5").withColor(0x888888), true);
+            }
         }
 
         player.sendSystemMessage(Component.literal("Resurrected " + grave.ownerName + "!" +
-                (withinWindow ? " (Free - within 60s)" : " (Totem consumed)")).withColor(0x55FF55));
+                (withinWindow ? " (Free - within 5min)" : " (Totem consumed)")).withColor(0x55FF55));
         level.playSound(null, pos, SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 1.0f);
 
         // Cleric XP
-        classManager.addXp(player, ProfessionType.CLERIC, 50);
+        classManager.addXp(player, ProfessionType.CLERIC, 50, "grave resurrection");
+
+        // Cleric exclusive: Milky Stars from resurrection
+        if (data.getChosenClass() == ClassType.CLERIC) {
+            int starAmount = 10 + level.random.nextInt(21); // 10-30
+            var star = com.mlkymc.economy.MilkyStar.create(starAmount);
+            if (!player.getInventory().add(star)) {
+                player.spawnAtLocation(level, star);
+            }
+            player.sendSystemMessage(Component.literal(
+                    "+" + starAmount + " Milky Stars for saving a soul!").withColor(0xFFD700));
+        }
+
+        // Cleric exclusive: 1/100 chance of Totem of Undying from free resurrection
+        if (withinWindow && data.getChosenClass() == ClassType.CLERIC) {
+            if (java.util.concurrent.ThreadLocalRandom.current().nextInt(100) == 0) {
+                var totem = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
+                if (!player.getInventory().add(totem)) {
+                    player.spawnAtLocation(level, totem);
+                }
+                player.sendSystemMessage(Component.literal(
+                        "A Totem of Undying materializes!").withColor(0xFF55FF));
+            }
+        }
 
         // 10 minute cooldown (halved at Lv50 exclusive)
         int clericLevel = data.getLevel(ProfessionType.CLERIC);
@@ -833,9 +1001,9 @@ public class PowerHandler {
             naturesCallActive.remove(uuid);
             player.displayClientMessage(Component.literal("Nature's Call: OFF").withColor(0xFF5555), true);
         } else {
-            // Adaptive enchantment: no Milky Star cost (but half growth in tick handler)
-            if (!hasAdaptiveHelmet(player) && MilkyStar.count(player) < 1) {
-                player.sendSystemMessage(Component.literal("Nature's Call requires Milky Stars!").withColor(0xFF5555));
+            // Adaptive enchantment: no bonemeal cost (but half growth in tick handler)
+            if (!hasAdaptiveHelmet(player) && !hasBonemeal(player)) {
+                player.sendSystemMessage(Component.literal("Nature's Call requires Bone Meal!").withColor(0xFF5555));
                 return;
             }
             naturesCallActive.add(uuid);
@@ -865,12 +1033,12 @@ public class PowerHandler {
                 continue;
             }
 
-            // Consume 1 Milky Star every 3 seconds (60 ticks) — Adaptive skips cost
+            // Consume 1 Bone Meal every second (20 ticks) — Adaptive skips cost
             boolean adaptiveNature = hasAdaptiveHelmet(sp);
-            if (!adaptiveNature && serverLevel.getGameTime() % 60 == 0) {
-                if (!MilkyStar.remove(sp, 1)) {
+            if (!adaptiveNature && serverLevel.getGameTime() % 20 == 0) {
+                if (!consumeBonemeal(sp)) {
                     naturesCallActive.remove(sp.getUUID());
-                    sp.displayClientMessage(Component.literal("Nature's Call: Out of Milky Stars!").withColor(0xFF5555), true);
+                    sp.displayClientMessage(Component.literal("Nature's Call: Out of Bone Meal!").withColor(0xFF5555), true);
                     continue;
                 }
             }
@@ -908,7 +1076,9 @@ public class PowerHandler {
                                 || state.getBlock() instanceof net.minecraft.world.level.block.StemBlock
                                 || state.getBlock() instanceof net.minecraft.world.level.block.SugarCaneBlock
                                 || state.getBlock() instanceof net.minecraft.world.level.block.NetherWartBlock
-                                || state.getBlock() instanceof net.minecraft.world.level.block.CocoaBlock) {
+                                || state.getBlock() instanceof net.minecraft.world.level.block.CocoaBlock
+                                || state.getBlock() instanceof net.minecraft.world.level.block.SaplingBlock
+                                || state.getBlock() instanceof net.minecraft.world.level.block.BambooStalkBlock) {
                             for (int t = 0; t < growthTicks; t++) {
                                 state.randomTick(serverLevel, pos, random);
                             }
@@ -946,12 +1116,12 @@ public class PowerHandler {
         int affected = 0;
 
         // Hostile mobs: charm to fight other hostile mobs for you (10s)
-        // Use Mob + Enemy interface to catch all hostile types (Monster, Phantom, Ghast, Slime, etc.)
+        // Catches all Enemy types including modded mobs. Excludes bosses.
         String charmTag = "mlkymc_charmed_" + player.getUUID();
         for (var mob : serverLevel.getEntitiesOfClass(
                 net.minecraft.world.entity.Mob.class,
                 player.getBoundingBox().inflate(radius),
-                m -> m instanceof net.minecraft.world.entity.monster.Enemy)) {
+                m -> m instanceof net.minecraft.world.entity.monster.Enemy && !isWhispererImmune(m))) {
             mob.addTag(charmTag);
             mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.GLOWING, 200, 0, false, false, true));
@@ -964,17 +1134,20 @@ public class PowerHandler {
         }
 
         // Neutral/passive mobs: follow for 1 minute
-        for (var animal : serverLevel.getEntitiesOfClass(
-                net.minecraft.world.entity.animal.Animal.class,
-                player.getBoundingBox().inflate(radius))) {
-            animal.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+        // Catches all Mob types that aren't hostile and aren't bosses (animals, golems, dolphins, etc.)
+        for (var mob : serverLevel.getEntitiesOfClass(
+                net.minecraft.world.entity.Mob.class,
+                player.getBoundingBox().inflate(radius),
+                m -> !(m instanceof net.minecraft.world.entity.monster.Enemy)
+                        && !isWhispererImmune(m))) {
+            mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.SPEED, 1200, 0, false, false, true));
-            animal.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+            mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.GLOWING, 1200, 0, false, false, true));
-            animal.addTag("mlkymc_following_" + player.getUUID());
+            mob.addTag("mlkymc_following_" + player.getUUID());
             var ash = com.mlkymc.MlkyMC.getActiveSkillHandler();
             if (ash != null) {
-                ash.trackFollowingAnimal(animal.getId(), player.getUUID());
+                ash.trackFollowingAnimal(mob.getId(), player.getUUID());
             }
             affected++;
         }
@@ -987,6 +1160,16 @@ public class PowerHandler {
         } else {
             player.sendSystemMessage(Component.literal("No creatures nearby.").withColor(0xAAAAAA));
         }
+    }
+
+    /**
+     * Bosses and special mobs immune to Whisperer charm/follow.
+     */
+    private static boolean isWhispererImmune(net.minecraft.world.entity.Entity entity) {
+        return entity instanceof net.minecraft.world.entity.boss.wither.WitherBoss
+                || entity instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon
+                || entity instanceof net.minecraft.world.entity.monster.warden.Warden
+                || entity instanceof net.minecraft.world.entity.monster.ElderGuardian;
     }
 
     /**
@@ -1029,7 +1212,7 @@ public class PowerHandler {
             String charmTag = "mlkymc_charmed_" + sp.getUUID();
 
             for (var mob : serverLevel.getEntitiesOfClass(
-                    net.minecraft.world.entity.monster.Monster.class,
+                    net.minecraft.world.entity.Mob.class,
                     sp.getBoundingBox().inflate(20),
                     m -> m.getTags().contains(charmTag))) {
 
@@ -1067,11 +1250,13 @@ public class PowerHandler {
     // =========================================================================
     // MINECRAFTER PRIMARY: Jackhammer
     // 10s instant-mine + knockback III on hits. 1min cooldown.
-    // Lv50 exclusive: 30s duration + extra damage (+4 = 2 hearts).
+    // Lv30 exclusive: 30s duration + bonus damage (+4 = 2 hearts).
     // =========================================================================
 
     private static final net.minecraft.resources.Identifier JACKHAMMER_SPEED_ID =
             net.minecraft.resources.Identifier.parse("mlkymc:jackhammer_speed");
+    private static final net.minecraft.resources.Identifier JACKHAMMER_DAMAGE_ID =
+            net.minecraft.resources.Identifier.parse("mlkymc:jackhammer_damage");
 
     private final Map<UUID, Long> jackhammerCooldown = new HashMap<>();
     private final Map<UUID, Long> jackhammerExpiryTick = new HashMap<>();
@@ -1089,10 +1274,10 @@ public class PowerHandler {
         }
 
         int level = data.getLevel(ProfessionType.MINECRAFTER);
-        boolean isExclusive = data.getChosenClass() == ClassType.MINECRAFTER && level >= 50;
+        boolean isExclusive30 = data.getChosenClass() == ClassType.MINECRAFTER && level >= 30;
 
-        // Duration: 10s base, 30s at Lv50 exclusive
-        int durationTicks = isExclusive ? 600 : 200;
+        // Duration: 10s base, 30s at Lv30 exclusive
+        int durationTicks = isExclusive30 ? 600 : 200;
 
         // Apply high block break speed via attribute (preserves arm animation + durability)
         var breakAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.BLOCK_BREAK_SPEED);
@@ -1103,10 +1288,15 @@ public class PowerHandler {
                     net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE));
         }
 
-        // Lv50 exclusive: bonus damage
-        if (isExclusive) {
-            player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                    net.minecraft.world.effect.MobEffects.STRENGTH, durationTicks, 1, false, true, true));
+        // Lv30 exclusive: +4 attack damage (+2 hearts)
+        if (isExclusive30) {
+            var dmgAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+            if (dmgAttr != null) {
+                dmgAttr.removeModifier(JACKHAMMER_DAMAGE_ID);
+                dmgAttr.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                        JACKHAMMER_DAMAGE_ID, 4.0,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE));
+            }
         }
 
         // Track expiry in game ticks
@@ -1125,6 +1315,12 @@ public class PowerHandler {
     /**
      * Tick Jackhammer expiry: remove the speed boost when time runs out.
      * Called from tickSmithPassives (reuses the server tick loop).
+     *
+     * Delays expiry if the player is currently mid-break on a block: vanilla's
+     * ServerPlayerGameMode.incrementDestroyProgress reads the block break speed fresh every
+     * tick, so yanking the JACKHAMMER_SPEED_ID modifier mid-break rolls the progress backward
+     * and visually resets the destroy. Waiting until the player is no longer destroying a
+     * block avoids the desync.
      */
     public void tickJackhammer(net.minecraft.world.level.Level level) {
         if (level.isClientSide()) return;
@@ -1136,6 +1332,9 @@ public class PowerHandler {
             ServerPlayer p = serverLevel.getServer().getPlayerList().getPlayer(entry.getKey());
             if (p == null || p.level() != serverLevel) continue; // Only process in player's dimension
             if (p.level().getGameTime() >= entry.getValue()) {
+                // Skip expiry if the player is currently destroying a block — avoids
+                // mid-break progress desync. Will retry on the next 20-tick pass.
+                if (isDestroyingBlock(p)) continue;
                 toExpire.add(entry.getKey());
             }
         }
@@ -1148,9 +1347,33 @@ public class PowerHandler {
                 if (breakAttr != null) {
                     breakAttr.removeModifier(JACKHAMMER_SPEED_ID);
                 }
+                var dmgAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+                if (dmgAttr != null) {
+                    dmgAttr.removeModifier(JACKHAMMER_DAMAGE_ID);
+                }
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "Jackhammer expired.").withColor(0xAAAAAA));
             }
+        }
+    }
+
+    // Reflection handle for ServerPlayerGameMode.isDestroyingBlock — used by jackhammer
+    // expiry to avoid interrupting an in-progress break.
+    private static java.lang.reflect.Field gameModeIsDestroyingField;
+    private static boolean gameModeReflectionFailed;
+
+    private static boolean isDestroyingBlock(ServerPlayer player) {
+        if (gameModeReflectionFailed) return false;
+        try {
+            if (gameModeIsDestroyingField == null) {
+                gameModeIsDestroyingField = net.minecraft.server.level.ServerPlayerGameMode.class
+                        .getDeclaredField("isDestroyingBlock");
+                gameModeIsDestroyingField.setAccessible(true);
+            }
+            return gameModeIsDestroyingField.getBoolean(player.gameMode);
+        } catch (Exception e) {
+            gameModeReflectionFailed = true;
+            return false;
         }
     }
 
@@ -1180,82 +1403,574 @@ public class PowerHandler {
     }
 
     // =========================================================================
-    // MINECRAFTER SECONDARY: Auto-Smelt Toggle + Light
+    // MINECRAFTER SECONDARY: Ore Scan Toggle + Light
+    // Scans for exposed ores (air-adjacent) in 20-block radius.
+    // Highlights ores with glowing entity outlines visible through walls.
+    // Adaptive enchantment: also reveals non-exposed ores within 5-block radius.
     // Consumes 1 coal per 80 seconds while active.
     // =========================================================================
 
-    private final java.util.Set<UUID> autoSmeltActive = new java.util.HashSet<>();
-    private final Map<UUID, Long> autoSmeltNextCoalTick = new HashMap<>();
+    private final java.util.Set<UUID> oreScanActive = new java.util.HashSet<>();
+    private final Map<UUID, Long> oreScanNextCoalTick = new HashMap<>();
+    private final Map<UUID, Long> oreScanRemainingTicks = new HashMap<>(); // saved remainder when toggled off
+    private final Map<UUID, java.util.List<net.minecraft.world.entity.Entity>> oreScanMarkers = new HashMap<>();
+    private final Map<UUID, BlockPos> oreScanLastPos = new HashMap<>();
 
-    public boolean isAutoSmeltActive(UUID uuid) {
-        return autoSmeltActive.contains(uuid);
+    public boolean isOreScanActive(UUID uuid) {
+        return oreScanActive.contains(uuid);
     }
 
     private void minecrafterSecondary(ServerPlayer player, ClassData data) {
         UUID uuid = player.getUUID();
-        if (autoSmeltActive.contains(uuid)) {
-            autoSmeltActive.remove(uuid);
+        if (oreScanActive.contains(uuid)) {
+            // Save remaining ticks until next coal consumption
+            Long nextCoal = oreScanNextCoalTick.get(uuid);
+            if (nextCoal != null) {
+                long remaining = nextCoal - player.level().getGameTime();
+                if (remaining > 0) {
+                    oreScanRemainingTicks.put(uuid, remaining);
+                }
+            }
+            oreScanActive.remove(uuid);
+            clearOreMarkers(uuid);
             player.removeEffect(net.minecraft.world.effect.MobEffects.GLOWING);
-            player.displayClientMessage(Component.literal("Auto-Smelt: OFF").withColor(0xFF5555), true);
+            player.displayClientMessage(Component.literal("Ore Scan: OFF").withColor(0xFF5555), true);
         } else {
-            // Check for coal
             if (!hasCoal(player)) {
                 player.sendSystemMessage(Component.literal("Need coal in inventory!").withColor(0xFF5555));
                 return;
             }
-            // Consume first coal immediately
-            consumeCoal(player);
-            autoSmeltActive.add(uuid);
-            autoSmeltNextCoalTick.put(uuid, player.level().getGameTime() + 1600); // next coal in 80s
-            player.displayClientMessage(Component.literal("Auto-Smelt: ON (uses 1 coal/80s)").withColor(0x55FF55), true);
-            // Apply glow/light effect
+            // Restore saved timer or consume a new coal
+            Long saved = oreScanRemainingTicks.remove(uuid);
+            if (saved != null && saved > 0) {
+                // Resume with remaining time — no coal consumed
+                oreScanNextCoalTick.put(uuid, player.level().getGameTime() + saved);
+            } else {
+                // First activation or timer expired — consume coal
+                consumeCoal(player);
+                oreScanNextCoalTick.put(uuid, player.level().getGameTime() + 1600); // 80s
+            }
+            oreScanActive.add(uuid);
             player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.GLOWING, Integer.MAX_VALUE, 0, false, false, false));
+            player.displayClientMessage(Component.literal("Ore Scan: ON (uses 1 coal/80s)").withColor(0x55FF55), true);
+            scanAndHighlightOres(player);
         }
     }
 
     /**
-     * Tick auto-smelt coal consumption. Called from server tick.
+     * Tick ore scan: coal consumption + periodic rescan. Called from server tick.
      */
-    public void tickAutoSmelt(net.minecraft.world.level.Level level) {
+    public void tickOreScan(net.minecraft.world.level.Level level) {
         if (level.isClientSide()) return;
         if (!(level instanceof ServerLevel serverLevel)) return;
         if (serverLevel.getGameTime() % 20 != 0) return; // Check every second
 
         var toRemove = new java.util.ArrayList<UUID>();
-        for (UUID uuid : autoSmeltActive) {
+        for (UUID uuid : oreScanActive) {
             ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
             if (player == null) { toRemove.add(uuid); continue; }
-
-            // Only process in the player's actual dimension to avoid double-ticking
             if (player.level() != serverLevel) continue;
 
-            Long nextCoal = autoSmeltNextCoalTick.get(uuid);
-            if (nextCoal != null && player.level().getGameTime() >= nextCoal) {
+            // Coal consumption
+            Long nextCoal = oreScanNextCoalTick.get(uuid);
+            if (nextCoal != null && serverLevel.getGameTime() >= nextCoal) {
                 if (consumeCoal(player)) {
-                    autoSmeltNextCoalTick.put(uuid, serverLevel.getGameTime() + 1600);
+                    oreScanNextCoalTick.put(uuid, serverLevel.getGameTime() + 1600);
                 } else {
-                    // No coal left, deactivate
                     toRemove.add(uuid);
                     player.removeEffect(net.minecraft.world.effect.MobEffects.GLOWING);
-                    player.sendSystemMessage(Component.literal("Auto-Smelt: OFF (out of coal)").withColor(0xFF5555));
+                    player.sendSystemMessage(Component.literal("Ore Scan: OFF (out of coal)").withColor(0xFF5555));
+                    continue;
+                }
+            }
+
+            // Rescan every 3 seconds or if player moved 3+ blocks
+            BlockPos lastPos = oreScanLastPos.get(uuid);
+            boolean shouldRescan = serverLevel.getGameTime() % 1 == 0 || lastPos == null;
+            if (!shouldRescan && lastPos != null) {
+                shouldRescan = lastPos.distSqr(player.blockPosition()) >= 9;
+            }
+            if (shouldRescan) {
+                scanAndHighlightOres(player);
+            }
+        }
+        for (UUID uuid : toRemove) {
+            oreScanActive.remove(uuid);
+            clearOreMarkers(uuid);
+        }
+    }
+
+    /**
+     * Scan for ores around the player and spawn glowing markers.
+     * Base: exposed ores (air-adjacent) in 20-block radius.
+     * Adaptive enchantment: also non-exposed ores within 5-block radius.
+     */
+    private void scanAndHighlightOres(ServerPlayer player) {
+        oreScanLastPos.put(player.getUUID(), player.blockPosition().immutable());
+
+        if (!(player.level() instanceof ServerLevel sl)) return;
+
+        boolean adaptive = hasAdaptiveHelmet(player);
+        // Adaptive: xray (no air check) in small radius. Normal: air-exposed in large radius.
+        int radius = adaptive ? 3 : 10;
+        BlockPos center = player.blockPosition();
+        var orePositions = new java.util.ArrayList<BlockPos>();
+
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -radius; y <= radius; y++) {
+                for (int z = -radius; z <= radius; z++) {
+                    BlockPos pos = center.offset(x, y, z);
+                    if (!isOreBlock(sl.getBlockState(pos))) continue;
+
+                    if (adaptive || isExposedToAir(sl, pos)) {
+                        orePositions.add(pos.immutable());
+                    }
                 }
             }
         }
-        toRemove.forEach(autoSmeltActive::remove);
+
+        // Cap at closest 64
+        if (orePositions.size() > 64) {
+            orePositions.sort(java.util.Comparator.comparingDouble(p -> p.distSqr(center)));
+            orePositions = new java.util.ArrayList<>(orePositions.subList(0, 64));
+        }
+
+        // Build set of new ore positions
+        var newPosSet = new java.util.HashSet<Long>();
+        for (BlockPos pos : orePositions) {
+            newPosSet.add(pos.asLong());
+        }
+
+        // Check existing markers — keep ones that are still valid, remove stale ones
+        var existingMarkers = oreScanMarkers.getOrDefault(player.getUUID(), new java.util.ArrayList<>());
+        var existingPosSet = new java.util.HashSet<Long>();
+        var keptMarkers = new java.util.ArrayList<net.minecraft.world.entity.Entity>();
+
+        for (var marker : existingMarkers) {
+            long markerPos = BlockPos.containing(marker.getX(), marker.getY(), marker.getZ()).asLong();
+            if (newPosSet.contains(markerPos) && marker.isAlive()) {
+                // Still valid — keep it
+                keptMarkers.add(marker);
+                existingPosSet.add(markerPos);
+            } else {
+                // Stale — remove
+                marker.discard();
+            }
+        }
+
+        // Spawn new markers only for positions that don't already have one
+        for (BlockPos pos : orePositions) {
+            if (existingPosSet.contains(pos.asLong())) continue;
+
+            var marker = new net.minecraft.world.entity.monster.Shulker(
+                    net.minecraft.world.entity.EntityType.SHULKER, sl);
+            marker.setPos(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            marker.setNoAi(true);
+            marker.setInvisible(true);
+            marker.setGlowingTag(true);
+            marker.setSilent(true);
+            marker.setInvulnerable(true);
+            marker.setNoGravity(true);
+            marker.noPhysics = true;
+            marker.addTag("mlkymc_ore_marker");
+            var oreColor = getOreColor(sl.getBlockState(pos).getBlock().getDescriptionId());
+            if (oreColor != null) {
+                try {
+                    var colorField = net.minecraft.world.entity.monster.Shulker.class.getDeclaredField("DATA_COLOR_ID");
+                    colorField.setAccessible(true);
+                    @SuppressWarnings("unchecked")
+                    var accessor = (net.minecraft.network.syncher.EntityDataAccessor<Byte>) colorField.get(null);
+                    marker.getEntityData().set(accessor, (byte) oreColor.getId());
+                } catch (Exception ignored) {}
+            }
+            sl.addFreshEntity(marker);
+            keptMarkers.add(marker);
+        }
+
+        oreScanMarkers.put(player.getUUID(), keptMarkers);
+    }
+
+    private void clearOreMarkers(UUID uuid) {
+        var markers = oreScanMarkers.remove(uuid);
+        if (markers != null) {
+            for (var marker : markers) {
+                marker.discard();
+            }
+        }
+    }
+
+    private static net.minecraft.world.item.DyeColor getOreColor(String blockId) {
+        if (blockId.contains("coal")) return net.minecraft.world.item.DyeColor.BLACK;
+        if (blockId.contains("iron")) return net.minecraft.world.item.DyeColor.LIGHT_GRAY;
+        if (blockId.contains("copper")) return net.minecraft.world.item.DyeColor.ORANGE;
+        if (blockId.contains("gold")) return net.minecraft.world.item.DyeColor.YELLOW;
+        if (blockId.contains("diamond")) return net.minecraft.world.item.DyeColor.LIGHT_BLUE;
+        if (blockId.contains("emerald")) return net.minecraft.world.item.DyeColor.GREEN;
+        if (blockId.contains("lapis")) return net.minecraft.world.item.DyeColor.BLUE;
+        if (blockId.contains("redstone")) return net.minecraft.world.item.DyeColor.RED;
+        if (blockId.contains("quartz")) return net.minecraft.world.item.DyeColor.WHITE;
+        if (blockId.contains("ancient_debris")) return net.minecraft.world.item.DyeColor.BROWN;
+        return null;
+    }
+
+    private static boolean isOreBlock(net.minecraft.world.level.block.state.BlockState state) {
+        String id = state.getBlock().getDescriptionId();
+        return id.contains("ore") || id.contains("ancient_debris");
+    }
+
+    private static boolean isExposedToAir(net.minecraft.world.level.Level level, BlockPos pos) {
+        return level.getBlockState(pos.above()).isAir()
+                || level.getBlockState(pos.below()).isAir()
+                || level.getBlockState(pos.north()).isAir()
+                || level.getBlockState(pos.south()).isAir()
+                || level.getBlockState(pos.east()).isAir()
+                || level.getBlockState(pos.west()).isAir();
+    }
+
+    // =========================================================================
+    // SKILL STATUS SYNC — sends [MLKYMC_SKILLS:...] to all online players
+    // =========================================================================
+
+    public void syncSkillStatuses(net.minecraft.server.MinecraftServer server,
+                                   ClassManager cm, PassiveSkillHandler psh,
+                                   ActiveSkillHandler ash) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            ClassData data = cm.getOrCreate(player);
+
+            java.util.UUID uuid = player.getUUID();
+            long gameTime = player.level().getGameTime();
+            long now = System.currentTimeMillis();
+            StringBuilder sb = new StringBuilder();
+
+            // Grave timer — show regardless of class
+            var graveManager = com.mlkymc.MlkyMC.getGraveManager();
+            if (graveManager != null) {
+                var grave = graveManager.getGraveByOwner(uuid);
+                if (grave != null) {
+                    long elapsed = gameTime - grave.deathTime;
+                    long graveLifeTicks = 72000; // 60 minutes
+                    long remaining = graveLifeTicks - elapsed;
+                    if (remaining > 0) {
+                        int remainingSec = (int)(remaining / 20);
+                        if (sb.length() > 0) sb.append(",");
+                        sb.append("grave=A").append(remainingSec)
+                           .append(":").append(grave.pos.getX())
+                           .append("/").append(grave.pos.getY())
+                           .append("/").append(grave.pos.getZ())
+                           .append(":").append(grave.dimension);
+                    }
+                }
+            }
+
+            // Soul Fracture — shown as a stack-based debuff icon whenever the player
+            // has 1+ stacks, regardless of chosen class. Zero stacks = not emitted,
+            // so the client's per-sync clear naturally hides it.
+            int fractureStacks = data.getSoulFractureStacks();
+            if (fractureStacks > 0) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append("soulfracture=S").append(fractureStacks);
+            }
+
+            // Milky Curse — fixed badge + numeric stack label. Applies to any player
+            // (class or no class) wearing gear with conflicting enchants.
+            int curseStacks = com.mlkymc.classes.MilkyCurseHandler.getStacks(player);
+            if (curseStacks > 0) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append("milkycurse=N").append(curseStacks);
+            }
+
+            // Gear Score — letter-tier badge that swaps icon based on gear value.
+            // Always shown if score > 0, regardless of class.
+            int gearScore = com.mlkymc.world.ThreatScalingHandler.getGearScoreFor(player);
+            if (gearScore > 0) {
+                String letter;
+                if (gearScore >= 250)      letter = "s";
+                else if (gearScore >= 200) letter = "a";
+                else if (gearScore >= 150) letter = "b";
+                else if (gearScore >= 100) letter = "c";
+                else if (gearScore >= 50)  letter = "d";
+                else                       letter = "e";
+                if (sb.length() > 0) sb.append(",");
+                sb.append("gearscore=L").append(letter);
+            }
+
+            if (!data.hasChosenClass()) {
+                // No class — send grave timer if present, or empty sync to clear old state
+                player.sendSystemMessage(Component.literal("[MLKYMC_SKILLS:" + sb + "]").withColor(0x000000));
+                continue;
+            }
+
+            // Devoted Life
+            int devotedSec = psh.getDevotedLifeCooldownSec(player);
+            if (devotedSec >= 0) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append("devoted=").append(devotedSec == 0 ? "R" : "C" + devotedSec);
+            }
+
+            // Cleric skills
+            if (data.getChosenClass() == ClassType.CLERIC) {
+                // Resurrection cooldown
+                Long resCd = resurrectionCooldown.get(uuid);
+                boolean resOnCd = resCd != null && gameTime < resCd;
+                if (sb.length() > 0) sb.append(",");
+                if (resOnCd) {
+                    sb.append("resurrection=C").append(Math.max(0, (int)((resCd - gameTime) / 20)));
+                } else {
+                    sb.append("resurrection=R");
+                }
+
+                // Spirit Ward (active duration, millis-based)
+                Long swExpiry = spiritWardExpiry.get(uuid);
+                boolean swActive = swExpiry != null && now < swExpiry;
+                if (swActive) {
+                    if (sb.length() > 0) sb.append(",");
+                    sb.append("spiritward=A").append(Math.max(0, (int)((swExpiry - now) / 1000)));
+                }
+
+                // Curse of Unrest (active duration, game tick-based)
+                Long caExpiry = curseAuraExpiry.get(uuid);
+                boolean caActive = caExpiry != null && gameTime < caExpiry;
+                if (caActive) {
+                    if (sb.length() > 0) sb.append(",");
+                    sb.append("curse=A").append(Math.max(0, (int)((caExpiry - gameTime) / 20)));
+                }
+            }
+
+            // Lifesteal (Adventurer)
+            if (data.getChosenClass() == ClassType.ADVENTURER) {
+                Long lsExpiry = lifestealExpiry.get(uuid);
+                boolean lsActive = lsExpiry != null && now < lsExpiry;
+                Long lsCd = lifestealCooldown.get(uuid);
+                boolean lsOnCd = lsCd != null && gameTime < lsCd;
+
+                if (sb.length() > 0) sb.append(",");
+                if (lsActive) {
+                    sb.append("lifesteal=A").append(Math.max(0, (int)((lsExpiry - now) / 1000)));
+                } else if (lsOnCd) {
+                    sb.append("lifesteal=C").append(Math.max(0, (int)((lsCd - gameTime) / 20)));
+                } else {
+                    sb.append("lifesteal=R");
+                }
+
+                // Quick-Charge
+                if (ash != null) {
+                    long qcExpiry = ash.getQuickChargeCooldownExpiry(uuid);
+                    if (sb.length() > 0) sb.append(",");
+                    if (qcExpiry > gameTime) {
+                        sb.append("quickcharge=C").append(Math.max(0, (int)((qcExpiry - gameTime) / 20)));
+                    } else {
+                        sb.append("quickcharge=R");
+                    }
+                }
+            }
+
+            // Jackhammer (MineCrafter)
+            if (data.getChosenClass() == ClassType.MINECRAFTER) {
+                Long jhExpiry = jackhammerExpiryTick.get(uuid);
+                boolean jhActive = jhExpiry != null && gameTime < jhExpiry;
+                Long jhCd = jackhammerCooldown.get(uuid);
+                boolean jhOnCd = jhCd != null && gameTime < jhCd;
+
+                if (sb.length() > 0) sb.append(",");
+                if (jhActive) {
+                    sb.append("jackhammer=A").append(Math.max(0, (int)((jhExpiry - gameTime) / 20)));
+                } else if (jhOnCd) {
+                    sb.append("jackhammer=C").append(Math.max(0, (int)((jhCd - gameTime) / 20)));
+                } else {
+                    sb.append("jackhammer=R");
+                }
+
+                // Ore Scan (toggle)
+                if (sb.length() > 0) sb.append(",");
+                sb.append("orescan=").append(oreScanActive.contains(uuid) ? "ON" : "X");
+            }
+
+            // Nature's Call (Farmhand toggle)
+            if (data.getChosenClass() == ClassType.FARMHAND) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append("nature=").append(naturesCallActive.contains(uuid) ? "ON" : "X");
+
+                // Whisperer cooldown
+                Long whCd = whispererCooldown.get(uuid);
+                boolean whOnCd = whCd != null && gameTime < whCd;
+                if (sb.length() > 0) sb.append(",");
+                if (whOnCd) {
+                    sb.append("whisperer=C").append(Math.max(0, (int)((whCd - gameTime) / 20)));
+                } else {
+                    sb.append("whisperer=R");
+                }
+            }
+
+            // Tempered Mind (Smith)
+            if (data.getChosenClass() == ClassType.SMITH) {
+                Long tmExpiry = temperedMindExpiry.get(uuid);
+                boolean tmActive = tmExpiry != null && System.currentTimeMillis() < tmExpiry;
+                Long tmCd = temperedMindCooldown.get(uuid);
+                boolean tmOnCd = tmCd != null && gameTime < tmCd;
+
+                if (sb.length() > 0) sb.append(",");
+                if (tmActive) {
+                    sb.append("tempmind=A").append(Math.max(0, (int)((tmExpiry - now) / 1000)));
+                } else if (tmOnCd) {
+                    sb.append("tempmind=C").append(Math.max(0, (int)((tmCd - gameTime) / 20)));
+                } else {
+                    sb.append("tempmind=R");
+                }
+
+                // Tempered Body (Smith secondary)
+                Long tbCd = temperedBodyCooldown.get(uuid);
+                boolean tbOnCd = tbCd != null && gameTime < tbCd;
+                if (sb.length() > 0) sb.append(",");
+                if (tbOnCd) {
+                    sb.append("tempbody=C").append(Math.max(0, (int)((tbCd - gameTime) / 20)));
+                } else {
+                    sb.append("tempbody=R");
+                }
+
+                // Forge Heat (Smith crouch+RMB furnace)
+                if (ash != null) {
+                    long fhExpiry = ash.getForgeHeatCooldownExpiry(uuid);
+                    if (sb.length() > 0) sb.append(",");
+                    if (fhExpiry > gameTime) {
+                        sb.append("forgeheat=C").append(Math.max(0, (int)((fhExpiry - gameTime) / 20)));
+                    } else {
+                        sb.append("forgeheat=R");
+                    }
+                }
+            }
+
+            // Food buff (sandwich/enhanced food) — any class
+            int foodBuffSec = IngredientBuffApplier.getRemainingSeconds(uuid, gameTime);
+            if (foodBuffSec > 0) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append("sandwich=A").append(foodBuffSec);
+            }
+
+            if (sb.length() > 0) {
+                player.sendSystemMessage(Component.literal("[MLKYMC_SKILLS:" + sb + "]").withColor(0x000000));
+            }
+
+            // Cleric: sync active graves within 5-min resurrection window.
+            // Only show graves whose owners are still ghosts — if the player was
+            // revived (by Cleric, Soul Altar, or self-respawn), their grave should
+            // disappear from the tracker even if the head block is still in the world.
+            if (data.getChosenClass() == ClassType.CLERIC) {
+                var gm2 = com.mlkymc.MlkyMC.getGraveManager();
+                var ghostMgr = com.mlkymc.MlkyMC.getGhostManager();
+                if (gm2 != null) {
+                    StringBuilder graveSb = new StringBuilder();
+                    for (var grave : gm2.getAllGraves()) {
+                        if (!grave.isWithinResurrectionWindow(gameTime)) continue;
+                        // Skip graves of players who are no longer ghosts (already revived)
+                        if (ghostMgr != null && !ghostMgr.isGhost(grave.ownerUUID)) continue;
+                        long remaining = 6000 - (gameTime - grave.deathTime);
+                        int remainingSec = Math.max(0, (int) (remaining / 20));
+                        if (graveSb.length() > 0) graveSb.append("|");
+                        graveSb.append(grave.ownerName)
+                                .append(",").append(grave.pos.getX())
+                                .append(",").append(grave.pos.getY())
+                                .append(",").append(grave.pos.getZ())
+                                .append(",").append(remainingSec)
+                                .append(",").append(grave.dimension);
+                    }
+                    player.sendSystemMessage(Component.literal(
+                            "[MLKYMC_GRAVES:" + graveSb + "]").withColor(0x000000));
+                }
+            }
+        }
+    }
+
+    private boolean isFuel(ItemStack stack) {
+        return stack.is(Items.COAL) || stack.is(Items.CHARCOAL);
     }
 
     private boolean hasCoal(ServerPlayer player) {
+        // Check direct inventory (coal first, then charcoal)
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            if (player.getInventory().getItem(i).is(Items.COAL)) return true;
+            if (isFuel(player.getInventory().getItem(i))) return true;
+        }
+        // Check shulker boxes and pouches
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack slot = player.getInventory().getItem(i);
+            if (hasFuelInContainer(slot)) return true;
         }
         return false;
     }
 
     private boolean consumeCoal(ServerPlayer player) {
+        // Priority 1: coal in direct inventory
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             var stack = player.getInventory().getItem(i);
             if (stack.is(Items.COAL)) {
+                stack.shrink(1);
+                if (stack.isEmpty()) player.getInventory().setItem(i, ItemStack.EMPTY);
+                return true;
+            }
+        }
+        // Priority 2: charcoal in direct inventory
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            var stack = player.getInventory().getItem(i);
+            if (stack.is(Items.CHARCOAL)) {
+                stack.shrink(1);
+                if (stack.isEmpty()) player.getInventory().setItem(i, ItemStack.EMPTY);
+                return true;
+            }
+        }
+        // Priority 3: coal/charcoal inside shulker boxes or pouches
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack slot = player.getInventory().getItem(i);
+            if (consumeFuelFromContainer(slot, player, i)) return true;
+        }
+        return false;
+    }
+
+    private boolean hasFuelInContainer(ItemStack container) {
+        var contents = container.get(net.minecraft.core.component.DataComponents.CONTAINER);
+        if (contents != null) {
+            for (ItemStack inner : contents.nonEmptyItems()) {
+                if (isFuel(inner)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean consumeFuelFromContainer(ItemStack container, ServerPlayer player, int containerSlot) {
+        var contents = container.get(net.minecraft.core.component.DataComponents.CONTAINER);
+        if (contents == null) return false;
+
+        java.util.List<ItemStack> items = new java.util.ArrayList<>();
+        for (ItemStack inner : contents.nonEmptyItems()) {
+            items.add(inner.copy());
+        }
+
+        // Try coal first, then charcoal
+        for (var target : new net.minecraft.world.item.Item[]{Items.COAL, Items.CHARCOAL}) {
+            for (int i = 0; i < items.size(); i++) {
+                ItemStack inner = items.get(i);
+                if (inner.is(target)) {
+                    inner.shrink(1);
+                    if (inner.isEmpty()) items.set(i, ItemStack.EMPTY);
+                    container.set(net.minecraft.core.component.DataComponents.CONTAINER,
+                            net.minecraft.world.item.component.ItemContainerContents.fromItems(items));
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hasBonemeal(ServerPlayer player) {
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            if (player.getInventory().getItem(i).is(Items.BONE_MEAL)) return true;
+        }
+        return false;
+    }
+
+    private boolean consumeBonemeal(ServerPlayer player) {
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            var stack = player.getInventory().getItem(i);
+            if (stack.is(Items.BONE_MEAL)) {
                 stack.shrink(1);
                 if (stack.isEmpty()) player.getInventory().setItem(i, ItemStack.EMPTY);
                 return true;
@@ -1265,66 +1980,9 @@ public class PowerHandler {
     }
 
     // =========================================================================
-    // MINECRAFTER: Auto-Smelt ore drop conversion
-    // =========================================================================
-
-    @SubscribeEvent
-    public void onOreDrop(BlockDropsEvent event) {
-        if (!(event.getBreaker() instanceof ServerPlayer player)) return;
-
-        ClassData data = classManager.getOrCreate(player);
-        if (data.getChosenClass() != ClassType.MINECRAFTER) return;
-        if (!autoSmeltActive.contains(player.getUUID())) return;
-
-        String blockId = event.getState().getBlock().getDescriptionId();
-        boolean isOre = blockId.contains("ore");
-        // Adaptive enchantment: also smelt cobblestone, stone variants (not sand)
-        boolean isSmeltableStone = false;
-        if (hasAdaptiveHelmet(player)) {
-            isSmeltableStone = blockId.contains("cobblestone") || blockId.contains("cobbled_deepslate")
-                    || blockId.contains("stone") || blockId.contains("deepslate")
-                    || blockId.contains("clay_ball") || blockId.contains("clay")
-                    || blockId.contains("netherrack") || blockId.contains("stone_bricks")
-                    || blockId.contains("basalt");
-        }
-        if (!isOre && !isSmeltableStone) return;
-
-        boolean converted = false;
-        for (var drop : event.getDrops()) {
-            ItemStack item = drop.getItem();
-            ItemStack smelted = getSmeltedResult(item);
-            if (smelted != null) {
-                drop.setItem(smelted);
-                converted = true;
-            }
-        }
-
-        // Grant Smith XP for auto-smelting (bypasses furnace so ItemSmeltedEvent doesn't fire)
-        if (converted) {
-            classManager.addXp(player, ProfessionType.SMITH, 3);
-        }
-    }
-
-    private static ItemStack getSmeltedResult(ItemStack input) {
-        var item = input.getItem();
-        if (item == Items.RAW_IRON) return new ItemStack(Items.IRON_INGOT, input.getCount());
-        if (item == Items.RAW_GOLD) return new ItemStack(Items.GOLD_INGOT, input.getCount());
-        if (item == Items.RAW_COPPER) return new ItemStack(Items.COPPER_INGOT, input.getCount());
-        // Stone variants (Adaptive enchantment extends these)
-        if (item == Items.COBBLESTONE) return new ItemStack(Items.STONE, input.getCount());
-        if (item == Items.COBBLED_DEEPSLATE) return new ItemStack(Items.DEEPSLATE, input.getCount());
-        if (item == Items.NETHERRACK) return new ItemStack(Items.NETHER_BRICK, input.getCount());
-        if (item == Items.CLAY_BALL) return new ItemStack(Items.BRICK, input.getCount());
-        if (item == Items.BASALT) return new ItemStack(Items.SMOOTH_BASALT, input.getCount());
-        if (item == Items.STONE_BRICKS) return new ItemStack(Items.CRACKED_STONE_BRICKS, input.getCount());
-        // Explicitly NOT smelting sand → glass (per spec)
-        return null;
-    }
-
-    // =========================================================================
     // SMITH PRIMARY: Tempered Mind
     // Stop all durability loss for equipped + hotbar items for 20s. 40s CD.
-    // Lv30 exclusive: AoE 10 blocks — nearby players also gain the effect.
+    // Lv50 exclusive: AoE 10 blocks — nearby players also gain the effect.
     // =========================================================================
 
     private final Map<UUID, Long> temperedMindCooldown = new HashMap<>();
@@ -1356,8 +2014,8 @@ public class PowerHandler {
                     SoundEvents.ANVIL_USE, SoundSource.PLAYERS, 0.6f, 1.2f);
         }
 
-        // Lv30 exclusive: AoE — nearby players also get the buff (skip PvP-tagged)
-        if (isSmith && level >= 30 && player.level() instanceof ServerLevel sl2) {
+        // Lv50 exclusive: AoE — nearby players also get the buff (skip PvP-tagged)
+        if (isSmith && level >= 50 && player.level() instanceof ServerLevel sl2) {
             var nearby = sl2.getEntitiesOfClass(ServerPlayer.class,
                     player.getBoundingBox().inflate(10),
                     p -> !p.getUUID().equals(player.getUUID())
@@ -1376,7 +2034,7 @@ public class PowerHandler {
     // =========================================================================
     // SMITH SECONDARY: Tempered Body
     // Passive: fire resistance (half damage). Activate: extinguish fire. 10s CD.
-    // Lv30 exclusive: AoE extinguish + fire resist to nearby players.
+    // Lv50 exclusive: AoE extinguish + fire resist to nearby players.
     // =========================================================================
 
     private final Map<UUID, Long> temperedBodyCooldown = new HashMap<>();
@@ -1417,8 +2075,8 @@ public class PowerHandler {
                         SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 1.0f);
             }
 
-            // Lv30 exclusive: AoE extinguish for nearby players too (skip PvP-tagged)
-            if (isSmith && level >= 30 && player.level() instanceof ServerLevel sl2) {
+            // Lv50 exclusive: AoE extinguish for nearby players too (skip PvP-tagged)
+            if (isSmith && level >= 50 && player.level() instanceof ServerLevel sl2) {
                 var nearby = sl2.getEntitiesOfClass(ServerPlayer.class,
                         player.getBoundingBox().inflate(10),
                         p -> !p.getUUID().equals(player.getUUID())
@@ -1428,6 +2086,38 @@ public class PowerHandler {
                     ally.sendSystemMessage(Component.literal(
                             "Tempered Body from " + player.getName().getString() + "!").withColor(0xFFAA00));
                 }
+            }
+        }
+
+        // Boost nearby furnace smelting speed by 100% for 10s (4 block radius).
+        // We also call speedUpFurnace inline here so the cookingTotalTime shrink + timer
+        // clamp happen immediately on activation, not on the next tickSmithPassives pass.
+        // Otherwise a mid-smelt furnace could get stuck if the Smith walks away or the
+        // smelt finishes awkwardly before the next 40-tick scheduler pass.
+        if (player.level() instanceof ServerLevel sl3) {
+            BlockPos center = player.blockPosition();
+            int boosted = 0;
+            // Match tickSmithSmeltingSpeed's extraTicks derivation for consistency
+            double speedBonus = getSmithSmeltBonus(level);
+            int extraTicks = (int) (speedBonus * 2);
+            if (extraTicks <= 0 && speedBonus > 0) extraTicks = 1;
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dy = -4; dy <= 4; dy++) {
+                    for (int dz = -4; dz <= 4; dz++) {
+                        BlockPos check = center.offset(dx, dy, dz);
+                        var be = sl3.getBlockEntity(check);
+                        if (be instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace) {
+                            ActiveSkillHandler.markForgeHeated(check.asLong(), 10000L); // 10 seconds
+                            // Apply the speedup + clamp right now so no stuck-timer window exists
+                            speedUpFurnace(furnace, extraTicks);
+                            boosted++;
+                        }
+                    }
+                }
+            }
+            if (boosted > 0) {
+                player.sendSystemMessage(Component.literal(
+                        "Tempered Body: " + boosted + " furnace(s) boosted for 10s!").withColor(0xFFAA00));
             }
         }
 
@@ -1559,6 +2249,8 @@ public class PowerHandler {
                     if (chunk == null) continue;
                     for (var be : chunk.getBlockEntities().values()) {
                         if (!(be instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace)) continue;
+                        // Skip smokers — debuff only applies to furnaces/blast furnaces (ore/stone smelting)
+                        if (be instanceof net.minecraft.world.level.block.entity.SmokerBlockEntity) continue;
 
                         // Read the tagged owner UUID
                         if (!be.getPersistentData().contains(FURNACE_OWNER_TAG)) continue;
@@ -1583,15 +2275,22 @@ public class PowerHandler {
                         double debuff = data.getDebuffPercent(ProfessionType.SMITH);
                         if (debuff <= 0) continue;
 
-                        // Slow furnace proportionally
-                        // debuff 0.4 -> subtract 8 ticks per 40-tick cycle
-                        int penalty = Math.max(2, (int) (debuff * 20));
+                        // Slow furnace by increasing total cook time
                         try {
                             int lit = furnaceLitField.getInt(furnace);
                             if (lit <= 0) continue;
-                            int timer = furnaceCookTimerField.getInt(furnace);
-                            if (timer > 0) {
-                                furnaceCookTimerField.setInt(furnace, Math.max(0, timer - penalty));
+                            int total = furnaceCookTotalField.getInt(furnace);
+                            if (total <= 0) continue;
+
+                            long posKey = furnace.getBlockPos().asLong();
+                            originalCookTotals.putIfAbsent(posKey, total);
+                            int originalTotal = originalCookTotals.get(posKey);
+
+                            // debuff 0.5 = 2x slower, 0.4 = 1.67x slower, etc.
+                            double slowMult = 1.0 + debuff;
+                            int newTotal = (int) (originalTotal * slowMult);
+                            if (newTotal != total) {
+                                furnaceCookTotalField.setInt(furnace, newTotal);
                             }
                         } catch (Exception ignored) {}
                     }
@@ -1683,13 +2382,17 @@ public class PowerHandler {
         int extraTicks = (int) (speedBonus * 2); // 0.2 -> 0, 0.4 -> 0, 0.6 -> 1, 0.8 -> 1, 1.0 -> 2
         if (extraTicks <= 0 && speedBonus > 0) extraTicks = 1; // Minimum 1 at any bonus level
 
-        // Find furnace block entities within 16 blocks and speed them up via reflection
-        // Scan loaded chunks around the player for furnace block entities
+        // Find furnace block entities within 16 blocks and speed them up via reflection.
+        // ONLY boost furnaces owned by this Smith player — otherwise we fight with
+        // tickSmeltingDebuff which is trying to slow down non-Smith-owned furnaces.
+        // The two handlers writing different cookingTotalTime values every cycle causes
+        // the timer to ping-pong and the smelt to never finish.
         BlockPos center = player.blockPosition();
         int chunkMinX = (center.getX() - 16) >> 4;
         int chunkMaxX = (center.getX() + 16) >> 4;
         int chunkMinZ = (center.getZ() - 16) >> 4;
         int chunkMaxZ = (center.getZ() + 16) >> 4;
+        String playerUuid = player.getStringUUID();
         for (int cx = chunkMinX; cx <= chunkMaxX; cx++) {
             for (int cz = chunkMinZ; cz <= chunkMaxZ; cz++) {
                 var chunk = level.getChunk(cx, cz);
@@ -1697,9 +2400,13 @@ public class PowerHandler {
                 for (var be : chunk.getBlockEntities().values()) {
                     if (!(be instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace)) continue;
                     BlockPos fPos = be.getBlockPos();
-                    if (fPos.distSqr(center) <= 16 * 16) {
-                        speedUpFurnace(furnace, extraTicks);
-                    }
+                    if (fPos.distSqr(center) > 16 * 16) continue;
+
+                    // Only speed up furnaces this Smith owns (tagged via right-click)
+                    String ownerTag = be.getPersistentData().getStringOr(FURNACE_OWNER_TAG, "");
+                    if (!playerUuid.equals(ownerTag)) continue;
+
+                    speedUpFurnace(furnace, extraTicks);
                 }
             }
         }
@@ -1709,6 +2416,11 @@ public class PowerHandler {
     private static java.lang.reflect.Field furnaceCookTimerField;
     private static java.lang.reflect.Field furnaceCookTotalField;
 
+    // Original recipe total time cache: blockPos.asLong() -> original cookingTotalTime
+    private static final Map<Long, Integer> originalCookTotals = new java.util.concurrent.ConcurrentHashMap<>();
+    // Last value we set on the furnace — detects vanilla recipe changes
+    private static final Map<Long, Integer> lastSetTotals = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static void speedUpFurnace(
             net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace, int extraTicks) {
         try {
@@ -1716,10 +2428,44 @@ public class PowerHandler {
             if (furnaceLitField == null) return;
             int lit = furnaceLitField.getInt(furnace);
             if (lit <= 0) return;
-            int timer = furnaceCookTimerField.getInt(furnace);
             int total = furnaceCookTotalField.getInt(furnace);
-            if (total > 0 && timer < total) {
-                furnaceCookTimerField.setInt(furnace, Math.min(timer + extraTicks, total));
+            if (total <= 0) return;
+
+            long posKey = furnace.getBlockPos().asLong();
+
+            // Detect recipe change: if vanilla's current total doesn't match the value
+            // we last set, vanilla wrote a new recipe total (different item being smelted).
+            // Refresh the cached original so the speedup is based on the NEW recipe, not
+            // whatever short/long recipe this furnace first saw.
+            Integer lastSet = lastSetTotals.get(posKey);
+            if (lastSet == null || total != lastSet) {
+                originalCookTotals.put(posKey, total);
+            }
+            int originalTotal = originalCookTotals.get(posKey);
+
+            // Calculate speed multiplier
+            double speedMult = 1.0 + (extraTicks * 0.5); // extraTicks 1 = 1.5x, 2 = 2x, 3 = 2.5x
+            if (ActiveSkillHandler.isForgeHeated(posKey)) {
+                speedMult += 1.0; // Forge Heat adds another 1x (doubling)
+            }
+
+            // Reduce total time (faster smelting)
+            int newTotal = Math.max(2, (int) (originalTotal / speedMult));
+            if (newTotal != total) {
+                furnaceCookTotalField.setInt(furnace, newTotal);
+            }
+            lastSetTotals.put(posKey, newTotal);
+
+            // Clamp cookingTimer to stay within newTotal. Vanilla's AbstractFurnaceBlockEntity
+            // uses `cookingTimer++; if (cookingTimer == cookingTotalTime)` — post-increment then
+            // exact-equality check. Two cases must be handled:
+            //   (a) timer > newTotal : already past the reduced total, recipe hangs.
+            //   (b) timer == newTotal: next vanilla tick increments to newTotal+1, misses equality.
+            // In both cases we must set timer to newTotal-1 so the very next vanilla tick
+            // increments it to exactly newTotal and fires the completion branch.
+            int timer = furnaceCookTimerField.getInt(furnace);
+            if (timer >= newTotal) {
+                furnaceCookTimerField.setInt(furnace, Math.max(0, newTotal - 1));
             }
         } catch (Exception ignored) {}
     }

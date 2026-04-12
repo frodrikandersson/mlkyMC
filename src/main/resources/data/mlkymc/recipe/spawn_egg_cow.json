@@ -6,15 +6,9 @@
     "SSS"
   ],
   "key": {
-    "S": {
-      "item": "mlkymc:milky_star"
-    },
-    "L": {
-      "item": "mlkymc:living_essence"
-    },
-    "M": {
-      "item": "minecraft:leather"
-    }
+    "S": "mlkymc:milky_star",
+    "L": "mlkymc:living_essence",
+    "M": "minecraft:leather"
   },
   "result": {
     "id": "minecraft:cow_spawn_egg",

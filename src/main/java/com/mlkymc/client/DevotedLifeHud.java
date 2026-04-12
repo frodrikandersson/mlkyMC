@@ -43,6 +43,7 @@ public class DevotedLifeHud {
 
     @SubscribeEvent
     public void onRenderHud(RenderGuiLayerEvent.Post event) {
+        if (net.minecraft.client.Minecraft.getInstance().options.hideGui) return;
         if (devotedState == -1) return;
 
         Minecraft mc = Minecraft.getInstance();

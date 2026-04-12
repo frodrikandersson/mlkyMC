@@ -57,7 +57,8 @@ public class IngredientBuffApplier {
         boolean first = true;
         for (var entry : buffs.entrySet()) {
             if (!first) msg.append(", ");
-            msg.append("+").append(entry.getValue()).append("% ")
+            String sign = isInvertedBuff(entry.getKey()) ? "-" : "+";
+            msg.append(sign).append(entry.getValue()).append("% ")
                     .append(IngredientBuffHandler.formatBuffName(entry.getKey()));
             first = false;
         }
@@ -179,5 +180,21 @@ public class IngredientBuffApplier {
      */
     public static void onPlayerLogout(UUID playerUUID) {
         activeBuffs.remove(playerUUID);
+    }
+
+    /**
+     * Get the remaining seconds of the longest active food buff for a player.
+     * Returns 0 if no buffs active.
+     */
+    public static int getRemainingSeconds(UUID playerUUID, long currentGameTick) {
+        var playerBuffs = activeBuffs.get(playerUUID);
+        if (playerBuffs == null || playerBuffs.isEmpty()) return 0;
+
+        long maxExpiry = 0;
+        for (long expiry : playerBuffs.values()) {
+            if (expiry > maxExpiry) maxExpiry = expiry;
+        }
+        long remaining = maxExpiry - currentGameTick;
+        return remaining > 0 ? (int)(remaining / 20) : 0;
     }
 }

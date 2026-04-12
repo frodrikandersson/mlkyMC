@@ -6,15 +6,9 @@
     "SSS"
   ],
   "key": {
-    "S": {
-      "item": "mlkymc:milky_star"
-    },
-    "L": {
-      "item": "mlkymc:living_essence"
-    },
-    "M": {
-      "item": "minecraft:iron_block"
-    }
+    "S": "mlkymc:milky_star",
+    "L": "mlkymc:living_essence",
+    "M": "minecraft:iron_block"
   },
   "result": {
     "id": "minecraft:iron_golem_spawn_egg",

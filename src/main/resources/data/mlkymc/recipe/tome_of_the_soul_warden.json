@@ -6,15 +6,9 @@
     "PPP"
   ],
   "key": {
-    "P": {
-      "item": "minecraft:paper"
-    },
-    "S": {
-      "item": "minecraft:soul_sand"
-    },
-    "B": {
-      "item": "mlkymc:soulstone_brick"
-    }
+    "P": "minecraft:paper",
+    "S": "minecraft:soul_sand",
+    "B": "mlkymc:soulstone_brick"
   },
   "result": {
     "id": "mlkymc:tome_of_the_soul_warden",

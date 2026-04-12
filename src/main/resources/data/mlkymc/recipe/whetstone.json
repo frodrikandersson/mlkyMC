@@ -6,15 +6,9 @@
     "III"
   ],
   "key": {
-    "I": {
-      "item": "minecraft:iron_ingot"
-    },
-    "S": {
-      "item": "minecraft:smooth_stone_slab"
-    },
-    "F": {
-      "item": "minecraft:flint"
-    }
+    "I": "minecraft:iron_ingot",
+    "S": "minecraft:smooth_stone_slab",
+    "F": "minecraft:flint"
   },
   "result": {
     "id": "mlkymc:whetstone",

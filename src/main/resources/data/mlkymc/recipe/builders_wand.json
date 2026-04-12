@@ -6,18 +6,10 @@
     " W "
   ],
   "key": {
-    "D": {
-      "item": "minecraft:diamond"
-    },
-    "G": {
-      "item": "minecraft:gold_block"
-    },
-    "B": {
-      "item": "minecraft:blaze_rod"
-    },
-    "W": {
-      "item": "mlkymc:waystone_shard"
-    }
+    "D": "minecraft:diamond",
+    "G": "minecraft:gold_block",
+    "B": "minecraft:blaze_rod",
+    "W": "mlkymc:waystone_shard"
   },
   "result": {
     "id": "mlkymc:builders_wand",

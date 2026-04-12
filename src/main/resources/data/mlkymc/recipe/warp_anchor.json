@@ -6,18 +6,10 @@
     " R "
   ],
   "key": {
-    "N": {
-      "item": "minecraft:nether_star"
-    },
-    "E": {
-      "item": "minecraft:ender_eye"
-    },
-    "L": {
-      "item": "minecraft:lodestone"
-    },
-    "R": {
-      "item": "mlkymc:resonant_core"
-    }
+    "N": "minecraft:nether_star",
+    "E": "minecraft:ender_eye",
+    "L": "minecraft:lodestone",
+    "R": "mlkymc:resonant_core"
   },
   "result": {
     "id": "mlkymc:warp_anchor",

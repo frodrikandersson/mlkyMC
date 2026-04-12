@@ -22,7 +22,9 @@
       "Bash(jar xf:*)",
       "Bash(done)",
       "Bash(JAVA_HOME=\"C:/Program Files/Java/jdk-21.0.10\" ./gradlew build)",
-      "Bash(javap -p \"net/minecraft/world/entity/projectile/FishingHook.class\")"
+      "Bash(javap -p \"net/minecraft/world/entity/projectile/FishingHook.class\")",
+      "Read(//c/Users/frodr/.gradle/caches/**)",
+      "Bash(\"/c/Program Files/Java/jdk-21.0.10/bin/jar.exe\" xf \"/c/Users/frodr/.gradle/caches/neoformruntime/intermediate_results/sourcesAndCompiledWithNeoForge_ff87a1282b49043ff06cfca0ce887fe03ab06a3a_output.jar\" -C /tmp/mcsrc3 net/minecraft/world/inventory/AnvilMenu.java)"
     ],
     "additionalDirectories": [
       "c:\\Users\\frodr\\Desktop\\Github_projects\\frodrikandersson\\mlkyMC\\build\\libs",

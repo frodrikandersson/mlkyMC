@@ -38,6 +38,12 @@ public class GhostListener {
             java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static java.nio.file.Path pendingGhostsFile;
 
+    // Death positions — used to teleport ghost back to where they died after respawn
+    private static final java.util.Map<java.util.UUID, DeathLocation> deathPositions =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record DeathLocation(String dimension, double x, double y, double z) {}
+
     public static void setPendingGhostsFile(java.nio.file.Path file) {
         pendingGhostsFile = file;
         loadPendingGhosts();
@@ -108,6 +114,10 @@ public class GhostListener {
             }
         }
 
+        // Store death position so the ghost spawns here after respawn
+        String dim = player.level().dimension().identifier().toString();
+        deathPositions.put(player.getUUID(), new DeathLocation(dim, player.getX(), player.getY(), player.getZ()));
+
         // Mark player as pending ghost — they'll become a ghost when they press Respawn
         pendingGhosts.add(player.getUUID());
         savePendingGhosts();
@@ -130,14 +140,32 @@ public class GhostListener {
         // Player pressed Respawn after dying — convert to ghost now
         if (pendingGhosts.remove(player.getUUID())) {
             savePendingGhosts();
+            // Convert to ghost, then teleport to death location after ghost mode is applied
+            DeathLocation deathLoc = deathPositions.remove(player.getUUID());
             player.level().getServer().execute(() -> {
                 ghostManager.makeGhost(player);
+
+                // Teleport AFTER makeGhost — needs another tick delay so spectator mode is settled
+                if (deathLoc != null) {
+                    player.level().getServer().execute(() -> {
+                        var dimKey = net.minecraft.resources.ResourceKey.create(
+                                net.minecraft.core.registries.Registries.DIMENSION,
+                                net.minecraft.resources.Identifier.parse(deathLoc.dimension));
+                        var deathLevel = player.level().getServer().getLevel(dimKey);
+                        if (deathLevel != null) {
+                            player.teleportTo(deathLevel, deathLoc.x, deathLoc.y, deathLoc.z,
+                                    java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+                        }
+                    });
+                }
 
                 // Create ghost data entry
                 var ghostDataManager = com.mlkymc.MlkyMC.getGhostDataManager();
                 if (ghostDataManager != null) {
-                    ghostDataManager.getOrCreate(player.getUUID());
+                    var ghostData = ghostDataManager.getOrCreate(player.getUUID());
                     ghostDataManager.save();
+                    // Send initial SE sync so the bar shows immediately
+                    ghostDataManager.sendSpectralSync(player, ghostData);
                 }
 
                 // Broadcast
@@ -196,14 +224,48 @@ public class GhostListener {
     }
 
     @SubscribeEvent
+    public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!ghostManager.isGhost(player.getUUID())) return;
+
+        // Save ghost's current position for restore on login
+        var gdm = com.mlkymc.MlkyMC.getGhostDataManager();
+        if (gdm != null) {
+            var data = gdm.getOrCreate(player.getUUID());
+            data.logoutX = player.getX();
+            data.logoutY = player.getY();
+            data.logoutZ = player.getZ();
+            data.logoutDimension = player.level().dimension().identifier().toString();
+            gdm.save();
+        }
+    }
+
+    @SubscribeEvent
     public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (ghostManager.isGhost(player.getUUID())) {
             ghostManager.applyGhostEffects(player);
-            // Sync spectral energy to client
+
+            // Restore ghost to their logout position
             var gdm = com.mlkymc.MlkyMC.getGhostDataManager();
             if (gdm != null) {
                 var data = gdm.getOrCreate(player.getUUID());
+                if (data.logoutDimension != null) {
+                    // Delay teleport by a few ticks to ensure player is fully loaded
+                    // and vanilla respawn logic has finished
+                    final double lx = data.logoutX, ly = data.logoutY, lz = data.logoutZ;
+                    final String lDim = data.logoutDimension;
+                    var server = player.level().getServer();
+                    server.execute(() -> server.execute(() -> server.execute(() -> {
+                        for (var sl : server.getAllLevels()) {
+                            if (sl.dimension().identifier().toString().equals(lDim)) {
+                                player.teleportTo(sl, lx, ly, lz,
+                                        java.util.Set.of(), player.getYRot(), player.getXRot(), false);
+                                break;
+                            }
+                        }
+                    })));
+                }
                 gdm.sendSpectralSync(player, data);
             }
         } else {

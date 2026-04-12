@@ -6,15 +6,9 @@
     "SSS"
   ],
   "key": {
-    "S": {
-      "item": "mlkymc:milky_star"
-    },
-    "L": {
-      "item": "mlkymc:living_essence"
-    },
-    "M": {
-      "item": "minecraft:goat_horn"
-    }
+    "S": "mlkymc:milky_star",
+    "L": "mlkymc:living_essence",
+    "M": "minecraft:goat_horn"
   },
   "result": {
     "id": "minecraft:goat_spawn_egg",

@@ -22,8 +22,8 @@ public class MimicSelectionMenu {
                 .withBold(true)
                 .withClickEvent(new ClickEvent.RunCommand("/mlkymc mimic bat"))
                 .withHoverEvent(new HoverEvent.ShowText(
-                        Component.literal("15 SE | 20s | Creative flight\nClick to transform!"))));
-        player.sendSystemMessage(bat.append(Component.literal(" — 15 SE, 20s, Flight").withColor(0xAAAAAA)));
+                        Component.literal("15 SE | 80s | Creative flight\nClick to transform!"))));
+        player.sendSystemMessage(bat.append(Component.literal(" — 15 SE, 80s, Flight").withColor(0xAAAAAA)));
 
         // Creeper
         MutableComponent creeper = Component.literal("[Creeper]").withStyle(s -> s
@@ -31,8 +31,8 @@ public class MimicSelectionMenu {
                 .withBold(true)
                 .withClickEvent(new ClickEvent.RunCommand("/mlkymc mimic creeper"))
                 .withHoverEvent(new HoverEvent.ShowText(
-                        Component.literal("20 SE | 30s | Primary: Knockback blast\nClick to transform!"))));
-        player.sendSystemMessage(creeper.append(Component.literal(" — 20 SE, 30s, Knockback blast").withColor(0xAAAAAA)));
+                        Component.literal("20 SE | 90s | Primary: Knockback blast\nClick to transform!"))));
+        player.sendSystemMessage(creeper.append(Component.literal(" — 20 SE, 90s, Knockback blast").withColor(0xAAAAAA)));
 
         // Enderman
         MutableComponent enderman = Component.literal("[Enderman]").withStyle(s -> s
@@ -40,7 +40,7 @@ public class MimicSelectionMenu {
                 .withBold(true)
                 .withClickEvent(new ClickEvent.RunCommand("/mlkymc mimic enderman"))
                 .withHoverEvent(new HoverEvent.ShowText(
-                        Component.literal("25 SE | 10s | Primary: Teleport 20 blocks\nClick to transform!"))));
-        player.sendSystemMessage(enderman.append(Component.literal(" — 25 SE, 10s, Teleport").withColor(0xAAAAAA)));
+                        Component.literal("25 SE | 70s | Primary: Teleport 20 blocks\nClick to transform!"))));
+        player.sendSystemMessage(enderman.append(Component.literal(" — 25 SE, 70s, Teleport").withColor(0xAAAAAA)));
     }
 }

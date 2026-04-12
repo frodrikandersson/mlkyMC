@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:iron_nugget"
-    },
-    {
-      "item": "minecraft:iron_nugget"
-    },
-    {
-      "item": "minecraft:string"
-    }
+    "minecraft:iron_nugget",
+    "minecraft:iron_nugget",
+    "minecraft:string"
   ],
   "result": {
     "id": "mlkymc:grappling_hook_ammo",

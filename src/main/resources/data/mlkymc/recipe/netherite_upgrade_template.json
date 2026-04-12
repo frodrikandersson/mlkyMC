@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:diamond"
-    },
-    {
-      "item": "minecraft:netherite_scrap"
-    },
-    {
-      "item": "minecraft:obsidian"
-    }
+    "minecraft:diamond",
+    "minecraft:netherite_scrap",
+    "minecraft:obsidian"
   ],
   "result": {
     "id": "minecraft:netherite_upgrade_smithing_template",

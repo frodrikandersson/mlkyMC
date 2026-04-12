@@ -26,6 +26,22 @@ public class ClassManager {
     private Path dataFile;
     private final Map<UUID, ClassData> playerData = new HashMap<>();
     private final Map<UUID, Long> lastSyncTick = new HashMap<>();
+    private final java.util.Set<UUID> dirtyPlayers = new java.util.HashSet<>();
+    private final java.util.Set<UUID> xpDebugPlayers = new java.util.HashSet<>();
+
+    public boolean toggleXpDebug(UUID uuid) {
+        if (xpDebugPlayers.contains(uuid)) {
+            xpDebugPlayers.remove(uuid);
+            return false;
+        } else {
+            xpDebugPlayers.add(uuid);
+            return true;
+        }
+    }
+
+    public boolean isXpDebugEnabled(UUID uuid) {
+        return xpDebugPlayers.contains(uuid);
+    }
 
     public ClassManager(Path configDir) {
         this.dataFile = configDir.resolve("class_data.json");
@@ -33,6 +49,10 @@ public class ClassManager {
     }
 
     // --- Data Access ---
+
+    public boolean hasPlayerData(UUID uuid) {
+        return playerData.containsKey(uuid);
+    }
 
     public ClassData getOrCreate(UUID uuid) {
         return playerData.computeIfAbsent(uuid, ClassData::new);
@@ -73,9 +93,13 @@ public class ClassManager {
             player.sendSystemMessage(Component.literal("Press [K] to open your Skill Tree and view your class progression.")
                     .withStyle(style -> style.withColor(0x55FFFF)));
 
-            // Give Tome of the Soul Warden to Clerics
+            // Give Tome of the Soul Warden to Clerics (the craftable item — opens altar guide GUI)
             if (classType == ClassType.CLERIC) {
-                giveSoulWardenTome(player, false);
+                var tome = new net.minecraft.world.item.ItemStack(
+                        com.mlkymc.registry.ModItems.TOME_OF_THE_SOUL_WARDEN.get());
+                if (!player.getInventory().add(tome)) {
+                    player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), tome);
+                }
             }
 
             save();
@@ -90,16 +114,61 @@ public class ClassManager {
      * Notifies the player on level up.
      */
     public void addXp(ServerPlayer player, ProfessionType profession, int amount) {
+        addXp(player, profession, amount, null);
+    }
+
+    public void addXpRaw(ServerPlayer player, ProfessionType profession, int amount) {
         ClassData data = getOrCreate(player);
+        int oldLevel = data.getLevel(profession);
+        int levelsGained = data.addXpRaw(profession, amount);
+        long now = player.level().getGameTime();
+        Long lastSync = lastSyncTick.get(player.getUUID());
+        if (lastSync == null || now - lastSync >= 5 || levelsGained > 0) {
+            sendLevelSync(player);
+            lastSyncTick.put(player.getUUID(), now);
+            dirtyPlayers.remove(player.getUUID());
+        } else {
+            dirtyPlayers.add(player.getUUID());
+        }
+        if (levelsGained > 0) {
+            int newLevel = data.getLevel(profession);
+            player.sendSystemMessage(Component.literal(profession.getDisplayName() + " leveled up! Level " + newLevel)
+                    .withStyle(style -> style.withColor(profession.getMatchingClass().getColor())));
+            save();
+        }
+    }
+
+    public void addXp(ServerPlayer player, ProfessionType profession, int amount, String reason) {
+        ClassData data = getOrCreate(player);
+
+        // Soul Fracture penalty: each stack reduces XP gain by 15% (up to 75% at 5 stacks).
+        int fractureStacks = data.getSoulFractureStacks();
+        if (fractureStacks > 0) {
+            double multiplier = Math.max(0.0, 1.0 - 0.15 * fractureStacks);
+            amount = (int) Math.round(amount * multiplier);
+            if (amount <= 0) return; // fully nullified
+        }
+
         int oldLevel = data.getLevel(profession);
         int levelsGained = data.addXp(profession, amount);
 
-        // Sync XP to client (throttled to avoid spam — max once per second)
+        // Debug mode: show XP gain reason to OPs who toggled it
+        if (isXpDebugEnabled(player.getUUID())) {
+            String debugMsg = "[XP] +" + amount + " " + profession.getDisplayName()
+                    + (reason != null ? " (" + reason + ")" : "");
+            player.sendSystemMessage(Component.literal(debugMsg).withColor(0x888888));
+        }
+
+        // Sync XP to client (throttled — max once per 5 ticks / 0.25s)
         long now = player.level().getGameTime();
         Long lastSync = lastSyncTick.get(player.getUUID());
-        if (lastSync == null || now - lastSync >= 20 || levelsGained > 0) {
+        if (lastSync == null || now - lastSync >= 5 || levelsGained > 0) {
             sendLevelSync(player);
             lastSyncTick.put(player.getUUID(), now);
+            dirtyPlayers.remove(player.getUUID());
+        } else {
+            // Mark as dirty — will be synced by tickSync within a few ticks
+            dirtyPlayers.add(player.getUUID());
         }
 
         if (levelsGained > 0) {
@@ -111,30 +180,35 @@ public class ClassManager {
             boolean isChosenProfession = data.getChosenClass() == profession.getMatchingClass();
             double oldDebuff = ProfessionType.getDebuffPercent(oldLevel);
             double newDebuff = ProfessionType.getDebuffPercent(newLevel);
-            if (newDebuff < oldDebuff) {
-                if (isChosenProfession) {
-                    // Show exclusive bonus instead of debuff for chosen class
-                    if (newDebuff == 0.0) {
-                        player.sendSystemMessage(Component.literal(profession.getDisplayName() + " debuff fully removed for all classes!")
-                                .withStyle(style -> style.withColor(0x55FF55)));
-                    } else {
-                        // The exclusive bonus is typically debuff * 0.5 (e.g., -40% debuff → +20% exclusive)
-                        player.sendSystemMessage(Component.literal(profession.getDisplayName() + " exclusive bonus increased!")
-                                .withStyle(style -> style.withColor(0x55FF55)));
-                    }
+            if (newDebuff < oldDebuff && !isChosenProfession) {
+                if (newDebuff == 0.0) {
+                    player.sendSystemMessage(Component.literal(profession.getDisplayName() + " debuff fully removed!")
+                            .withStyle(style -> style.withColor(0x55FF55)));
                 } else {
-                    if (newDebuff == 0.0) {
-                        player.sendSystemMessage(Component.literal(profession.getDisplayName() + " debuff fully removed!")
-                                .withStyle(style -> style.withColor(0x55FF55)));
-                    } else {
-                        int pct = (int) (newDebuff * 100);
-                        player.sendSystemMessage(Component.literal(profession.getDisplayName() + " debuff reduced to -" + pct + "%")
-                                .withStyle(style -> style.withColor(0xFFFF55)));
-                    }
+                    int pct = (int) (newDebuff * 100);
+                    player.sendSystemMessage(Component.literal(profession.getDisplayName() + " debuff reduced to -" + pct + "%")
+                            .withStyle(style -> style.withColor(0xFFFF55)));
                 }
             }
 
             save();
+        }
+    }
+
+    /**
+     * Flush any pending XP syncs for players marked dirty.
+     * Call from server tick (every 5-10 ticks).
+     */
+    public void tickSync(net.minecraft.server.MinecraftServer server) {
+        if (dirtyPlayers.isEmpty()) return;
+        var toSync = new java.util.ArrayList<>(dirtyPlayers);
+        dirtyPlayers.clear();
+        for (UUID uuid : toSync) {
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                sendLevelSync(player);
+                lastSyncTick.put(uuid, player.level().getGameTime());
+            }
         }
     }
 
@@ -217,7 +291,7 @@ public class ClassManager {
         }
 
         var bookContent = new net.minecraft.world.item.component.WrittenBookContent(
-                net.minecraft.server.network.Filterable.passThrough("Soul Warden"),
+                net.minecraft.server.network.Filterable.passThrough("Tome of the Soul Warden"),
                 "The Cleric Order", 0, pages, true
         );
 
@@ -300,7 +374,12 @@ public class ClassManager {
      * They will need to choose a class again.
      */
     public void resetPlayer(UUID uuid) {
-        playerData.put(uuid, new ClassData(uuid));
+        ClassData fresh = new ClassData(uuid);
+        ClassData old = playerData.get(uuid);
+        if (old != null && old.isIntroShown()) {
+            fresh.setIntroShown(true);
+        }
+        playerData.put(uuid, fresh);
         save();
     }
 

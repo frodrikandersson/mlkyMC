@@ -22,7 +22,7 @@ public class ModCreativeTabs {
                         output.accept(ModItems.MILKY_STAR_JAR_EMPTY.get());
                         output.accept(ModItems.MILKY_STAR_JAR_HALF.get());
                         output.accept(ModItems.MILKY_STAR_JAR_FULL.get());
-                        output.accept(ModItems.STALL_DEED.get());
+                        output.accept(ModBlocks.STALL_DEED_ITEM.get());
                         output.accept(ModItems.MARKET_CATALOG.get());
                         output.accept(ModItems.DIMENSION_COMPASS.get());
 
@@ -41,13 +41,16 @@ public class ModCreativeTabs {
 
                         // Cleric
                         output.accept(ModItems.TOTEM_OF_RESURRECTION.get());
-                        output.accept(ModItems.HOLY_WATER.get());
                         output.accept(ModItems.BLESSING_SCROLL.get());
+                        output.accept(ModItems.CONCOCTION.get());
+                        output.accept(ModItems.CONCOCTION_SPLASH.get());
+                        output.accept(ModItems.CONCOCTION_LINGERING.get());
                         output.accept(ModItems.TOME_OF_THE_SOUL_WARDEN.get());
 
                         // Farmhand
                         output.accept(ModItems.GROWTH_FERTILIZER.get());
                         output.accept(ModItems.ANIMAL_FEED.get());
+                        output.accept(ModItems.SANDWICH.get());
 
                         // MineCrafter
                         output.accept(ModItems.REINFORCED_PICKAXE.get());
@@ -64,6 +67,9 @@ public class ModCreativeTabs {
                         output.accept(ModBlocks.TROPHY_BASE_ITEM.get());
                         output.accept(ModBlocks.SCARECROW_ITEM.get());
                         output.accept(ModBlocks.SOUL_FORGE_ITEM.get());
+                        output.accept(ModBlocks.MICROPHONE_ITEM.get());
+                        output.accept(ModBlocks.SPEAKER_ITEM.get());
+                        output.accept(ModBlocks.RADIO_ITEM.get());
 
                         // Soul Altar blocks
                         output.accept(ModBlocks.SOULSTONE_BRICK_ITEM.get());

@@ -23,4 +23,15 @@ public class ModEntities {
                             .clientTrackingRange(4)
                             .updateInterval(5)
                             .build(GRAPPLING_HOOK_KEY));
+
+    private static final ResourceKey<EntityType<?>> THROWN_CONCOCTION_KEY =
+            ResourceKey.create(Registries.ENTITY_TYPE, Identifier.fromNamespaceAndPath(MlkyMC.MOD_ID, "thrown_concoction"));
+
+    public static final DeferredHolder<EntityType<?>, EntityType<ThrownConcoctionEntity>> THROWN_CONCOCTION =
+            ENTITIES.register("thrown_concoction",
+                    () -> EntityType.Builder.<ThrownConcoctionEntity>of(ThrownConcoctionEntity::new, MobCategory.MISC)
+                            .sized(0.25f, 0.25f)
+                            .clientTrackingRange(4)
+                            .updateInterval(10)
+                            .build(THROWN_CONCOCTION_KEY));
 }

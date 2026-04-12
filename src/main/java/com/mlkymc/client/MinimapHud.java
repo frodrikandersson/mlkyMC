@@ -45,8 +45,12 @@ public class MinimapHud {
 
     @SubscribeEvent
     public void onRenderHud(RenderGuiLayerEvent.Post event) {
-        if (!enabled) return;
+        if (net.minecraft.client.Minecraft.getInstance().options.hideGui) return;
+        // Auto-enable at Lv10 Adventurer exclusive, allow manual toggle off
         if (ClientClassData.getChosenClass() != ClassType.ADVENTURER) return;
+        int advLevel = ClientClassData.getLevel(ProfessionType.ADVENTURER);
+        if (advLevel < 10) return;
+        if (!enabled) return;
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
@@ -93,7 +97,6 @@ public class MinimapHud {
 
         // Lv20 EXCLUSIVE: Mob dots (red) — only for Adventurer class
         // Throttled: only refresh entity lists every 10 ticks (0.5s)
-        int advLevel = ClientClassData.getLevel(ProfessionType.ADVENTURER);
         boolean isAdventurer = ClientClassData.getChosenClass() == ClassType.ADVENTURER;
         if (isAdventurer && advLevel >= 20 && gameTick % 10 == 0) {
             cachedMobs = level.getEntitiesOfClass(Monster.class, player.getBoundingBox().inflate(SCAN_RADIUS));

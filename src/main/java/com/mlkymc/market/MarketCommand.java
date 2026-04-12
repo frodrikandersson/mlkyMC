@@ -380,8 +380,21 @@ public class MarketCommand {
             return 0;
         }
 
-        if (!marketManager.removeStall(player)) {
+        var stall = marketManager.getStall(player.getStringUUID());
+        if (stall == null) {
             source.sendFailure(Component.literal("You don't have a stall."));
+            return 0;
+        }
+
+        var listings = marketManager.getStallListings(player.getStringUUID());
+        if (listings != null && !listings.isEmpty()) {
+            source.sendFailure(Component.literal("Remove all listings first! Your stall has "
+                    + listings.size() + " active listing(s)."));
+            return 0;
+        }
+
+        if (!marketManager.removeStall(player)) {
+            source.sendFailure(Component.literal("Failed to remove stall."));
             return 0;
         }
 

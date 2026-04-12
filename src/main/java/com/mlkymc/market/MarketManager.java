@@ -4,6 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mlkymc.MlkyMC;
 import com.mlkymc.economy.MilkyStar;
+import com.mlkymc.registry.ModBlocks;
+import com.mlkymc.shop.ShopBlock;
+import com.mlkymc.shop.ShopBlockEntity;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -11,10 +15,9 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -32,9 +35,6 @@ public class MarketManager {
     private Path dataFile;
     private MarketData data = new MarketData();
     private MinecraftServer server;
-
-    // Spawned villager entities (transient, not saved)
-    private final Map<String, Villager> stallVillagers = new HashMap<>();
 
     public MarketManager(Path configDir) {
         this.dataFile = configDir.resolve("market.json");
@@ -84,7 +84,7 @@ public class MarketManager {
         return true;
     }
 
-    // ==== STALL LISTINGS (per-player, accessed via stall vendor) ====
+    // ==== STALL LISTINGS (per-player, accessed via stall block) ====
 
     public MarketListing addStallListing(ServerPlayer player, String itemId, int amount, int price, String itemNbt) {
         String uuid = player.getStringUUID();
@@ -159,7 +159,7 @@ public class MarketManager {
         return data.pendingEarnings.getOrDefault(uuid, 0);
     }
 
-    // ==== PLAYER STALLS ====
+    // ==== PLAYER STALLS (block-based) ====
 
     public boolean createStall(ServerPlayer player, String stallName) {
         String uuid = player.getStringUUID();
@@ -175,17 +175,36 @@ public class MarketManager {
         stall.yaw = player.getYRot();
         data.stalls.put(uuid, stall);
         save();
-        spawnStallVillager(uuid, stall);
+        placeStallBlock(uuid, stall);
         return true;
+    }
+
+    /**
+     * Register a stall from an already-placed block (called by ShopBlock.setPlacedBy).
+     * Does NOT place a block — the block is already in the world.
+     */
+    public void registerStall(String ownerUuid, StallData stall) {
+        data.stalls.put(ownerUuid, stall);
+        save();
     }
 
     public boolean removeStall(ServerPlayer player) {
         String uuid = player.getStringUUID();
-        if (!data.stalls.containsKey(uuid)) return false;
-        despawnVillager(stallVillagers, uuid);
+        StallData stall = data.stalls.get(uuid);
+        if (stall == null) return false;
+        removeStallBlock(stall);
         data.stalls.remove(uuid);
         save();
         return true;
+    }
+
+    /**
+     * Remove stall data only (called when the block is already being broken).
+     * Does NOT remove the block — it's already gone.
+     */
+    public void removeStallData(String ownerUuid) {
+        data.stalls.remove(ownerUuid);
+        save();
     }
 
     public StallData getStall(String ownerUuid) {
@@ -196,120 +215,79 @@ public class MarketManager {
         return Collections.unmodifiableMap(data.stalls);
     }
 
-    // ==== VILLAGER MANAGEMENT ====
-
-    public void spawnAllVillagers() {
-        if (server == null) return;
-
-        // Kill any existing stall villagers from world save to prevent duplicates on restart
-        for (var level : server.getAllLevels()) {
-            var existing = level.getEntities(
-                    net.minecraft.world.entity.EntityType.VILLAGER,
-                    e -> e.getTags().contains(STALL_TAG));
-            for (var entity : existing) {
-                entity.discard();
-            }
-        }
-
-        for (Map.Entry<String, StallData> entry : data.stalls.entrySet()) {
-            spawnStallVillager(entry.getKey(), entry.getValue());
-        }
-    }
-
-    public void despawnAll() {
-        for (Villager v : stallVillagers.values()) {
-            if (v != null && v.isAlive()) v.discard();
-        }
-        stallVillagers.clear();
-    }
-
-    private void spawnStallVillager(String ownerUuid, StallData stall) {
-        if (server == null) {
-            LOGGER.warn("[Stall] server is null, cannot spawn villager for {}", ownerUuid);
-            return;
-        }
-        despawnVillager(stallVillagers, ownerUuid);
-        ServerLevel level = getLevel(stall.dimension);
-        if (level == null) {
-            LOGGER.warn("[Stall] Could not find level for dimension '{}' for stall owner {}", stall.dimension, ownerUuid);
-            return;
-        }
-
-        // Remove any old persisted stall villagers for this owner (from before restart)
-        removeOldStallVillagers(level, ownerUuid, stall.x, stall.y, stall.z);
-
-        String displayName = stall.stallName + " [" + stall.ownerName + "]";
-        Villager villager = createVillager(level, displayName, stall.x, stall.y, stall.z, stall.yaw, ownerUuid);
-        boolean added = level.addFreshEntity(villager);
-        LOGGER.info("[Stall] Spawned villager for {} at {},{},{} in {} - addFreshEntity returned: {}, isAlive: {}, id: {}",
-                ownerUuid, stall.x, stall.y, stall.z, stall.dimension, added, villager.isAlive(), villager.getId());
-        applyHeadRotation(villager, stall.yaw);
-        stallVillagers.put(ownerUuid, villager);
-    }
-
-    private void removeOldStallVillagers(ServerLevel level, String ownerUuid, double x, double y, double z) {
-        String ownerTag = STALL_TAG + "_" + ownerUuid;
-        // Search wider area — villagers might drift slightly
-        var aabb = new net.minecraft.world.phys.AABB(x - 5, y - 5, z - 5, x + 5, y + 5, z + 5);
-        var old = level.getEntitiesOfClass(Villager.class, aabb, v -> v.getTags().contains(ownerTag));
-        for (Villager v : old) {
-            v.discard();
-        }
-    }
-
-    private static final String STALL_TAG = "mlkymc_stall";
-
-    private Villager createVillager(ServerLevel level, String name, double x, double y, double z, float yaw, String ownerUuid) {
-        Villager villager = new Villager(EntityType.VILLAGER, level);
-        villager.setPos(x, y, z);
-        villager.setYRot(yaw);
-        villager.yBodyRot = yaw;
-        villager.setCustomName(Component.literal(name));
-        villager.setCustomNameVisible(true);
-        villager.setNoAi(true);
-        villager.setInvulnerable(true);
-        villager.setSilent(true);
-        villager.setNoGravity(true);
-        villager.addTag(STALL_TAG);
-        villager.addTag(STALL_TAG + "_" + ownerUuid);
-        return villager;
-    }
-
-    private void applyHeadRotation(Villager villager, float yaw) {
-        villager.yHeadRot = yaw;
-        villager.yHeadRotO = yaw;
-        villager.setYHeadRot(yaw);
-        villager.yBodyRot = yaw;
-        villager.yBodyRotO = yaw;
-        if (villager.level() instanceof ServerLevel serverLevel) {
-            var packet = new net.minecraft.network.protocol.game.ClientboundRotateHeadPacket(
-                    villager, (byte)((int)(yaw * 256.0F / 360.0F)));
-            for (ServerPlayer player : serverLevel.players()) {
-                player.connection.send(packet);
-            }
-        }
-    }
-
-    private void despawnVillager(Map<String, Villager> map, String key) {
-        Villager villager = map.remove(key);
-        if (villager != null && villager.isAlive()) {
-            villager.discard();
-        }
-    }
-
-    // ==== IDENTIFICATION ====
-
-    public String getStallOwner(Villager villager) {
-        for (Map.Entry<String, Villager> entry : stallVillagers.entrySet()) {
-            if (entry.getValue().equals(villager)) {
-                return entry.getKey();
+    /**
+     * Find the stall owner UUID by looking up the block entity at a position.
+     */
+    public String getStallOwnerAtPos(BlockPos pos, ServerLevel level) {
+        var be = level.getBlockEntity(pos);
+        if (be instanceof ShopBlockEntity shopBE) {
+            String shopId = shopBE.getShopId();
+            if (!shopId.isEmpty() && shopId.startsWith("stall_")) {
+                return shopId.substring(6); // "stall_<uuid>" -> "<uuid>"
             }
         }
         return null;
     }
 
-    public boolean isStallVillager(Villager villager) {
-        return getStallOwner(villager) != null;
+    // ==== BLOCK MANAGEMENT ====
+
+    private void placeStallBlock(String ownerUuid, StallData stall) {
+        if (server == null) return;
+        ServerLevel level = getLevel(stall.dimension);
+        if (level == null) return;
+
+        BlockPos pos = BlockPos.containing(stall.x, stall.y, stall.z);
+        var facing = net.minecraft.core.Direction.fromYRot(stall.yaw);
+
+        var state = ModBlocks.STALL_DEED.get().defaultBlockState()
+                .setValue(ShopBlock.FACING, facing)
+                .setValue(ShopBlock.HALF, DoubleBlockHalf.LOWER);
+        level.setBlock(pos, state, 3);
+        level.setBlock(pos.above(), state.setValue(ShopBlock.HALF, DoubleBlockHalf.UPPER), 3);
+
+        var be = level.getBlockEntity(pos);
+        if (be instanceof ShopBlockEntity shopBE) {
+            shopBE.setShopId("stall_" + ownerUuid);
+        }
+    }
+
+    private void removeStallBlock(StallData stall) {
+        if (server == null) return;
+        ServerLevel level = getLevel(stall.dimension);
+        if (level == null) return;
+
+        BlockPos pos = BlockPos.containing(stall.x, stall.y, stall.z);
+        if (level.getBlockState(pos).is(ModBlocks.STALL_DEED.get())) {
+            level.removeBlock(pos.above(), false);
+            level.removeBlock(pos, false);
+        }
+    }
+
+    /**
+     * On server start: ensure all stall blocks exist with correct data.
+     * Blocks persist in chunks — only place if missing (e.g. first migration from villagers).
+     */
+    public void placeAllStallBlocks() {
+        if (server == null) return;
+        for (Map.Entry<String, StallData> entry : data.stalls.entrySet()) {
+            String uuid = entry.getKey();
+            StallData stall = entry.getValue();
+            ServerLevel level = getLevel(stall.dimension);
+            if (level == null) continue;
+
+            BlockPos pos = BlockPos.containing(stall.x, stall.y, stall.z);
+            if (!level.getBlockState(pos).is(ModBlocks.STALL_DEED.get())) {
+                placeStallBlock(uuid, stall);
+            } else {
+                var be = level.getBlockEntity(pos);
+                if (be instanceof ShopBlockEntity shopBE) {
+                    String expectedId = "stall_" + uuid;
+                    if (!expectedId.equals(shopBE.getShopId())) {
+                        shopBE.setShopId(expectedId);
+                    }
+                }
+            }
+        }
     }
 
     // ==== PROXIMITY CHECKS ====
@@ -326,7 +304,7 @@ public class MarketManager {
                     var pos = playerPos.offset(dx, dy, dz);
                     if (level.getBlockState(pos).is(net.minecraft.world.level.block.Blocks.LECTERN)) {
                         if (level.getBlockEntity(pos) instanceof net.minecraft.world.level.block.entity.LecternBlockEntity lectern) {
-                            if (com.mlkymc.economy.MilkyStar.isMarketBook(lectern.getBook())) {
+                            if (MilkyStar.isMarketBook(lectern.getBook())) {
                                 return true;
                             }
                         }
@@ -379,13 +357,43 @@ public class MarketManager {
 
         ItemStack stack = restoreItemStack(listing);
         if (!stack.isEmpty()) {
-            if (!buyer.getInventory().add(stack)) {
-                buyer.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
-                        buyer.level(), buyer.getX(), buyer.getY(), buyer.getZ(), stack));
+            // Try mailbox delivery first (Refurbished Furniture integration).
+            // Falls back to inventory/drop if the mod isn't installed or the buyer
+            // has no mailbox.
+            boolean mailed = false;
+            if (com.mlkymc.compat.FurnitureCompat.isAvailable() && server != null) {
+                mailed = com.mlkymc.compat.FurnitureCompat.sendToMailbox(
+                        server, buyer.getUUID(), stack);
+            }
+            if (!mailed) {
+                if (!buyer.getInventory().add(stack)) {
+                    buyer.level().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
+                            buyer.level(), buyer.getX(), buyer.getY(), buyer.getZ(), stack));
+                }
             }
         }
 
-        data.pendingEarnings.merge(listing.getSellerUuid(), listing.getPrice(), Integer::sum);
+        // Route seller earnings to their mailbox as Milky Stars if possible.
+        // Only fall back to pendingEarnings if mailbox delivery fails — otherwise
+        // the seller gets paid twice (once from mailbox, once from collectEarnings).
+        boolean earningsMailed = false;
+        if (com.mlkymc.compat.FurnitureCompat.isAvailable() && server != null) {
+            try {
+                UUID sellerUuid = UUID.fromString(listing.getSellerUuid());
+                earningsMailed = true;
+                for (ItemStack star : com.mlkymc.economy.MilkyStar.createAll(listing.getPrice())) {
+                    if (!com.mlkymc.compat.FurnitureCompat.sendToMailbox(server, sellerUuid, star)) {
+                        earningsMailed = false;
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                earningsMailed = false;
+            }
+        }
+        if (!earningsMailed) {
+            data.pendingEarnings.merge(listing.getSellerUuid(), listing.getPrice(), Integer::sum);
+        }
 
         String displayName = getItemDisplayName(listing);
         if (server != null) {
@@ -405,10 +413,6 @@ public class MarketManager {
         return true;
     }
 
-    /**
-     * Get the display name of a listing's item. Uses the custom name from NBT if available,
-     * otherwise falls back to the default item name (e.g., "Milky Star" instead of "nether_star").
-     */
     public String getItemDisplayName(MarketListing listing) {
         if (listing.getItemNbt() != null && !listing.getItemNbt().isEmpty() && server != null) {
             try {
@@ -426,9 +430,6 @@ public class MarketManager {
         return listing.getItemId().replace("minecraft:", "");
     }
 
-    /**
-     * Get the display name of an item by its registry ID. Uses the item's default name.
-     */
     public String getItemDisplayName(String itemId) {
         Identifier id = Identifier.parse(itemId);
         Item item = BuiltInRegistries.ITEM.get(id).map(Holder.Reference::value).orElse(null);
@@ -436,10 +437,6 @@ public class MarketManager {
         return itemId.replace("minecraft:", "");
     }
 
-    /**
-     * Get a list of content description strings for container items (shulker boxes, bundles, etc.)
-     * Returns empty list if the item has no container contents or NBT is missing.
-     */
     public List<String> getContainerContents(MarketListing listing) {
         List<String> contents = new ArrayList<>();
         if (listing.getItemNbt() == null || listing.getItemNbt().isEmpty() || server == null) {
@@ -451,7 +448,6 @@ public class MarketManager {
             var result = ItemStack.CODEC.parse(ops, tag);
             ItemStack stack = result.getOrThrow();
 
-            // Check if this is a wallet - show balance instead of container contents
             if (MilkyStar.isJar(stack)) {
                 int balance = MilkyStar.getJarBalance(stack);
                 contents.add(balance + " Milky Stars");
@@ -477,14 +473,12 @@ public class MarketManager {
         return contents;
     }
 
-    /** Serialize an ItemStack to SNBT string for storage. */
     public static String serializeItemStack(ItemStack stack, ServerPlayer player) {
         var ops = player.registryAccess().createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE);
         var result = ItemStack.CODEC.encodeStart(ops, stack);
         return result.getOrThrow().toString();
     }
 
-    /** Restore an ItemStack from a listing's saved NBT, falling back to basic item if no NBT. */
     public ItemStack restoreItemStack(MarketListing listing) {
         if (listing.getItemNbt() != null && !listing.getItemNbt().isEmpty() && server != null) {
             try {
@@ -496,7 +490,6 @@ public class MarketManager {
                 MlkyMC.LOGGER.error("Failed to parse item NBT for listing " + listing.getId(), e);
             }
         }
-        // Fallback for old listings without NBT
         Identifier id = Identifier.parse(listing.getItemId());
         Item item = BuiltInRegistries.ITEM.get(id).map(Holder.Reference::value).orElse(null);
         if (item != null) return new ItemStack(item, listing.getAmount());

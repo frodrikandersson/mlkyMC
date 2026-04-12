@@ -136,25 +136,37 @@ public class SpawnerHandler {
     }
 
     /**
-     * Crafted spawners drop themselves when broken. Vanilla spawners don't.
+     * Crafted spawners drop themselves when broken. Natural spawners do not.
+     * Reads the mlkymc_crafted flag directly from BlockDropsEvent.getBlockEntity(),
+     * which NeoForge captures before the block is removed. This is robust across
+     * server restarts (unlike an in-memory position tracker) and independent of
+     * handler priority order.
      */
     @SubscribeEvent
     public void onBlockDrop(BlockDropsEvent event) {
         if (event.getState() == null || !event.getState().is(Blocks.SPAWNER)) return;
         if (!(event.getLevel() instanceof ServerLevel level)) return;
 
-        if (!(level.getBlockEntity(event.getPos()) instanceof SpawnerBlockEntity spawnerBE)) return;
+        boolean isCrafted = event.getBlockEntity() instanceof SpawnerBlockEntity spawnerBE
+                && spawnerBE.getPersistentData().getBooleanOr("mlkymc_crafted", false);
 
-        CompoundTag data = spawnerBE.getPersistentData();
-        if (!data.getBooleanOr("mlkymc_crafted", false)) return;
+        if (!isCrafted) {
+            // Natural spawner — strip any spawner drops added by other handlers
+            event.getDrops().removeIf(e -> e.getItem().is(Items.SPAWNER));
+            return;
+        }
 
-        // Drop the spawner item
-        event.getDrops().add(new net.minecraft.world.entity.item.ItemEntity(
-                level,
-                event.getPos().getX() + 0.5,
-                event.getPos().getY() + 0.5,
-                event.getPos().getZ() + 0.5,
-                new ItemStack(Items.SPAWNER)));
+        // Crafted spawner — ensure it drops exactly once
+        boolean alreadyDropping = event.getDrops().stream()
+                .anyMatch(e -> e.getItem().is(Items.SPAWNER));
+        if (!alreadyDropping) {
+            event.getDrops().add(new net.minecraft.world.entity.item.ItemEntity(
+                    level,
+                    event.getPos().getX() + 0.5,
+                    event.getPos().getY() + 0.5,
+                    event.getPos().getZ() + 0.5,
+                    new ItemStack(Items.SPAWNER)));
+        }
     }
 
     /**
@@ -198,12 +210,22 @@ public class SpawnerHandler {
                     spawnerBE.setChanged();
 
                     if (count >= limit) {
-                        // Revert to empty crafted spawner
-                        BaseSpawner spawner = spawnerBE.getSpawner();
-                        spawner.setEntityId(EntityType.PIG, level, level.random, checkPos);
-                        data.remove("mlkymc_mob_type");
-                        data.putInt("mlkymc_spawn_count", 0);
-                        spawnerBE.setChanged();
+                        // Nuke and recreate the block entity so it becomes a truly empty
+                        // spawner (no mob assigned visually). BaseSpawner has no public API
+                        // to clear an assigned entity, and setEntityId(PIG) just swaps the
+                        // display to a pig spawner. Replacing the block produces a fresh,
+                        // entity-less spawner. Preserve the crafted flag + limit on the new
+                        // BE so the player can still pick it up, and reset the count.
+                        int savedLimit = limit;
+                        level.setBlock(checkPos, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(checkPos, Blocks.SPAWNER.defaultBlockState(), 3);
+                        if (level.getBlockEntity(checkPos) instanceof SpawnerBlockEntity freshBE) {
+                            CompoundTag freshData = freshBE.getPersistentData();
+                            freshData.putBoolean("mlkymc_crafted", true);
+                            freshData.putInt("mlkymc_spawn_limit", savedLimit);
+                            freshData.putInt("mlkymc_spawn_count", 0);
+                            freshBE.setChanged();
+                        }
 
                         for (var p : level.players()) {
                             if (p.blockPosition().distSqr(checkPos) < 30 * 30) {

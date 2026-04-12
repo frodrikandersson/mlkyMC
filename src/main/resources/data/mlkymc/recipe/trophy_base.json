@@ -6,15 +6,9 @@
     " P "
   ],
   "key": {
-    "S": {
-      "item": "minecraft:smooth_stone_slab"
-    },
-    "G": {
-      "item": "minecraft:gold_nugget"
-    },
-    "P": {
-      "tag": "minecraft:planks"
-    }
+    "S": "minecraft:smooth_stone_slab",
+    "G": "minecraft:gold_nugget",
+    "P": "#minecraft:planks"
   },
   "result": {
     "id": "mlkymc:trophy_base",

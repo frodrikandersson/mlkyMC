@@ -30,13 +30,17 @@ public class GhostData {
     public String hauntZoneDimension;
     public long hauntZoneStartMs;
 
+    // Logout position — restore on login so ghosts don't respawn at world spawn
+    public double logoutX, logoutY, logoutZ;
+    public String logoutDimension;
+
     // Passive gain tracking
     public long lastGainTickMs;
     public transient int gainTickCounter; // not saved, resets on restart
 
     public GhostData(UUID uuid) {
         this.ghostUuid = uuid;
-        this.spectralEnergy = 0;
+        this.spectralEnergy = 50;
         this.totalAccumulatedSE = 0;
         this.ghostSinceMs = System.currentTimeMillis();
         this.activeMimic = null;
@@ -94,6 +98,12 @@ public class GhostData {
             data.put("hauntDim", hauntZoneDimension);
             data.put("hauntStartMs", hauntZoneStartMs);
         }
+        if (logoutDimension != null) {
+            data.put("logoutX", logoutX);
+            data.put("logoutY", logoutY);
+            data.put("logoutZ", logoutZ);
+            data.put("logoutDim", logoutDimension);
+        }
         return data;
     }
 
@@ -120,6 +130,12 @@ public class GhostData {
                     ((Number) data.get("hauntZ")).intValue());
             gd.hauntZoneDimension = (String) data.get("hauntDim");
             gd.hauntZoneStartMs = ((Number) data.get("hauntStartMs")).longValue();
+        }
+        if (data.containsKey("logoutX")) {
+            gd.logoutX = ((Number) data.get("logoutX")).doubleValue();
+            gd.logoutY = ((Number) data.get("logoutY")).doubleValue();
+            gd.logoutZ = ((Number) data.get("logoutZ")).doubleValue();
+            gd.logoutDimension = (String) data.get("logoutDim");
         }
         return gd;
     }

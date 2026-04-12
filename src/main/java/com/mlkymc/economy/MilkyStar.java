@@ -35,6 +35,72 @@ public class MilkyStar {
         return new ItemStack(ModItems.MILKY_STAR.get(), Math.min(amount, 64));
     }
 
+    /**
+     * Give Milky Stars to a player with automatic jar deposit.
+     * Search order mirrors WalletListener.onMilkyStarPickup (hotbar → inventory → containers).
+     * If no jar is found, falls back to adding loose stars to inventory or dropping on the ground.
+     * Use this for server-side star rewards (craft bonuses, kill drops, etc.) that bypass
+     * the ItemEntityPickupEvent path.
+     */
+    public static void giveOrDeposit(net.minecraft.server.level.ServerPlayer player, int amount) {
+        if (amount <= 0) return;
+        var inv = player.getInventory();
+
+        // 1. Hotbar (0-8)
+        int jarSlot = findJarSlot(inv, 0, 9);
+        // 2. Rest of main inventory (9-35)
+        if (jarSlot == -1) jarSlot = findJarSlot(inv, 9, 36);
+        if (jarSlot != -1) {
+            int balance = getJarBalance(inv.getItem(jarSlot));
+            setJarBalanceAndUpdateVisual(player, jarSlot, balance + amount);
+            return;
+        }
+
+        // 3. Jars nested inside shulker boxes / pouches in the inventory
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack container = inv.getItem(i);
+            if (container.isEmpty()) continue;
+            if (!isNestedContainer(container)) continue;
+
+            var contents = container.get(DataComponents.CONTAINER);
+            if (contents == null) continue;
+
+            var items = new java.util.ArrayList<ItemStack>();
+            for (ItemStack inner : contents.nonEmptyItems()) items.add(inner.copy());
+
+            for (int j = 0; j < items.size(); j++) {
+                if (isJar(items.get(j))) {
+                    int balance = getJarBalance(items.get(j));
+                    setJarBalance(items.get(j), balance + amount);
+                    container.set(DataComponents.CONTAINER,
+                            net.minecraft.world.item.component.ItemContainerContents.fromItems(items));
+                    return;
+                }
+            }
+        }
+
+        // 4. No jar anywhere — fall back to loose stars in inventory, drop if full
+        var star = create(amount);
+        if (!player.getInventory().add(star)) {
+            if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                player.spawnAtLocation(sl, star);
+            }
+        }
+    }
+
+    private static int findJarSlot(Inventory inv, int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (isJar(inv.getItem(i))) return i;
+        }
+        return -1;
+    }
+
+    private static boolean isNestedContainer(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        String name = stack.getItem().toString();
+        return name.contains("shulker_box") || name.contains("ender_pouch") || name.contains("pouch");
+    }
+
     public static java.util.List<ItemStack> createAll(int amount) {
         java.util.List<ItemStack> stacks = new java.util.ArrayList<>();
         while (amount > 0) {
@@ -304,13 +370,13 @@ public class MilkyStar {
     // ---- Stall Deed ----
 
     public static ItemStack createStallDeed() {
-        return new ItemStack(ModItems.STALL_DEED.get());
+        return new ItemStack(com.mlkymc.registry.ModBlocks.STALL_DEED_ITEM.get());
     }
 
     public static boolean isStallDeed(ItemStack stack) {
         if (stack.isEmpty()) return false;
         // New registered item
-        if (stack.is(ModItems.STALL_DEED.get())) return true;
+        if (stack.is(com.mlkymc.registry.ModBlocks.STALL_DEED_ITEM.get())) return true;
         // Legacy NBT paper
         if (stack.is(Items.PAPER)) {
             CustomData customData = stack.get(DataComponents.CUSTOM_DATA);

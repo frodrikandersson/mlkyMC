@@ -1,18 +1,10 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:glass_bottle"
-    },
-    {
-      "item": "minecraft:redstone"
-    },
-    {
-      "item": "minecraft:glowstone_dust"
-    },
-    {
-      "item": "mlkymc:milky_star"
-    }
+    "minecraft:glass_bottle",
+    "minecraft:redstone",
+    "minecraft:glowstone_dust",
+    "mlkymc:milky_star"
   ],
   "result": {
     "id": "mlkymc:trophy_witch",

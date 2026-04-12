@@ -1,6 +1,8 @@
 {
   "replace": false,
   "values": [
-    "mlkymc:scarecrow"
+    "mlkymc:scarecrow",
+    "mlkymc:stall_deed",
+    "mlkymc:trophy_base"
   ]
 }

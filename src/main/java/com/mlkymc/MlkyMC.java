@@ -21,9 +21,6 @@ import com.mlkymc.ghost.GhostListener;
 import com.mlkymc.ghost.GhostManager;
 import com.mlkymc.revive.ReviveListener;
 import com.mlkymc.revive.ReviveManager;
-import com.mlkymc.shop.ShopCommand;
-import com.mlkymc.shop.ShopListener;
-import com.mlkymc.shop.ShopManager;
 import com.mlkymc.storage.JsonStorage;
 import com.mlkymc.twitch.StreamCommand;
 import com.mlkymc.twitch.StreamListener;
@@ -69,7 +66,6 @@ public class MlkyMC {
     private final GhostManager ghostManager;
     private final ReviveManager reviveManager;
     private final DimensionManager dimensionManager;
-    private final ShopManager shopManager;
     private final SpawnerAgingManager spawnerAgingManager;
     private SpawnerAgingListener spawnerAgingListener;
     private final RegionManager regionManager;
@@ -85,12 +81,14 @@ public class MlkyMC {
     private static com.mlkymc.altar.SoulAltarManager soulAltarManagerInstance;
     private static com.mlkymc.ghost.GhostDataManager ghostDataManagerInstance;
     private static com.mlkymc.classes.PassiveSkillHandler passiveSkillHandlerInstance;
+    private com.mlkymc.classes.ConcoctionHandler concoctionHandler;
+    private ClassExpHandler classExpHandler;
+    private com.mlkymc.classes.IngredientBuffHandler ingredientBuffHandler;
 
     // Commands (instance-based)
     private final ClassCommand classCommand;
     private final GhostCommand ghostCommand;
     private final DimensionCommand dimensionCommand;
-    private final ShopCommand shopCommand;
     private final RegionCommand regionCommand;
     private final MarketCommand marketCommand;
 
@@ -108,6 +106,7 @@ public class MlkyMC {
 
         // Register blocks, items, entities, creative tabs, and keybinds on the mod event bus
         com.mlkymc.registry.ModBlocks.BLOCKS.register(modEventBus);
+        com.mlkymc.registry.ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
         com.mlkymc.registry.ModEntities.ENTITIES.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
@@ -132,10 +131,11 @@ public class MlkyMC {
         reviveManager = new ReviveManager(ghostManager, storage);
         reviveManagerInstance = reviveManager;
         dimensionManager = new DimensionManager(configDir);
-        shopManager = new ShopManager(configDir);
         spawnerAgingManager = new SpawnerAgingManager(configDir);
         regionManager = new RegionManager(configDir);
         marketManager = new MarketManager(configDir);
+        marketManagerInstance = marketManager;
+        regionManagerInstance = regionManager;
         graveManager = new com.mlkymc.grave.GraveManager();
         soulAltarManager = new com.mlkymc.altar.SoulAltarManager(configDir);
         ghostDataManager = new com.mlkymc.ghost.GhostDataManager(configDir);
@@ -149,7 +149,6 @@ public class MlkyMC {
         classCommand = new ClassCommand(classManager);
         ghostCommand = new GhostCommand(ghostManager, reviveManager);
         dimensionCommand = new DimensionCommand(dimensionManager);
-        shopCommand = new ShopCommand(shopManager);
         regionCommand = new RegionCommand(regionManager);
         marketCommand = new MarketCommand(marketManager);
 
@@ -175,15 +174,19 @@ public class MlkyMC {
             forgeBus.register(new com.mlkymc.client.MinimapHud());
             forgeBus.register(new com.mlkymc.client.PowerChargeHud());
             forgeBus.register(new com.mlkymc.client.ResurrectionCountdownHud());
-            forgeBus.register(new com.mlkymc.client.DevotedLifeHud());
+            forgeBus.register(new com.mlkymc.client.SkillStatusHud());
             forgeBus.register(new com.mlkymc.client.SoulEnergyHud());
             forgeBus.register(new com.mlkymc.client.SpectralEnergyHud());
+            forgeBus.register(new com.mlkymc.client.ClassXpHud());
+            forgeBus.register(new com.mlkymc.client.GraveTrackerHud());
             forgeBus.register(new com.mlkymc.registry.ItemTooltipHandler());
             forgeBus.register(new com.mlkymc.client.BlockOwnerRenderer());
+            forgeBus.register(new com.mlkymc.client.QuickChargeHandler());
         }
-        forgeBus.register(new MobDropListener());
+        // MobDropListener disabled — mob star drops are now class-specific (SpecialEffectHandler)
         forgeBus.register(new DebuffHandler(classManager));
-        forgeBus.register(new ClassExpHandler(classManager));
+        classExpHandler = new ClassExpHandler(classManager);
+        forgeBus.register(classExpHandler);
         passiveSkillHandler = new com.mlkymc.classes.PassiveSkillHandler(classManager);
         passiveSkillHandlerInstance = passiveSkillHandler;
         forgeBus.register(passiveSkillHandler);
@@ -194,15 +197,23 @@ public class MlkyMC {
         forgeBus.register(new com.mlkymc.classes.CraftRestrictionHandler(classManager));
         powerHandler = new com.mlkymc.classes.PowerHandler(classManager);
         powerHandler.setGraveManager(graveManager);
+        powerHandlerInstance = powerHandler;
         forgeBus.register(powerHandler);
         forgeBus.register(new com.mlkymc.classes.TrophyBuffHandler());
         forgeBus.register(new com.mlkymc.classes.ItemFunctionHandler());
         forgeBus.register(new com.mlkymc.classes.ClassLoginHandler(classManager));
-        forgeBus.register(new com.mlkymc.classes.IngredientBuffHandler(classManager));
+        ingredientBuffHandler = new com.mlkymc.classes.IngredientBuffHandler(classManager);
+        forgeBus.register(ingredientBuffHandler);
         forgeBus.register(new com.mlkymc.classes.IngredientBuffApplier());
-        forgeBus.register(new com.mlkymc.classes.SmithGambleListener(classManager));
+        var smithGambleListener = new com.mlkymc.classes.SmithGambleListener(classManager);
+        smithGambleListenerInstance = smithGambleListener;
+        forgeBus.register(smithGambleListener);
+        concoctionHandler = new com.mlkymc.classes.ConcoctionHandler(classManager);
+        forgeBus.register(concoctionHandler);
+        var fletcherHandler = new com.mlkymc.classes.FletcherModifierHandler(classManager);
+        fletcherHandlerInstance = fletcherHandler;
+        forgeBus.register(fletcherHandler);
         forgeBus.register(new DimensionListener(dimensionManager));
-        forgeBus.register(new ShopListener(shopManager));
         spawnerAgingListener = new SpawnerAgingListener(spawnerAgingManager);
         forgeBus.register(spawnerAgingListener);
         forgeBus.register(new RegionListener(regionManager));
@@ -215,6 +226,10 @@ public class MlkyMC {
         forgeBus.register(new com.mlkymc.world.AntiExploitListener());
         forgeBus.register(new com.mlkymc.world.ElytraRemover());
         forgeBus.register(new com.mlkymc.world.SpawnerHandler());
+        forgeBus.register(new com.mlkymc.world.ThreatScalingHandler(classManager));
+        forgeBus.register(new com.mlkymc.classes.MilkyCurseHandler());
+        forgeBus.register(new com.mlkymc.transmutation.TransmutationHandler(classManager));
+        forgeBus.register(new com.mlkymc.classes.HorseBuffHandler());
 
         if (MlkyConfig.getDisableVillagerSpawning()) {
             forgeBus.register(new VillagerBlocker());
@@ -242,6 +257,13 @@ public class MlkyMC {
         return soulAltarManagerInstance;
     }
 
+    private static com.mlkymc.classes.PowerHandler powerHandlerInstance;
+    private static com.mlkymc.classes.SmithGambleListener smithGambleListenerInstance;
+    private static com.mlkymc.classes.FletcherModifierHandler fletcherHandlerInstance;
+    public static com.mlkymc.classes.PowerHandler getPowerHandler() {
+        return powerHandlerInstance;
+    }
+
     public static com.mlkymc.ghost.GhostDataManager getGhostDataManager() {
         return ghostDataManagerInstance;
     }
@@ -266,6 +288,16 @@ public class MlkyMC {
         return activeSkillHandlerInstance;
     }
 
+    private static MarketManager marketManagerInstance;
+    public static MarketManager getMarketManager() {
+        return marketManagerInstance;
+    }
+
+    private static com.mlkymc.region.RegionManager regionManagerInstance;
+    public static com.mlkymc.region.RegionManager getRegionManager() {
+        return regionManagerInstance;
+    }
+
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         var dispatcher = event.getDispatcher();
@@ -273,7 +305,6 @@ public class MlkyMC {
         classCommand.register(dispatcher);
         ghostCommand.register(dispatcher);
         dimensionCommand.register(dispatcher);
-        shopCommand.register(dispatcher);
         streamCommand.register(dispatcher);
         regionCommand.register(dispatcher);
         marketCommand.register(dispatcher);
@@ -301,19 +332,39 @@ public class MlkyMC {
         soulAltarManager.reload(worldDataDir);
         ghostDataManager.reload(worldDataDir);
 
+        com.mlkymc.registry.ScarecrowBlock.reload(worldDataDir);
+        var radioManager = new com.mlkymc.radio.RadioManager();
+        radioManager.reload(worldDataDir);
+        com.mlkymc.radio.RadioMusicPlayer.init(worldDataDir);
+        // Replace MrCrayfish's "Coming Soon" Marketplace with our mlkymc Marketplace.
+        // Server-only — the client briefly shows "Coming Soon" before our MarketMenu
+        // takes over. Client-side replacement was attempted but scrambles the desktop
+        // icon order because it changes HashMap iteration order.
+        com.mlkymc.compat.FurnitureCompat.registerComputerProgram();
         ghostManager.setServer(server);
         graveManager.setServer(server);
         graveManager.reload(worldDataDir);
         com.mlkymc.ghost.GhostListener.setPendingGhostsFile(worldDataDir.resolve("pending_ghosts.json"));
-        shopManager.setServer(server);
+        if (classExpHandler != null) classExpHandler.setLootrDataFile(worldDataDir);
         marketManager.setServer(server);
         twitchHandler.setServer(server);
 
-        // Spawn shopkeeper villagers
-        shopManager.spawnAllVillagers();
+        // Place market stall blocks
+        marketManager.placeAllStallBlocks();
 
-        // Spawn market vendors and player stalls
-        marketManager.spawnAllVillagers();
+        // Clean up stale ore scan shulker markers from previous session
+        for (var level : server.getAllLevels()) {
+            var staleMarkers = level.getEntities(
+                    net.minecraft.world.entity.EntityType.SHULKER,
+                    e -> e.getTags().contains("mlkymc_ore_marker"));
+            for (var marker : staleMarkers) {
+                marker.discard();
+            }
+            if (!staleMarkers.isEmpty()) {
+                LOGGER.info("[mlkyMC] Cleaned up {} stale ore scan markers in {}", staleMarkers.size(),
+                        level.dimension().identifier());
+            }
+        }
 
         // Start stream status polling
         streamerManager.setServer(server);
@@ -333,14 +384,16 @@ public class MlkyMC {
         storage.save();
         classManager.save();
         dimensionManager.save();
-        shopManager.save();
-        shopManager.despawnAll();
         spawnerAgingManager.save();
         regionManager.save();
         marketManager.save();
-        marketManager.despawnAll();
+        // Market stall blocks persist in-world, no despawn needed
         soulAltarManager.save();
         ghostDataManager.save();
+        com.mlkymc.registry.ScarecrowBlock.save();
+        var rm = com.mlkymc.radio.RadioManager.getInstance();
+        if (rm != null) rm.save();
+        com.mlkymc.radio.RadioMusicPlayer.stopAll();
 
         // Stop stream polling
         streamerManager.stop();
@@ -381,6 +434,20 @@ public class MlkyMC {
         if (powerHandler != null) {
             powerHandler.tickJackhammer(level);
             powerHandler.tickCharmedMobs(level);
+            powerHandler.tickAirDashReset(level);
+        }
+        if (concoctionHandler != null) {
+            concoctionHandler.tickPreserveBrewData(level);
+            concoctionHandler.tickLingeringClouds(level);
+        }
+        if (classExpHandler != null) {
+            classExpHandler.tickBrewingStands(level);
+        }
+        if (activeSkillHandler != null) {
+            activeSkillHandler.tickAnimalFollowing(level);
+        }
+        if (ingredientBuffHandler != null) {
+            ingredientBuffHandler.tickCookingBlocks(level);
         }
         // Sync mimic mob positions (overworld only to avoid duplicate ticks)
         if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
@@ -397,12 +464,13 @@ public class MlkyMC {
                 tickTimings[8] += System.nanoTime() - t0;
 
                 t0 = System.nanoTime();
-                powerHandler.tickAutoSmelt(level);
+                powerHandler.tickOreScan(level);
                 tickTimings[9] += System.nanoTime() - t0;
             }
             if (passiveSkillHandler != null) {
                 t0 = System.nanoTime();
                 passiveSkillHandler.tickLavaFishing(level);
+                passiveSkillHandler.tickNaturesCallFishing(level);
                 tickTimings[10] += System.nanoTime() - t0;
             }
         }
@@ -412,10 +480,11 @@ public class MlkyMC {
             t0 = System.nanoTime();
             com.mlkymc.registry.ScarecrowBlock.tickCropBoost(sl);
             if (activeSkillHandler != null) {
-                activeSkillHandler.tickAnimalFollowing(level);
+                activeSkillHandler.tickQuickChargeCrossbow(level);
             }
             if (passiveSkillHandler != null) {
                 passiveSkillHandler.tickComposters(level);
+                passiveSkillHandler.tickFurnaces(level);
             }
             // Periodic data saves (dirty flag based)
             com.mlkymc.world.BlockOwnerData.get(sl.getServer()).tickSave();
@@ -443,9 +512,29 @@ public class MlkyMC {
             ghostDataManager.tickSpectralEnergy(sl.getServer());
             ghostDataManager.tickHauntZones(sl.getServer());
             ghostDataManager.tickSpectralVision(sl.getServer());
+            ghostDataManager.tickPositionSave(sl.getServer());
             if (reviveListenerInstance != null) {
                 reviveListenerInstance.tickPendingRevives(gameTime, sl.getServer());
             }
+        }
+
+        // Cleric ghost vision particles (every 5 ticks)
+        if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD
+                && gameTime % 5 == 0 && ghostDataManager != null) {
+            ghostDataManager.tickClericGhostVision(sl.getServer());
+        }
+
+        // Smith gamble + Fletcher forge lore reveal (every 10 ticks). Both hide the
+        // real attribute values behind ??? in the anvil preview and reveal them only
+        // after the player takes the result — this scan flips the pending flag.
+        if (gameTime % 10 == 0) {
+            if (smithGambleListenerInstance != null) smithGambleListenerInstance.tickRevealGambles(sl.getServer());
+            if (fletcherHandlerInstance != null) fletcherHandlerInstance.tickRevealFletcher(sl.getServer());
+        }
+
+        // Flush pending XP syncs (every 5 ticks)
+        if (gameTime % 5 == 0 && classManager != null) {
+            classManager.tickSync(sl.getServer());
         }
 
         // Block owner sync (every 5 ticks = 0.25s)
@@ -465,7 +554,10 @@ public class MlkyMC {
                         String id = state.getBlock().getDescriptionId();
                         if (id.contains("furnace") || id.contains("smoker") || id.contains("blast")
                                 || id.contains("composter") || id.contains("brewing") || id.contains("anvil")
-                                || id.contains("enchanting")) {
+                                || id.contains("enchanting")
+                                || id.contains("grill") || id.contains("stove")
+                                || id.contains("microwave") || id.contains("toaster")
+                                || id.contains("cutting_board") || id.contains("campfire")) {
                             newMsg = "[MLKYMC_BLOCK_OWNERS:" + pos.getX() + "," + pos.getY() + "," + pos.getZ()
                                     + "," + owner.uuid() + "," + owner.name() + "]";
                         }
@@ -479,7 +571,7 @@ public class MlkyMC {
                     var grave = graveManager.getGrave(graveDim, gravePos);
                     if (grave != null) {
                         long elapsed = gameTime - grave.deathTime;
-                        long freeWindowTicks = 1200; // 60 seconds
+                        long freeWindowTicks = 6000; // 5 minutes
                         long graveLifeTicks = 72000; // 60 minutes
 
                         String graveMsg;
@@ -514,6 +606,13 @@ public class MlkyMC {
                 }
             }
             tickTimings[7] += System.nanoTime() - t0;
+        }
+
+        // Sync skill statuses to clients every second
+        if (sl.dimension() == net.minecraft.world.level.Level.OVERWORLD && gameTime % 20 == 0) {
+            if (powerHandler != null && passiveSkillHandler != null) {
+                powerHandler.syncSkillStatuses(sl.getServer(), classManager, passiveSkillHandler, activeSkillHandler);
+            }
         }
 
         // Report timings every 30 seconds (600 ticks) to server log

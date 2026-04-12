@@ -43,7 +43,28 @@ public class ClientSyncHandler {
                 } catch (NumberFormatException ignored) {}
             }
 
+            // Auto-enable minimap when Adventurer reaches Lv10
+            if (ClientClassData.getChosenClass() == com.mlkymc.classes.ClassType.ADVENTURER
+                    && ClientClassData.getLevel(ProfessionType.ADVENTURER) >= 10) {
+                if (!MinimapHud.isEnabled()) {
+                    MinimapHud.toggle(); // Auto-enable once
+                }
+            }
+
             // Hide the sync message from chat
+            event.setCanceled(true);
+        }
+
+        // Quick-Charge cooldown sync
+        if (msg.equals("[MLKYMC_QUICKCHARGE_CD]")) {
+            QuickChargeHandler.triggerCooldown();
+            event.setCanceled(true);
+        }
+
+        // Open Altar Guide GUI
+        if (msg.equals("[MLKYMC_OPEN_ALTAR_GUIDE]")) {
+            net.minecraft.client.Minecraft.getInstance().execute(() ->
+                    net.minecraft.client.Minecraft.getInstance().setScreen(new AltarGuideScreen()));
             event.setCanceled(true);
         }
     }

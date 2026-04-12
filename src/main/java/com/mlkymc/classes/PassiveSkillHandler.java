@@ -33,10 +33,13 @@ public class PassiveSkillHandler {
     private final ClassManager classManager;
 
     // Wind-up damage tracking for Adventurer Lv30
-    // Tracks distance sprinted since last hit. Max 10 blocks = +5 damage.
-    // Expires after 10 seconds (200 ticks) of not sprinting.
+    // Tracks distance moved since last hit. Max 10 blocks = +5 damage.
+    // Resets after 1 second (20 ticks) of not moving.
     private final java.util.Map<java.util.UUID, Double> sprintDistance = new java.util.HashMap<>();
-    private final java.util.Map<java.util.UUID, Integer> windupExpireTick = new java.util.HashMap<>();
+    private final java.util.Map<java.util.UUID, Integer> lastMovedTick = new java.util.HashMap<>();
+    private final java.util.Map<java.util.UUID, double[]> lastPosition = new java.util.HashMap<>();
+    private static final net.minecraft.resources.Identifier WINDUP_DAMAGE_ID =
+            net.minecraft.resources.Identifier.parse("mlkymc:windup_damage");
 
     // Attribute modifier IDs (unique per effect)
     private static final net.minecraft.resources.Identifier HEALTH_MODIFIER_ID =
@@ -283,41 +286,74 @@ public class PassiveSkillHandler {
     // =========================================================================
 
     /**
-     * Track sprint distance each tick. Only accumulates while sprinting.
-     * Resets on hit.
+     * Track movement distance each tick. Accumulates while moving (any speed).
+     * Resets after 1 second of not moving, or on hit.
      */
     private void trackSprintDistance(ServerPlayer player) {
         java.util.UUID uuid = player.getUUID();
         int advLevel = classManager.getOrCreate(player).getLevel(ProfessionType.ADVENTURER);
-        if (advLevel < 30) return;
+        if (advLevel < 30) {
+            removeWindupModifier(player);
+            return;
+        }
 
         double currentDist = sprintDistance.getOrDefault(uuid, 0.0);
 
-        if (player.isSprinting()) {
-            double moved = player.getDeltaMovement().horizontalDistance();
-            currentDist = Math.min(10.0, currentDist + moved);
-            sprintDistance.put(uuid, currentDist);
-            // Reset expire timer while sprinting
-            windupExpireTick.put(uuid, player.tickCount + 200); // 10 seconds from now
+        // Track actual position change between ticks (getDeltaMovement is unreliable on ground)
+        double[] prev = lastPosition.get(uuid);
+        double px = player.getX(), pz = player.getZ();
+        double moved = 0;
+        if (prev != null) {
+            double dx = px - prev[0];
+            double dz = pz - prev[1];
+            moved = Math.sqrt(dx * dx + dz * dz);
+        }
+        lastPosition.put(uuid, new double[]{px, pz});
 
-            // Show wind-up visually: give Strength effect with level based on charge
-            // This shows the strength icon + particles as a visual indicator
-            if (currentDist >= 1.0) {
-                int strengthLevel = Math.min(4, (int)(currentDist / 2.5)); // 0-4 based on 0-10 blocks
-                player.addEffect(new MobEffectInstance(
-                        MobEffects.STRENGTH, 220, strengthLevel, false, true, true));
-            }
+        if (moved > 0.05) {
+            // Player is moving — accumulate distance
+            currentDist = Math.min(20.0, currentDist + moved);
+            sprintDistance.put(uuid, currentDist);
+            lastMovedTick.put(uuid, player.tickCount);
+
+            // Update attack damage attribute modifier based on distance
+            applyWindupModifier(player, currentDist);
         } else {
-            // Not sprinting — check expiry
+            // Not moving — check if 1 second has passed
             if (currentDist > 0) {
-                Integer expireTick = windupExpireTick.get(uuid);
-                if (expireTick != null && player.tickCount > expireTick) {
-                    // Expired — reset
+                Integer lastMoved = lastMovedTick.get(uuid);
+                if (lastMoved != null && player.tickCount - lastMoved >= 20) {
+                    // 1 second idle — reset
                     sprintDistance.put(uuid, 0.0);
-                    windupExpireTick.remove(uuid);
-                    player.removeEffect(MobEffects.STRENGTH);
+                    lastMovedTick.remove(uuid);
+                    removeWindupModifier(player);
                 }
             }
+        }
+    }
+
+    private void applyWindupModifier(ServerPlayer player, double distance) {
+        var attr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        if (attr == null) return;
+
+        double bonus = Math.min(5.0, distance * 0.25); // +0.25 per block, max +5 at 20 blocks
+        var existing = attr.getModifier(WINDUP_DAMAGE_ID);
+        double existingVal = existing != null ? existing.amount() : 0;
+
+        if (Math.abs(existingVal - bonus) > 0.1) {
+            attr.removeModifier(WINDUP_DAMAGE_ID);
+            if (bonus > 0) {
+                attr.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                        WINDUP_DAMAGE_ID, bonus,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE));
+            }
+        }
+    }
+
+    private void removeWindupModifier(ServerPlayer player) {
+        var attr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+        if (attr != null) {
+            attr.removeModifier(WINDUP_DAMAGE_ID);
         }
     }
 
@@ -329,16 +365,13 @@ public class PassiveSkillHandler {
 
         int advLevel = classManager.getOrCreate(player).getLevel(ProfessionType.ADVENTURER);
         if (advLevel >= 30) {
-            // Wind-up damage: +0.5 per block sprinted, max 10 blocks = +5 damage
+            // Wind-up damage: reset after hit (attribute modifier already applied the bonus)
             java.util.UUID uuid = player.getUUID();
             double dist = sprintDistance.getOrDefault(uuid, 0.0);
             if (dist >= 1.0) {
-                float bonus = (float) (dist * 0.5);
-                event.setNewDamage(event.getNewDamage() + bonus);
-                // Reset after hit
                 sprintDistance.put(uuid, 0.0);
-                windupExpireTick.remove(uuid);
-                player.removeEffect(MobEffects.STRENGTH);
+                lastMovedTick.remove(uuid);
+                removeWindupModifier(player);
             }
         }
     }
@@ -361,10 +394,22 @@ public class PassiveSkillHandler {
 
         if (state.getBlock() instanceof CropBlock crop) {
             if (crop.isMaxAge(state)) {
-                // Break and replant
                 if (level instanceof ServerLevel serverLevel) {
                     Block.dropResources(state, serverLevel, pos, null, player, player.getMainHandItem());
                     level.setBlock(pos, crop.getStateForAge(0), 3);
+                    player.swing(net.minecraft.world.InteractionHand.MAIN_HAND, true);
+                    event.setCanceled(true);
+                }
+            }
+        }
+        // Cocoa beans: max age is 2
+        if (state.getBlock() instanceof net.minecraft.world.level.block.CocoaBlock) {
+            int age = state.getValue(net.minecraft.world.level.block.CocoaBlock.AGE);
+            if (age >= 2) {
+                if (level instanceof ServerLevel serverLevel) {
+                    Block.dropResources(state, serverLevel, pos, null, player, player.getMainHandItem());
+                    level.setBlock(pos, state.setValue(net.minecraft.world.level.block.CocoaBlock.AGE, 0), 3);
+                    player.swing(net.minecraft.world.InteractionHand.MAIN_HAND, true);
                     event.setCanceled(true);
                 }
             }
@@ -412,6 +457,8 @@ public class PassiveSkillHandler {
 
     // Track composter levels: posLong -> last known level (for hopper detection)
     private final java.util.Map<Long, Integer> trackedComposters = new java.util.concurrent.ConcurrentHashMap<>();
+    // Track furnace output slot counts to detect hopper extraction
+    private final java.util.Map<Long, Integer> trackedFurnaceOutputs = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * Called from level tick. Scans owned composters near players and detects when they empty.
@@ -422,24 +469,21 @@ public class PassiveSkillHandler {
         if (serverLevel.getGameTime() % 10 != 0) return; // Every 0.5 seconds
 
         var ownerData = com.mlkymc.world.BlockOwnerData.get(serverLevel.getServer());
+        var loadedOwned = ownerData.getLoadedOwned(serverLevel);
 
-        // Only scan owned blocks that are composters — much cheaper than scanning all blocks
-        for (ServerPlayer player : serverLevel.players()) {
-            var nearbyOwned = ownerData.getOwnersNear(player.blockPosition(), 16);
-            for (var entry : nearbyOwned.entrySet()) {
-                BlockPos pos = entry.getKey();
-                var state = serverLevel.getBlockState(pos);
-                if (!(state.getBlock() instanceof net.minecraft.world.level.block.ComposterBlock)) continue;
+        for (var entry : loadedOwned.entrySet()) {
+            BlockPos pos = entry.getKey();
+            var state = serverLevel.getBlockState(pos);
+            if (!(state.getBlock() instanceof net.minecraft.world.level.block.ComposterBlock)) continue;
 
-                long posKey = pos.asLong();
-                int currentLevel = state.getValue(net.minecraft.world.level.block.ComposterBlock.LEVEL);
-                int prevLevel = trackedComposters.getOrDefault(posKey, -1);
-                trackedComposters.put(posKey, currentLevel);
+            long posKey = pos.asLong();
+            int currentLevel = state.getValue(net.minecraft.world.level.block.ComposterBlock.LEVEL);
+            int prevLevel = trackedComposters.getOrDefault(posKey, -1);
+            trackedComposters.put(posKey, currentLevel);
 
-                // Detect: was at level 7 or 8 (full/ready), now lower (emptied)
-                if ((prevLevel == 7 || prevLevel == 8) && currentLevel < prevLevel) {
-                    onComposterEmptied(serverLevel, pos, ownerData);
-                }
+            // Detect: was at level 7 or 8 (full/ready), now lower (emptied)
+            if ((prevLevel == 7 || prevLevel == 8) && currentLevel < prevLevel) {
+                onComposterEmptied(serverLevel, pos, ownerData);
             }
         }
     }
@@ -487,6 +531,68 @@ public class PassiveSkillHandler {
         }
     }
 
+    /**
+     * Called from level tick. Scans owned furnaces near players and detects when output is extracted.
+     * Awards Milky Stars to the Smith owner (Lv10+ exclusive).
+     */
+    public void tickFurnaces(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        if (serverLevel.getGameTime() % 10 != 0) return; // Every 0.5 seconds
+
+        var ownerData = com.mlkymc.world.BlockOwnerData.get(serverLevel.getServer());
+        var loadedOwned = ownerData.getLoadedOwned(serverLevel);
+
+        for (var entry : loadedOwned.entrySet()) {
+            BlockPos pos = entry.getKey();
+            var be = serverLevel.getBlockEntity(pos);
+            if (!(be instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace)) continue;
+
+            long posKey = pos.asLong();
+
+            // Track the output slot (slot 2) count
+            int currentOutput = furnace.getItem(2).getCount();
+            int prevOutput = trackedFurnaceOutputs.getOrDefault(posKey, -1);
+            trackedFurnaceOutputs.put(posKey, currentOutput);
+
+            // Detect: output decreased (items were extracted by hopper or player)
+            if (prevOutput > 0 && currentOutput < prevOutput) {
+                int extracted = prevOutput - currentOutput;
+                onFurnaceOutputExtracted(serverLevel, pos, ownerData, extracted);
+            }
+        }
+    }
+
+    private void onFurnaceOutputExtracted(ServerLevel level, BlockPos pos,
+                                           com.mlkymc.world.BlockOwnerData ownerData, int count) {
+        java.util.UUID ownerUUID = ownerData.getOwnerUUID(pos);
+        if (ownerUUID == null) return;
+
+        ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUUID);
+        if (owner == null) return;
+
+        ClassData data = classManager.getOrCreate(owner);
+        if (!data.hasExclusiveSkills(ProfessionType.SMITH)) return;
+        if (data.getLevel(ProfessionType.SMITH) < 10) return;
+
+        // 5% chance per extracted item to get a Milky Star
+        int starsFound = 0;
+        for (int i = 0; i < count; i++) {
+            if (ThreadLocalRandom.current().nextDouble() < 0.05) {
+                starsFound++;
+            }
+        }
+
+        if (starsFound > 0) {
+            var star = new ItemStack(com.mlkymc.registry.ModItems.MILKY_STAR.get(), starsFound);
+            if (!owner.getInventory().add(star)) {
+                owner.spawnAtLocation((ServerLevel) owner.level(), star);
+            }
+            owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                    "Found " + starsFound + " Milky Star" + (starsFound > 1 ? "s" : "") + " while smelting!").withColor(0xFFD700));
+        }
+    }
+
     // =========================================================================
     // FARMHAND: Double shearing/seeds (Lv30)
     // =========================================================================
@@ -516,6 +622,9 @@ public class PassiveSkillHandler {
                 }
             }
 
+            // (Honeycomb shear doubling is handled in onHoneycombSpawn — beehive shears
+            // don't break the block so don't fire BlockDropsEvent.)
+
             // Grass blocks (short_grass, tall_grass): chance to drop various farm seeds
             if (blockId.contains("grass") && !blockId.contains("block")) {
                 double x = event.getPos().getX() + 0.5;
@@ -538,22 +647,22 @@ public class PassiveSkillHandler {
             }
         }
 
-        // Lv30 (everyone): Rare Milky Stars from ore
-        // Lv30 exclusive: Good chance from stone/ore/trees
-        // Lv50 (everyone): Higher chance from ore
+        // MineCrafter exclusive: Milky Stars from mining
+        // Lv10: 2% ore, 1% stone/logs
+        // Lv30: 6% ore, 3% stone/logs
+        // Lv50: 12% ore, 6% stone/logs
         int mcLevel = classManager.getOrCreate(player).getLevel(ProfessionType.MINECRAFTER);
         boolean isMC = classManager.getOrCreate(player).getChosenClass() == ClassType.MINECRAFTER;
-        if (mcLevel >= 30) {
+        if (isMC && mcLevel >= 10) {
             boolean isOre = blockId.contains("ore") || blockId.contains("ancient_debris");
             boolean isStoneOrLog = blockId.contains("stone") || blockId.contains("deepslate")
                     || blockId.contains("log") || blockId.contains("wood");
 
             double chance = 0;
             if (isOre) {
-                chance = mcLevel >= 50 ? 0.10 : 0.03; // Everyone: 3% at Lv30, 10% at Lv50
-                if (isMC) chance = mcLevel >= 50 ? 0.20 : 0.10; // Exclusive: 10% at Lv30, 20% at Lv50
-            } else if (isStoneOrLog && isMC) {
-                chance = 0.05; // Exclusive Lv30: 5% from stone/logs
+                chance = mcLevel >= 50 ? 0.12 : mcLevel >= 30 ? 0.06 : 0.02;
+            } else if (isStoneOrLog) {
+                chance = mcLevel >= 50 ? 0.06 : mcLevel >= 30 ? 0.03 : 0.01;
             }
 
             if (chance > 0 && ThreadLocalRandom.current().nextDouble() < chance) {
@@ -566,82 +675,89 @@ public class PassiveSkillHandler {
             }
         }
 
-        // Lv20: XP orbs from stone (MineCrafter)
+        // Lv20+: XP orbs from mining natural stone (everyone)
+        // Lv20: 5% (small), Lv30: 15% (medium), Lv50: 30% (good)
         if (mcLevel >= 20) {
-            if (blockId.contains("stone") || blockId.contains("deepslate")) {
-                if (ThreadLocalRandom.current().nextDouble() < 0.15) {
-                    int xpAmount = event.getDroppedExperience() + ThreadLocalRandom.current().nextInt(1, 4);
-                    event.setDroppedExperience(xpAmount);
+            boolean isStone = blockId.contains("stone") || blockId.contains("deepslate");
+            if (isStone) {
+                // Check not player-placed
+                boolean placed = false;
+                if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                    var tracker = com.mlkymc.world.PlacedOreTracker.get(sl.getServer());
+                    String dim = sl.dimension().identifier().toString();
+                    placed = tracker.isPlayerPlaced(dim, event.getPos());
+                }
+                if (!placed) {
+                    double chance = mcLevel >= 50 ? 0.30 : mcLevel >= 30 ? 0.15 : 0.05;
+                    if (ThreadLocalRandom.current().nextDouble() < chance) {
+                        int xpAmount = event.getDroppedExperience() + ThreadLocalRandom.current().nextInt(1, 4);
+                        event.setDroppedExperience(xpAmount);
+                    }
                 }
             }
         }
     }
 
+    // (Ingredient return on craft removed)
+
     // =========================================================================
-    // MINECRAFTER: Crafting bonus output (Lv40, exclusive double at Lv30)
+    // FARMHAND Lv30: Double beehive/bee nest shear drops
+    // Honeycomb extraction via shears doesn't break the block, so BlockDropsEvent
+    // never fires. We hook the honeycomb ItemEntity spawn instead and duplicate it
+    // 50% of the time if a Farmhand Lv30+ is standing nearby a bee block.
     // =========================================================================
 
     @SubscribeEvent
-    public void onCraft(PlayerEvent.ItemCraftedEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+    public void onHoneycombSpawn(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.item.ItemEntity itemEntity)) return;
+        // Prevent infinite recursion — our own duplicates are tagged
+        if (itemEntity.getTags().contains("mlkymc_farmhand_shear_dup")) return;
+        if (!itemEntity.getItem().is(net.minecraft.world.item.Items.HONEYCOMB)) return;
+        if (!(event.getLevel() instanceof ServerLevel sl)) return;
 
-        // Skip conversion recipes — no bonus output, no ingredient return
-        if (ItemBaseValues.isConversionOutput(event.getCrafting().getItem())) return;
-
-        ClassData data = classManager.getOrCreate(player);
-        int mcLevel = data.getLevel(ProfessionType.MINECRAFTER);
-
-        // MineCrafter special effect: chance to return one ingredient
-        // 10% base + 0.5% per level = 10% at Lv0, 35% at Lv50
-        if (data.getChosenClass() == ClassType.MINECRAFTER) {
-            double returnChance = 0.10 + mcLevel * 0.005;
-            if (ThreadLocalRandom.current().nextDouble() < returnChance) {
-                // Find a non-empty ingredient from the crafting grid and return 1
-                var container = event.getInventory();
-                for (int i = 0; i < container.getContainerSize(); i++) {
-                    ItemStack slot = container.getItem(i);
-                    if (!slot.isEmpty()) {
-                        ItemStack returned = slot.copy();
-                        returned.setCount(1);
-                        if (!player.getInventory().add(returned)) {
-                            player.drop(returned, false);
-                        }
-                        break; // Only return one ingredient
+        // Require an adjacent beehive or bee nest — beehive shears spawn honeycombs
+        // right at the beehive's position, so a 1-block radius check is enough and
+        // avoids false positives from player-dropped honeycombs elsewhere in the world.
+        BlockPos pos = itemEntity.blockPosition();
+        boolean nearBee = false;
+        outer:
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    var state = sl.getBlockState(pos.offset(dx, dy, dz));
+                    if (state.is(net.minecraft.world.level.block.Blocks.BEEHIVE)
+                            || state.is(net.minecraft.world.level.block.Blocks.BEE_NEST)) {
+                        nearBee = true;
+                        break outer;
                     }
                 }
             }
         }
+        if (!nearBee) return;
 
-        // Exclusive Lv30: Double crafting output — give bonus items directly to inventory
-        if (data.hasExclusiveSkills(ProfessionType.MINECRAFTER) && mcLevel >= 30) {
-            var result = event.getCrafting();
-            int bonus = result.getCount(); // double = add same amount
-            // Lv40: +1 on top of double
-            if (mcLevel >= 40) bonus += 1;
-            ItemStack bonusStack = result.copy();
-            bonusStack.setCount(bonus);
-            if (!player.getInventory().add(bonusStack)) {
-                player.drop(bonusStack, false);
-            }
-            return;
-        }
+        // Nearest player within shear reach is the presumed shearer
+        var nearestPlayer = sl.getNearestPlayer(
+                itemEntity.getX(), itemEntity.getY(), itemEntity.getZ(), 6.0, false);
+        if (!(nearestPlayer instanceof ServerPlayer player)) return;
 
-        // Non-exclusive Lv40: 25% chance to produce +1 output
-        if (mcLevel >= 40) {
-            if (ThreadLocalRandom.current().nextDouble() < 0.25) {
-                ItemStack bonusItem = event.getCrafting().copy();
-                bonusItem.setCount(1);
-                if (!player.getInventory().add(bonusItem)) {
-                    player.drop(bonusItem, false);
-                }
-            }
-        }
+        ClassData data = classManager.getOrCreate(player);
+        if (data.getLevel(ProfessionType.FARMHAND) < 30) return;
+
+        // 50% chance — match the existing crop/leaves double-shear chance
+        if (ThreadLocalRandom.current().nextDouble() >= 0.5) return;
+
+        var dupe = new net.minecraft.world.entity.item.ItemEntity(
+                sl, itemEntity.getX(), itemEntity.getY(), itemEntity.getZ(),
+                itemEntity.getItem().copy());
+        dupe.addTag("mlkymc_farmhand_shear_dup");
+        sl.addFreshEntity(dupe);
     }
 
     // =========================================================================
     // SMITH: Fuel saving (Lv10), Anvil Too Expensive cap (Lv40)
     // These are handled elsewhere (furnace events, anvil events).
-    // Smith Lv10 Exclusive: Unbreakable Aura is tick-based but affects OTHER
+    // Smith Lv20 Exclusive: Unbreakable Aura is tick-based but affects OTHER
     // players near the Smith — complex, placeholder for now.
     // =========================================================================
 
@@ -652,6 +768,20 @@ public class PassiveSkillHandler {
     // Devoted Life cooldown per player (game time when cooldown expires)
     private final java.util.Map<java.util.UUID, Long> devotedLifeCooldown = new java.util.HashMap<>();
 
+    /** Get devoted life cooldown remaining in seconds, 0 = ready, -1 = doesn't have skill */
+    public int getDevotedLifeCooldownSec(ServerPlayer player) {
+        ClassData data = classManager.getOrCreate(player);
+        boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
+        int clericLevel = data.getLevel(ProfessionType.CLERIC);
+        // Devoted Life is now Cleric-class exclusive — non-Clerics never have the skill.
+        boolean hasSkill = isCleric && clericLevel >= 10;
+        if (!hasSkill) return -1;
+
+        Long expiry = devotedLifeCooldown.get(player.getUUID());
+        if (expiry == null || player.level().getGameTime() >= expiry) return 0;
+        return (int) ((expiry - player.level().getGameTime()) / 20);
+    }
+
     /**
      * Cleric Lv10 (everyone): Faster HP regen when food bar is full.
      * Called from the main onPlayerTick handler.
@@ -659,22 +789,7 @@ public class PassiveSkillHandler {
     public void tickClericHpRegen(ServerPlayer player, ClassData data) {
         int clericLevel = data.getLevel(ProfessionType.CLERIC);
 
-        // Devoted Life status sync to client every 5 seconds (only for players with Devoted Life)
-        if (player.tickCount % 100 == 0) {
-            boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
-            boolean hasDevotedLife = (isCleric && clericLevel >= 10) || (!isCleric && clericLevel >= 30);
-            if (hasDevotedLife) {
-                Long expiry = devotedLifeCooldown.get(player.getUUID());
-                if (expiry != null && player.level().getGameTime() < expiry) {
-                    int remainSec = (int) ((expiry - player.level().getGameTime()) / 20);
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                            "[MLKYMC_DEVOTED:" + remainSec + "]").withColor(0x000000));
-                } else {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                            "[MLKYMC_DEVOTED:READY]").withColor(0x000000));
-                }
-            }
-        }
+        // Devoted Life sync is now handled by SkillStatusHud via PowerHandler.syncSkillStatuses()
 
         if (clericLevel < 10) return;
 
@@ -682,6 +797,26 @@ public class PassiveSkillHandler {
         if (player.getFoodData().getFoodLevel() >= 20 && player.getHealth() < player.getMaxHealth()) {
             // Heal 0.5 HP per second (vanilla natural regen is ~0.5 HP per 4s at full food)
             player.heal(0.5f);
+        }
+    }
+
+    /**
+     * Cleric Lv20 (everyone): +10% food saturation when eating.
+     */
+    @SubscribeEvent
+    public void onFoodEatenSaturation(net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent.Finish event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!event.getItem().has(net.minecraft.core.component.DataComponents.FOOD)) return;
+
+        int clericLevel = classManager.getOrCreate(player).getLevel(ProfessionType.CLERIC);
+        if (clericLevel < 20) return;
+
+        // Add 10% bonus saturation
+        var foodData = player.getFoodData();
+        float currentSat = foodData.getSaturationLevel();
+        float bonus = currentSat * 0.10f;
+        if (bonus > 0) {
+            foodData.setSaturation(currentSat + bonus);
         }
     }
 
@@ -703,19 +838,19 @@ public class PassiveSkillHandler {
         int clericLevel = data.getLevel(ProfessionType.CLERIC);
         boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
 
-        // Determine if Devoted Life should activate
+        // Devoted Life is now Cleric-class exclusive. Non-Clerics with Cleric profession
+        // Lv30+ no longer get a watered-down version — the ability only activates when the
+        // player has actually chosen Cleric as their class.
+        if (!isCleric) return false;
+
+        // Determine Devoted Life tier by Cleric profession level
         float revivePercent = 0;
         int cooldownMinutes = 0;
 
-        if (isCleric) {
-            if (clericLevel >= 50) { revivePercent = 0.8f; cooldownMinutes = 20; }
-            else if (clericLevel >= 40) { revivePercent = 0.6f; cooldownMinutes = 30; }
-            else if (clericLevel >= 20) { revivePercent = 0.4f; cooldownMinutes = 45; }
-            else if (clericLevel >= 10) { revivePercent = 0.2f; cooldownMinutes = 60; }
-        } else {
-            // Everyone gets it at Cleric Lv30, but NOT if they chose Cleric (they get the better version)
-            if (clericLevel >= 30) { revivePercent = 0.2f; cooldownMinutes = 60; }
-        }
+        if (clericLevel >= 50) { revivePercent = 0.8f; cooldownMinutes = 20; }
+        else if (clericLevel >= 40) { revivePercent = 0.6f; cooldownMinutes = 30; }
+        else if (clericLevel >= 20) { revivePercent = 0.4f; cooldownMinutes = 45; }
+        else if (clericLevel >= 10) { revivePercent = 0.2f; cooldownMinutes = 60; }
 
         if (revivePercent <= 0) return false;
 
@@ -891,50 +1026,7 @@ public class PassiveSkillHandler {
         }
     }
 
-    /**
-     * Cleric potion modifications when picking up from brewing stand:
-     * - Cleric special effect: +1 amplifier (Cleric class only)
-     * - Lv20 (everyone): +25% duration
-     */
-    @SubscribeEvent
-    public void onClericBrewPotion(net.neoforged.neoforge.event.brewing.PlayerBrewedPotionEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
-
-        ClassData data = classManager.getOrCreate(player);
-        int clericLevel = data.getLevel(ProfessionType.CLERIC);
-        boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
-
-        // Need at least Lv20 for duration or Cleric class for amplifier
-        if (!isCleric && clericLevel < 20) return;
-
-        ItemStack stack = event.getStack();
-        var contents = stack.get(net.minecraft.core.component.DataComponents.POTION_CONTENTS);
-        if (contents == null) return;
-
-        var effects = contents.getAllEffects();
-        var boosted = new java.util.ArrayList<net.minecraft.world.effect.MobEffectInstance>();
-        for (var effect : effects) {
-            int amp = effect.getAmplifier();
-            int dur = effect.getDuration();
-
-            // Cleric special effect: +1 amplifier
-            if (isCleric) amp += 1;
-
-            // Lv20 (everyone): +25% duration
-            if (clericLevel >= 20) dur = (int) (dur * 1.25);
-
-            boosted.add(new net.minecraft.world.effect.MobEffectInstance(
-                    effect.getEffect(), dur, amp,
-                    effect.isAmbient(), effect.isVisible(), effect.showIcon()));
-        }
-
-        stack.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS,
-                new net.minecraft.world.item.alchemy.PotionContents(
-                        contents.potion(),
-                        contents.customColor(),
-                        boosted,
-                        contents.customName()));
-    }
+    // (Old Cleric potion amplifier/duration boost removed — replaced by Concoction system)
 
     // =========================================================================
     // SMITH: Anvil cost reduction (50% as special effect handled via AnvilUpdate)
@@ -993,14 +1085,58 @@ public class PassiveSkillHandler {
             }
         }
 
-        // Lv50 exclusive: Allow combining conflicting enchantments at 3x cost
-        if (isSmith && smithLevel >= 50) {
+        // Lv30 Cleric exclusive: Allow combining conflicting enchantments at 3x cost
+        ClassData clericData = classManager.getOrCreate(player);
+        boolean isCleric = clericData.getChosenClass() == ClassType.CLERIC;
+        int clericLevel = clericData.getLevel(ProfessionType.CLERIC);
+        if (isCleric && clericLevel >= 30) {
             tryConflictingEnchantCombine(event);
+        }
+
+        // Preserve over-max enchantment levels from the left input
+        // (prevents Cleric's +1 enchant bonus from being capped by vanilla anvil logic)
+        preserveOverMaxEnchants(event);
+    }
+
+    /**
+     * If the left input has any enchantments above their normal max level,
+     * ensure the output keeps those levels instead of capping them.
+     */
+    private void preserveOverMaxEnchants(net.neoforged.neoforge.event.AnvilUpdateEvent event) {
+        ItemStack left = event.getLeft();
+        ItemStack output = event.getOutput();
+        if (left.isEmpty() || output.isEmpty()) return;
+
+        var leftEnchants = left.getTagEnchantments();
+        var outputEnchants = output.getTagEnchantments();
+        if (leftEnchants.isEmpty()) return;
+
+        boolean changed = false;
+        var mutable = new net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(outputEnchants);
+
+        for (var entry : leftEnchants.entrySet()) {
+            var enchant = entry.getKey();
+            int leftLevel = entry.getIntValue();
+            int maxLevel = enchant.value().getMaxLevel();
+
+            // Only fix over-max enchantments
+            if (leftLevel > maxLevel) {
+                int outputLevel = outputEnchants.getLevel(enchant);
+                if (outputLevel < leftLevel) {
+                    // Output was capped — restore the over-max level
+                    mutable.set(enchant, leftLevel);
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            output.set(net.minecraft.core.component.DataComponents.ENCHANTMENTS, mutable.toImmutable());
         }
     }
 
     /**
-     * Smith Lv50 exclusive: Combine enchanted books with conflicting enchants.
+     * Cleric Lv30 exclusive: Combine enchanted books with conflicting enchants.
      * e.g. Smite + Sharpness. Costs 3x normal XP.
      */
     private void tryConflictingEnchantCombine(net.neoforged.neoforge.event.AnvilUpdateEvent event) {
@@ -1162,12 +1298,15 @@ public class PassiveSkillHandler {
         if (data.getChosenClass() == ClassType.FARMHAND && event.getChild() != null) {
             double twinChance = 0.05 + farmLevel * 0.005;
             if (player.level().random.nextDouble() < twinChance) {
-                // Spawn a second baby at the same location
+                // Spawn a second baby at the PARENT's location. BabyEntitySpawnEvent fires
+                // BEFORE vanilla calls snapTo() on the child, so event.getChild().getX/Y/Z()
+                // returns (0,0,0). We use parentA's position which is always valid.
                 var child = event.getChild();
-                if (child != null && player.level() instanceof ServerLevel sl) {
+                var parent = event.getParentA();
+                if (child != null && parent != null && player.level() instanceof ServerLevel sl) {
                     var twin = child.getType().create(sl, net.minecraft.world.entity.EntitySpawnReason.BREEDING);
                     if (twin != null) {
-                        twin.setPos(child.getX(), child.getY(), child.getZ());
+                        twin.snapTo(parent.getX(), parent.getY(), parent.getZ(), 0f, 0f);
                         if (twin instanceof net.minecraft.world.entity.animal.Animal babyTwin) {
                             babyTwin.setBaby(true);
                         }
@@ -1253,6 +1392,30 @@ public class PassiveSkillHandler {
     }
 
     // =========================================================================
+    /**
+     * Nature's Call fishing boost: when active, fish bite 50% faster.
+     * Called from server tick.
+     */
+    public void tickNaturesCallFishing(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof ServerLevel sl)) return;
+        var powerHandler = com.mlkymc.MlkyMC.getPowerHandler();
+        if (powerHandler == null) return;
+
+        for (ServerPlayer player : sl.players()) {
+            if (player.fishing == null) continue;
+            if (!powerHandler.isNaturesCallActive(player.getUUID())) continue;
+
+            var hook = player.fishing;
+            // Only speed up timeUntilLured (wait before fish approaches).
+            // Don't touch timeUntilHooked — that controls the bite animation
+            // and messing with it causes phantom fish trail visuals.
+            if (hook.timeUntilLured > 0) {
+                hook.timeUntilLured = Math.max(0, hook.timeUntilLured - 1);
+            }
+        }
+    }
+
     // FARMHAND: Fishing bonuses
     // Lv20 exclusive: +1 items per catch (2 total)
     // Lv40: rare items + exclusive: +1 more (3 total)
@@ -1266,14 +1429,16 @@ public class PassiveSkillHandler {
         int farmLevel = data.getLevel(ProfessionType.FARMHAND);
         boolean isExclusive = data.hasExclusiveSkills(ProfessionType.FARMHAND);
 
-        // Lv20 exclusive: +1 extra item from loot pool
+        // Lv20 exclusive: +1 extra item from loot pool (non-treasure only)
         if (isExclusive && farmLevel >= 20) {
             int extraRolls = farmLevel >= 40 ? 2 : 1; // Lv40: 3 total (1 base + 2 extra)
+            var drops = event.getDrops();
+            var nonTreasure = drops.stream()
+                    .filter(stack -> !isFishingTreasure(stack))
+                    .toList();
             for (int i = 0; i < extraRolls; i++) {
-                // Duplicate a random item from the existing drops
-                var drops = event.getDrops();
-                if (!drops.isEmpty()) {
-                    ItemStack extraDrop = drops.get(ThreadLocalRandom.current().nextInt(drops.size())).copy();
+                if (!nonTreasure.isEmpty()) {
+                    ItemStack extraDrop = nonTreasure.get(ThreadLocalRandom.current().nextInt(nonTreasure.size())).copy();
                     giveItem(player, extraDrop);
                 }
             }
@@ -1286,10 +1451,26 @@ public class PassiveSkillHandler {
                 case 1 -> new ItemStack(net.minecraft.world.item.Items.NAME_TAG);
                 case 2 -> new ItemStack(net.minecraft.world.item.Items.NAUTILUS_SHELL);
                 case 3 -> new ItemStack(net.minecraft.world.item.Items.HEART_OF_THE_SEA);
-                default -> new ItemStack(net.minecraft.world.item.Items.ENCHANTED_BOOK);
+                default -> createRandomEnchantedBook(player);
             };
             giveItem(player, bonus);
             player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Rare catch!").withColor(0x55FFFF));
+        }
+
+        // Very low chance: Totem of Undying (0.1%)
+        if (ThreadLocalRandom.current().nextDouble() < 0.001) {
+            giveItem(player, new ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING));
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Incredible catch! Totem of Undying!").withColor(0xFF55FF));
+        }
+
+        // Low chance: Milky Star Jar with 5-100 stars
+        if (ThreadLocalRandom.current().nextDouble() < 0.02) {
+            int stars = 5 + ThreadLocalRandom.current().nextInt(96); // 5-100
+            ItemStack jar = com.mlkymc.economy.MilkyStar.createJar(player.getName().getString());
+            com.mlkymc.economy.MilkyStar.setJarBalance(jar, stars);
+            giveItem(player, jar);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                    "You fished up a Milky Star Jar with " + stars + " stars!").withColor(0xFFD700));
         }
     }
 
@@ -1404,9 +1585,14 @@ public class PassiveSkillHandler {
             int ticks = lavaBobbingTicks.getOrDefault(hookId, 0) + 1;
             lavaBobbingTicks.put(hookId, ticks);
 
-            // Set bite threshold once per cycle
+            // Set bite threshold once per cycle. Nature's Call halves the wait time,
+            // making lava fishing significantly faster when the skill is toggled on.
             if (!lavaBiteTimes.containsKey(hookId)) {
-                lavaBiteTimes.put(hookId, 200 + ThreadLocalRandom.current().nextInt(200)); // 10-20s
+                var ph = com.mlkymc.MlkyMC.getPowerHandler();
+                boolean naturesCall = ph != null && ph.isNaturesCallActive(player.getUUID());
+                int baseWait = naturesCall ? 100 + ThreadLocalRandom.current().nextInt(100) // 5-10s
+                                           : 200 + ThreadLocalRandom.current().nextInt(200); // 10-20s
+                lavaBiteTimes.put(hookId, baseWait);
             }
             int biteTime = lavaBiteTimes.get(hookId);
 
@@ -1447,7 +1633,7 @@ public class PassiveSkillHandler {
                 // Reeled in during bite — catch!
                 ClassData fisherData = classManager.getOrCreate(fisher);
                 generateLavaLoot(fisher, fisherData.getLevel(ProfessionType.FARMHAND));
-                classManager.addXp(fisher, ProfessionType.FARMHAND, 15);
+                classManager.addXp(fisher, ProfessionType.FARMHAND, 15, "lava fishing catch");
 
                 // Durability cost
                 ItemStack mainHand = fisher.getMainHandItem();
@@ -1529,6 +1715,14 @@ public class PassiveSkillHandler {
         } else if (roll < 0.576) {
             // Bell — 2%
             loot = new ItemStack(net.minecraft.world.item.Items.BELL);
+        } else if (roll < 0.581) {
+            // Totem of Undying — 0.5%
+            loot = new ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Incredible catch! Totem of Undying!").withColor(0xFF55FF));
+        } else if (roll < 0.611) {
+            // Enchanted Book — 3%
+            loot = createRandomEnchantedBook(player);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Rare catch! Enchanted Book!").withColor(0xFFAA00));
         } else {
             // Magma cream — filler (remaining ~42%)
             loot = new ItemStack(net.minecraft.world.item.Items.MAGMA_CREAM, 1 + ThreadLocalRandom.current().nextInt(3));
@@ -1577,127 +1771,47 @@ public class PassiveSkillHandler {
         }
     }
 
-    // =========================================================================
-    // FARMHAND EXCLUSIVE: Food buffs (Lv35: self, Lv50: crafted food buffs all)
-    // Applied when eating food — use LivingEntityUseItemEvent
-    // =========================================================================
-
-    private static final String FARMHAND_FOOD_TAG = "mlkymc_farmhand_food";
-    private static final String FARMHAND_FOOD_LV50 = "mlkymc_farmhand_food_lv50";
-
     /**
-     * When a Lv35+ Farmhand crafts food, tag the item with custom NBT.
-     * The food itself carries the buff — anyone who eats it gets the effects.
-     *
-     * event.getCrafting() returns a copy, so we scan the player's inventory
-     * on the next tick to find and tag the newly crafted food item.
+     * Create an enchanted book with a random enchantment at a random valid level.
      */
-    @SubscribeEvent
-    public void onFoodCrafted(PlayerEvent.ItemCraftedEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
-
-        ClassData data = classManager.getOrCreate(player);
-        if (!data.hasExclusiveSkills(ProfessionType.FARMHAND)) return;
-        int farmLevel = data.getLevel(ProfessionType.FARMHAND);
-        if (farmLevel < 35) return;
-
-        ItemStack crafted = event.getCrafting();
-        if (!crafted.has(net.minecraft.core.component.DataComponents.FOOD)) return;
-
-        // Remember what was crafted and tag matching items in inventory next tick
-        var craftedItem = crafted.getItem();
-        boolean isLv50 = farmLevel >= 50;
-
-        // Schedule for next server tick so the item is in the inventory
-        ((ServerLevel) player.level()).getServer().execute(() -> {
-            // Check cursor (carried item) first
-            ItemStack carried = player.containerMenu.getCarried();
-            if (!carried.isEmpty() && carried.getItem() == craftedItem) {
-                tagFarmhandFood(carried, isLv50);
-                return;
-            }
-            // Check inventory for matching untagged food
-            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-                ItemStack slot = player.getInventory().getItem(i);
-                if (!slot.isEmpty() && slot.getItem() == craftedItem
-                        && slot.has(net.minecraft.core.component.DataComponents.FOOD)) {
-                    var existing = slot.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-                    if (existing == null || !existing.copyTag().getBooleanOr(FARMHAND_FOOD_TAG, false)) {
-                        tagFarmhandFood(slot, isLv50);
-                        return;
-                    }
-                }
-            }
-        });
+    private static boolean isFishingTreasure(ItemStack stack) {
+        var item = stack.getItem();
+        return item == net.minecraft.world.item.Items.ENCHANTED_BOOK
+                || item == net.minecraft.world.item.Items.BOW
+                || item == net.minecraft.world.item.Items.FISHING_ROD
+                || item == net.minecraft.world.item.Items.NAME_TAG
+                || item == net.minecraft.world.item.Items.SADDLE
+                || item == net.minecraft.world.item.Items.NAUTILUS_SHELL
+                || item == net.minecraft.world.item.Items.TOTEM_OF_UNDYING
+                || stack.has(net.minecraft.core.component.DataComponents.STORED_ENCHANTMENTS)
+                || stack.isEnchanted();
     }
 
-    private void tagFarmhandFood(ItemStack stack, boolean isLv50) {
-        var existing = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
-                net.minecraft.world.item.component.CustomData.EMPTY);
-        var nbt = new net.minecraft.nbt.CompoundTag();
-        if (existing != net.minecraft.world.item.component.CustomData.EMPTY) {
-            nbt = existing.copyTag();
+    private ItemStack createRandomEnchantedBook(ServerPlayer player) {
+        ItemStack book = new ItemStack(net.minecraft.world.item.Items.ENCHANTED_BOOK);
+        var registry = player.level().registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+        var allEnchants = new java.util.ArrayList<>(registry.listElements().toList());
+        if (!allEnchants.isEmpty()) {
+            var chosen = allEnchants.get(ThreadLocalRandom.current().nextInt(allEnchants.size()));
+            int maxLevel = chosen.value().getMaxLevel();
+            int level = 1 + ThreadLocalRandom.current().nextInt(maxLevel);
+            var storedEnchants = new net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(
+                    net.minecraft.world.item.enchantment.ItemEnchantments.EMPTY);
+            storedEnchants.set(chosen, level);
+            book.set(net.minecraft.core.component.DataComponents.STORED_ENCHANTMENTS, storedEnchants.toImmutable());
         }
-        nbt.putBoolean(FARMHAND_FOOD_TAG, true);
-        if (isLv50) {
-            nbt.putBoolean(FARMHAND_FOOD_LV50, true);
-        }
-        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
-                net.minecraft.world.item.component.CustomData.of(nbt));
+        return book;
     }
 
-    /**
-     * When anyone eats food tagged by a Farmhand, apply buffs.
-     */
-    @SubscribeEvent
-    public void onFoodEaten(net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent.Finish event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
-
-        ItemStack item = event.getItem();
-        if (!item.has(net.minecraft.core.component.DataComponents.FOOD)) return;
-
-        // Check for Farmhand food tag
-        var customData = item.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-        if (customData == null) return;
-        var nbt = customData.copyTag();
-        if (!nbt.getBooleanOr(FARMHAND_FOOD_TAG, false)) return;
-
-        // Lv35 buffs: Regen I (5s), Speed I (15s), Luck (1min)
-        player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 0));
-        player.addEffect(new MobEffectInstance(MobEffects.SPEED, 300, 0));
-        player.addEffect(new MobEffectInstance(MobEffects.LUCK, 1200, 0));
-
-        // Lv50 buffs: enhanced + AoE to nearby players
-        if (nbt.getBooleanOr(FARMHAND_FOOD_LV50, false)) {
-            applyFarmhandFoodBuff(player, 200, 600, 2400);
-
-            var nearbyPlayers = player.level().getEntitiesOfClass(
-                    ServerPlayer.class, player.getBoundingBox().inflate(16));
-            for (var nearby : nearbyPlayers) {
-                if (nearby == player) continue;
-                applyFarmhandFoodBuff(nearby, 200, 600, 2400);
-            }
-        }
-    }
-
-    private void applyFarmhandFoodBuff(ServerPlayer target, int regenDur, int speedDur, int luckDur) {
-        target.addEffect(new MobEffectInstance(MobEffects.REGENERATION, regenDur, 0));
-        target.addEffect(new MobEffectInstance(MobEffects.SPEED, speedDur, 0));
-        // Luck II for Fortune/Looting equivalent (improves loot table quality)
-        target.addEffect(new MobEffectInstance(MobEffects.LUCK, luckDur, 1));
-    }
+    // (Farmhand food buff system removed — replaced by ingredient attribute % system)
 
     // =========================================================================
-    // SMITH EXCLUSIVE: Unbreakable Aura (Lv10)
+    // SMITH EXCLUSIVE: Unbreakable Aura (Lv20)
     // 10% chance nearby players gain durability instead of losing it
     // Applied via tick handler checking nearby players
     // =========================================================================
 
-    // This is checked in the tick handler — when a Smith Lv10+ is nearby,
-    // other players' items have a chance to not lose durability.
-    // Implementing via LivingDamageEvent or item damage event.
-
-    // Cached set of online Smith Lv10+ players (refreshed every 2 seconds in tick)
+    // Cached set of online Smith Lv20+ players (refreshed every 2 seconds in tick)
     private final java.util.Set<java.util.UUID> onlineSmithLv10 = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private long lastSmithCacheRefresh = 0;
 
@@ -1705,7 +1819,7 @@ public class PassiveSkillHandler {
         onlineSmithLv10.clear();
         for (ServerPlayer sp : server.getPlayerList().getPlayers()) {
             ClassData d = classManager.getOrCreate(sp);
-            if (d.hasExclusiveSkills(ProfessionType.SMITH) && d.getLevel(ProfessionType.SMITH) >= 10) {
+            if (d.hasExclusiveSkills(ProfessionType.SMITH) && d.getLevel(ProfessionType.SMITH) >= 20) {
                 onlineSmithLv10.add(sp.getUUID());
             }
         }
@@ -1730,6 +1844,9 @@ public class PassiveSkillHandler {
                 if (smith != null && smith.level() == player.level()
                         && smith.distanceToSqr(player) <= 100
                         && !com.mlkymc.pvp.PvPTagManager.isPvPTagged(player.getUUID())) { // 10 blocks, skip PvP
+                    // Skip if player has Tempered Mind active (no durability loss = nothing to repair)
+                    if (PowerHandler.isTemperedMindActive(player.getUUID())) break;
+
                     if (ThreadLocalRandom.current().nextDouble() < 0.10) {
                         for (net.minecraft.world.entity.EquipmentSlot slot : net.minecraft.world.entity.EquipmentSlot.values()) {
                             if (slot.getType() == net.minecraft.world.entity.EquipmentSlot.Type.HUMANOID_ARMOR) {
@@ -1756,7 +1873,8 @@ public class PassiveSkillHandler {
         ClassData data = classManager.getOrCreate(sp);
         int clericLv = data.getLevel(ProfessionType.CLERIC);
         boolean isCleric = data.getChosenClass() == ClassType.CLERIC;
-        boolean hasDevoted = (isCleric && clericLv >= 10) || (!isCleric && clericLv >= 30);
+        // Devoted Life is Cleric-class exclusive — only Clerics Lv10+ have it.
+        boolean hasDevoted = isCleric && clericLv >= 10;
         if (!hasDevoted) {
             sendDevotedLifeNone(sp);
         }

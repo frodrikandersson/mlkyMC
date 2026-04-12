@@ -6,15 +6,9 @@
     "BSB"
   ],
   "key": {
-    "B": {
-      "item": "minecraft:blackstone"
-    },
-    "S": {
-      "item": "minecraft:soul_sand"
-    },
-    "O": {
-      "item": "minecraft:soul_soil"
-    }
+    "B": "minecraft:blackstone",
+    "S": "minecraft:soul_sand",
+    "O": "minecraft:soul_soil"
   },
   "result": {
     "id": "mlkymc:soulstone_brick",

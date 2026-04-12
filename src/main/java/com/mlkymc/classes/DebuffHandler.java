@@ -113,7 +113,7 @@ public class DebuffHandler {
 
         // Grant Cleric class XP from vanilla XP
         int clericXp = Math.max(1, value / 3);
-        classManager.addXp(player, ProfessionType.CLERIC, clericXp);
+        classManager.addXp(player, ProfessionType.CLERIC, clericXp, "xp orb pickup");
 
         orb.setValue(Math.max(1, value));
     }
@@ -143,35 +143,107 @@ public class DebuffHandler {
                 || blockId.contains("stair") || blockId.contains("wall")
                 || blockId.contains("button") || blockId.contains("pressure")
                 || blockId.contains("plank") || blockId.contains("fence")
-                || blockId.contains("door") || blockId.contains("trapdoor");
+                || blockId.contains("door") || blockId.contains("trapdoor")
+                || blockId.contains("redstone_block") || blockId.contains("lapis_block");
         if (isCrafted) return;
+
+        // Exempt functional blocks (right-click opens a GUI / has a utility). Most of these
+        // don't match the isMining whitelist below anyway, but any whose id contains a
+        // mining substring (stonecutter/grindstone/lodestone all contain "stone") would
+        // otherwise trip the debuff and nuke the drop when the player breaks one.
+        boolean isFunctional = blockId.equals("block.minecraft.stonecutter")
+                || blockId.equals("block.minecraft.grindstone")
+                || blockId.equals("block.minecraft.lodestone")
+                || blockId.equals("block.minecraft.smooth_stone");
+        if (isFunctional) return;
 
         boolean isMining = blockId.contains("ore")
                 || blockId.contains("ancient_debris")
                 || blockId.contains("deepslate")
                 || blockId.contains("stone")
                 || blockId.contains("log") || blockId.contains("wood")
+                || blockId.contains("stem") || blockId.contains("hyphae")
                 || blockId.contains("granite") || blockId.contains("diorite")
                 || blockId.contains("andesite") || blockId.contains("tuff")
                 || blockId.contains("calcite") || blockId.contains("dripstone")
                 || blockId.contains("basalt") || blockId.contains("blackstone")
                 || blockId.contains("netherrack") || blockId.contains("end_stone")
-                || blockId.contains("obsidian")
-                || blockId.contains("gravel") || blockId.contains("clay")
-                || blockId.contains("sand") || blockId.contains("sandstone")
-                || blockId.contains("terracotta") || blockId.contains("dirt")
-                || blockId.contains("mud");
+                || blockId.contains("obsidian") || blockId.contains("sandstone")
+                || blockId.contains("terracotta");
 
         if (!isMining) return;
 
-        // Placed ore cleanup is handled in SpecialEffectHandler (runs at HIGHEST priority)
+        // Skip the debuff entirely for player-placed blocks (place-and-mine exploit prevention).
+        // Also free the tracker entry so the slot is reclaimed when the block is broken.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            var tracker = com.mlkymc.world.PlacedOreTracker.get(sl.getServer());
+            String dim = sl.dimension().identifier().toString();
+            if (tracker.isPlayerPlaced(dim, event.getPos())) {
+                tracker.markBroken(dim, event.getPos());
+                return;
+            }
+        }
 
         ClassData data = classManager.getOrCreate(player);
         double debuff = data.getDebuffPercent(ProfessionType.MINECRAFTER);
         if (debuff <= 0) return;
 
+        // Only remove bonus drops (ores dropping raw materials, etc.)
+        // Never remove drops for blocks that drop themselves (dirt, logs, sand, etc.)
+        // This prevents players from losing placed blocks
         if (ThreadLocalRandom.current().nextDouble() < debuff) {
-            event.getDrops().clear();
+            var blockItem = event.getState().getBlock().asItem();
+            boolean affectedDrops = false;
+
+            // Check if player has silk touch — silk touch makes ores drop themselves
+            var tool = player.getMainHandItem();
+            var enchReg = player.level().registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+            var silkHolder = enchReg.get(net.minecraft.world.item.enchantment.Enchantments.SILK_TOUCH).orElse(null);
+            boolean hasSilkTouch = silkHolder != null
+                    && net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(silkHolder, tool) > 0;
+
+            if (hasSilkTouch) {
+                // Silk touch: reduce stack count of all drops by half (min 0)
+                for (var itemEntity : event.getDrops()) {
+                    int count = itemEntity.getItem().getCount();
+                    if (count > 0) {
+                        int reduced = Math.max(1, count / 2);
+                        if (reduced < count) {
+                            itemEntity.getItem().setCount(reduced);
+                            affectedDrops = true;
+                        }
+                    }
+                }
+                event.getDrops().removeIf(e -> e.getItem().isEmpty() || e.getItem().getCount() <= 0);
+            } else {
+                // Check if the block drops itself (logs, sand, etc.) vs bonus drops (ores)
+                boolean isSelfDrop = event.getDrops().stream()
+                        .anyMatch(e -> e.getItem().getItem() == blockItem);
+                boolean hasNonSelfDrops = event.getDrops().stream()
+                        .anyMatch(e -> e.getItem().getItem() != blockItem);
+
+                if (hasNonSelfDrops) {
+                    // Ore-type: remove bonus drops, keep self-drops
+                    affectedDrops = event.getDrops().removeIf(itemEntity -> {
+                        var dropItem = itemEntity.getItem().getItem();
+                        return dropItem != blockItem;
+                    });
+                } else if (isSelfDrop) {
+                    // Self-dropping block (logs, sand, etc.): clear all drops
+                    event.getDrops().clear();
+                    affectedDrops = true;
+                }
+            }
+
+            if (affectedDrops) {
+                playDebuffSound(player);
+                // Compensate: 10x class XP when debuff triggers
+                int baseXp = ItemBaseValues.getBaseXp(blockItem);
+                if (baseXp > 0) {
+                    classManager.addXp(player, ProfessionType.MINECRAFTER, baseXp * 9,
+                            "debuff bonus (lost drops)");
+                }
+            }
         }
     }
 
@@ -213,7 +285,13 @@ public class DebuffHandler {
         if (debuff <= 0) return;
 
         if (ThreadLocalRandom.current().nextDouble() < debuff) {
-            event.getDrops().clear();
+            // Reduce extra drops but always keep at least 1 of the primary drop
+            var drops = event.getDrops();
+            if (drops.size() > 1) {
+                var first = drops.iterator().next();
+                drops.clear();
+                drops.add(first);
+            }
         }
     }
 
@@ -234,12 +312,39 @@ public class DebuffHandler {
 
         if (!isFarming) return;
 
+        // Skip debuff for player-placed tracked blocks (e.g. carved pumpkin placed
+        // for decoration/iron golems, sugar cane replanted). Clean up the tracker entry
+        // so the slot is freed when broken.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            var tracker = com.mlkymc.world.PlacedOreTracker.get(sl.getServer());
+            String dim = sl.dimension().identifier().toString();
+            if (tracker.isPlayerPlaced(dim, event.getPos())) {
+                tracker.markBroken(dim, event.getPos());
+                return;
+            }
+        }
+
         ClassData data = classManager.getOrCreate(player);
         double debuff = data.getDebuffPercent(ProfessionType.FARMHAND);
         if (debuff <= 0) return;
 
         if (ThreadLocalRandom.current().nextDouble() < debuff) {
             event.getDrops().clear();
+            playDebuffSound(player);
+
+            // Compensate: 10x class XP when debuff triggers
+            var blockItem = event.getState().getBlock().asItem();
+            int baseXp = ItemBaseValues.getBaseXp(blockItem);
+            if (baseXp > 0) {
+                classManager.addXp(player, ProfessionType.FARMHAND, baseXp * 9,
+                        "debuff bonus (lost drops)");
+            }
         }
+    }
+
+    private static void playDebuffSound(ServerPlayer player) {
+        player.level().playSound(null, player.blockPosition(),
+                net.minecraft.sounds.SoundEvents.NOTE_BLOCK_BASS.value(),
+                net.minecraft.sounds.SoundSource.PLAYERS, 0.4f, 0.5f);
     }
 }

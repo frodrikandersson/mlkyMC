@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:glistering_melon_slice"
-    },
-    {
-      "item": "minecraft:honeycomb"
-    },
-    {
-      "item": "minecraft:bone_meal"
-    }
+    "mlkymc:milky_star",
+    "minecraft:honeycomb",
+    "minecraft:bone_meal"
   ],
   "result": {
     "id": "mlkymc:living_essence",

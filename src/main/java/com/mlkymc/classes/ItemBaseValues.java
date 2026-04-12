@@ -129,6 +129,13 @@ public final class ItemBaseValues {
         CONVERSION_OUTPUTS.add(item);
     }
 
+    /** Mark a modded item as a conversion output (safe if the mod isn't loaded). */
+    private static void conversionMod(String modId, String itemName) {
+        var id = Identifier.tryParse(modId + ":" + itemName);
+        if (id == null) return;
+        BuiltInRegistries.ITEM.get(id).ifPresent(holder -> CONVERSION_OUTPUTS.add(holder.value()));
+    }
+
     private static void smelt(Item output, Item input) {
         SMELTING_INPUT_MAP.put(output, input);
     }
@@ -195,9 +202,9 @@ public final class ItemBaseValues {
         r(Items.POLISHED_DIORITE, 1, M, false);
         r(Items.ANDESITE, 1, M, true);
         r(Items.POLISHED_ANDESITE, 1, M, false);
-        r(Items.DEEPSLATE, 2, M, true);
-        r(Items.COBBLED_DEEPSLATE, 2, M, true);
-        r(Items.POLISHED_DEEPSLATE, 2, M, false);
+        r(Items.DEEPSLATE, 1, M, true);
+        r(Items.COBBLED_DEEPSLATE, 1, M, true);
+        r(Items.POLISHED_DEEPSLATE, 1, M, false);
         r(Items.CALCITE, 1, M, true);
         r(Items.TUFF, 1, M, true);
         r(Items.POLISHED_TUFF, 1, M, false);
@@ -291,13 +298,13 @@ public final class ItemBaseValues {
         r(Items.IRON_NUGGET, 0, S, false); // conversion
         r(Items.COPPER_INGOT, 2, S, false);
         r(Items.GOLD_INGOT, 5, S, false);
-        r(Items.GOLD_NUGGET, 0, S, false); // conversion
+        r(Items.GOLD_NUGGET, 0, S, false, AttributeBuff.LUCK); // conversion
         r(Items.NETHERITE_SCRAP, 12, S, false);
         r(Items.NETHERITE_INGOT, 20, S, false);
         r(Items.DIAMOND, 8, M, true);
         r(Items.EMERALD, 8, M, true);
         r(Items.LAPIS_LAZULI, 5, C, true);
-        r(Items.REDSTONE, 3, M, true);
+        r(Items.REDSTONE, 3, M, false);
         r(Items.QUARTZ, 3, M, true);
         r(Items.FLINT, 2, M, true);
         r(Items.PRISMARINE_SHARD, 3, M, true);
@@ -640,28 +647,28 @@ public final class ItemBaseValues {
         r(Items.WHEAT, 2, F, false);
         r(Items.BREAD, 3, F, false);
         r(Items.APPLE, 2, F, true, AttributeBuff.HEALTH);
-        r(Items.GOLDEN_APPLE, 8, F, false, AttributeBuff.ARMOR);
+        r(Items.GOLDEN_APPLE, 8, F, false, AttributeBuff.ARMOR_TOUGHNESS);
         r(Items.ENCHANTED_GOLDEN_APPLE, 20, C, true, AttributeBuff.KNOCKBACK_RESISTANCE);
-        r(Items.GOLDEN_CARROT, 5, F, false, AttributeBuff.HEALTH);
+        r(Items.GOLDEN_CARROT, 5, F, false, AttributeBuff.LUCK);
         r(Items.CARROT, 2, F, true, AttributeBuff.HEALTH);
         r(Items.POTATO, 2, F, true, AttributeBuff.ARMOR);
         r(Items.BAKED_POTATO, 3, F, false, AttributeBuff.ARMOR);
         r(Items.POISONOUS_POTATO, 1, F, true);
         r(Items.MELON_SLICE, 1, F, true, AttributeBuff.SPEED);
-        r(Items.MELON, 0, F, true); // conversion
-        r(Items.PUMPKIN, 2, F, true, AttributeBuff.KNOCKBACK_RESISTANCE);
+        r(Items.MELON, 0, F, true, AttributeBuff.SPEED); // conversion
+        r(Items.PUMPKIN, 2, F, true, AttributeBuff.STEP_HEIGHT);
         r(Items.CARVED_PUMPKIN, 2, F, false);
         r(Items.JACK_O_LANTERN, 2, F, false);
         r(Items.SUGAR_CANE, 1, F, true);
         r(Items.SUGAR, 1, F, false, AttributeBuff.SPEED);
-        r(Items.BEETROOT, 2, F, true, AttributeBuff.HEALTH);
+        r(Items.BEETROOT, 2, F, true, AttributeBuff.BURNING_TIME);
         r(Items.BEETROOT_SEEDS, 1, F, true);
-        r(Items.BEETROOT_SOUP, 3, F, false);
-        r(Items.MUSHROOM_STEW, 3, F, false);
-        r(Items.RABBIT_STEW, 5, F, false);
-        r(Items.SUSPICIOUS_STEW, 3, F, false);
-        r(Items.CAKE, 5, F, false);
-        r(Items.PUMPKIN_PIE, 3, F, false);
+        r(Items.BEETROOT_SOUP, 3, F, false, AttributeBuff.ARMOR);
+        r(Items.MUSHROOM_STEW, 3, F, false, AttributeBuff.ARMOR_TOUGHNESS);
+        r(Items.RABBIT_STEW, 5, F, false, AttributeBuff.JUMP);
+        r(Items.SUSPICIOUS_STEW, 3, F, false, AttributeBuff.LUCK);
+        r(Items.CAKE, 5, F, false, AttributeBuff.HEALTH);
+        r(Items.PUMPKIN_PIE, 3, F, false, AttributeBuff.STEP_HEIGHT);
         r(Items.COOKIE, 2, F, false, AttributeBuff.SNEAKING_SPEED);
         r(Items.COCOA_BEANS, 2, F, true, AttributeBuff.MINING_SPEED);
         r(Items.SWEET_BERRIES, 1, F, true, AttributeBuff.ATTACK_SPEED);
@@ -677,8 +684,8 @@ public final class ItemBaseValues {
         r(Items.CHORUS_FLOWER, 3, F, true);
         r(Items.POPPED_CHORUS_FRUIT, 3, F, false, AttributeBuff.ENTITY_REACH);
         r(Items.NETHER_WART, 3, C, true);
-        r(Items.GLISTERING_MELON_SLICE, 5, C, false, AttributeBuff.HEALTH);
-        r(Items.HONEY_BOTTLE, 3, F, false, AttributeBuff.ATTACK_SPEED);
+        r(Items.GLISTERING_MELON_SLICE, 5, C, false, AttributeBuff.ENTITY_REACH);
+        r(Items.HONEY_BOTTLE, 3, F, false, AttributeBuff.FALL_DAMAGE);
         r(Items.HONEYCOMB, 2, F, false, AttributeBuff.ARMOR_TOUGHNESS);
         r(Items.DRIED_KELP_BLOCK, 0, F, false); // conversion
 
@@ -694,17 +701,19 @@ public final class ItemBaseValues {
         r(Items.RABBIT, 2, F, false, AttributeBuff.JUMP);
         r(Items.COOKED_RABBIT, 3, F, false, AttributeBuff.JUMP);
         r(Items.COD, 2, F, true, AttributeBuff.LUCK);
-        r(Items.COOKED_COD, 3, F, false, AttributeBuff.LUCK);
-        r(Items.SALMON, 2, F, true, AttributeBuff.LUCK);
-        r(Items.COOKED_SALMON, 3, F, false, AttributeBuff.LUCK);
-        r(Items.TROPICAL_FISH, 2, F, true, AttributeBuff.LUCK);
+        r(Items.COOKED_COD, 3, F, false, AttributeBuff.OXYGEN);
+        r(Items.SALMON, 2, F, true, AttributeBuff.UNDERWATER_MINING);
+        r(Items.COOKED_SALMON, 3, F, false, AttributeBuff.REACH);
+        r(Items.TROPICAL_FISH, 2, F, true, AttributeBuff.ENTITY_REACH);
         r(Items.PUFFERFISH, 2, F, true, AttributeBuff.OXYGEN);
         r(Items.ROTTEN_FLESH, 1, F, false);
         r(Items.SPIDER_EYE, 2, C, false, AttributeBuff.SNEAKING_SPEED);
-        r(Items.FERMENTED_SPIDER_EYE, 3, C, false, AttributeBuff.LUCK);
+        r(Items.FERMENTED_SPIDER_EYE, 3, C, false, AttributeBuff.MINING_SPEED);
 
         // Eggs/breeding
         r(Items.EGG, 1, F, false, AttributeBuff.JUMP);
+        r(Items.BROWN_EGG, 1, F, false, AttributeBuff.JUMP);
+        r(Items.BLUE_EGG, 1, F, false, AttributeBuff.JUMP);
         r(Items.TURTLE_EGG, 3, F, false);
         r(Items.SNIFFER_EGG, 5, F, true);
         r(Items.FROGSPAWN, 2, F, false);
@@ -712,9 +721,9 @@ public final class ItemBaseValues {
         r(Items.TURTLE_SCUTE, 3, S, false, AttributeBuff.OXYGEN);
 
         // --- MOB DROPS ---
-        r(Items.LEATHER, 2, F, false, AttributeBuff.ARMOR);
+        r(Items.LEATHER, 2, F, false, AttributeBuff.BURNING_TIME);
         r(Items.RABBIT_HIDE, 1, F, false);
-        r(Items.RABBIT_FOOT, 3, F, false, AttributeBuff.JUMP);
+        r(Items.RABBIT_FOOT, 3, F, false, AttributeBuff.LUCK);
         r(Items.FEATHER, 1, F, false, AttributeBuff.SAFE_FALL);
         r(Items.STRING, 1, F, false);
         r(Items.BONE, 2, F, false);
@@ -722,13 +731,13 @@ public final class ItemBaseValues {
         r(Items.BONE_BLOCK, 0, F, false); // conversion
         r(Items.SLIME_BALL, 2, M, false);
         r(Items.SLIME_BLOCK, 0, M, false); // conversion
-        r(Items.HONEY_BLOCK, 0, F, false); // conversion
-        r(Items.HONEYCOMB_BLOCK, 0, F, false); // conversion
+        r(Items.HONEY_BLOCK, 0, F, false, AttributeBuff.FALL_DAMAGE); // conversion
+        r(Items.HONEYCOMB_BLOCK, 0, F, false, AttributeBuff.ARMOR_TOUGHNESS); // conversion
         r(Items.INK_SAC, 1, F, false);
         r(Items.GLOW_INK_SAC, 2, F, false);
         r(Items.GUNPOWDER, 3, M, false);
         r(Items.PHANTOM_MEMBRANE, 5, A, false);
-        r(Items.GHAST_TEAR, 5, C, false, AttributeBuff.ARMOR_TOUGHNESS);
+        r(Items.GHAST_TEAR, 5, C, false, AttributeBuff.HEALTH);
         r(Items.BLAZE_ROD, 5, C, false);
         r(Items.BLAZE_POWDER, 3, C, false, AttributeBuff.DAMAGE);
         r(Items.MAGMA_CREAM, 3, C, false);
@@ -876,19 +885,19 @@ public final class ItemBaseValues {
         r(Items.TADPOLE_BUCKET, 3, F, false);
 
         // --- FLOWERS & PLANTS ---
-        r(Items.DANDELION, 1, F, true);
-        r(Items.POPPY, 1, F, true);
-        r(Items.BLUE_ORCHID, 1, F, true);
-        r(Items.ALLIUM, 1, F, true);
-        r(Items.AZURE_BLUET, 1, F, true);
-        r(Items.RED_TULIP, 1, F, true);
-        r(Items.ORANGE_TULIP, 1, F, true);
-        r(Items.WHITE_TULIP, 1, F, true);
-        r(Items.PINK_TULIP, 1, F, true);
-        r(Items.OXEYE_DAISY, 1, F, true);
-        r(Items.CORNFLOWER, 1, F, true);
-        r(Items.LILY_OF_THE_VALLEY, 1, F, true);
-        r(Items.WITHER_ROSE, 3, C, false);
+        r(Items.DANDELION, 1, F, true, AttributeBuff.HEALTH);           // vanilla stew: saturation
+        r(Items.POPPY, 1, F, true, AttributeBuff.SPEED);               // vanilla stew: night vision
+        r(Items.BLUE_ORCHID, 1, F, true, AttributeBuff.OXYGEN);        // vanilla stew: saturation
+        r(Items.ALLIUM, 1, F, true, AttributeBuff.BURNING_TIME);       // vanilla stew: fire resistance
+        r(Items.AZURE_BLUET, 1, F, true, AttributeBuff.SNEAKING_SPEED);// vanilla stew: blindness
+        r(Items.RED_TULIP, 1, F, true, AttributeBuff.ARMOR);           // vanilla stew: weakness
+        r(Items.ORANGE_TULIP, 1, F, true, AttributeBuff.ARMOR);        // vanilla stew: weakness
+        r(Items.WHITE_TULIP, 1, F, true, AttributeBuff.ARMOR);         // vanilla stew: weakness
+        r(Items.PINK_TULIP, 1, F, true, AttributeBuff.ARMOR);          // vanilla stew: weakness
+        r(Items.OXEYE_DAISY, 1, F, true, AttributeBuff.HEALTH);        // vanilla stew: regeneration
+        r(Items.CORNFLOWER, 1, F, true, AttributeBuff.JUMP);           // vanilla stew: jump boost
+        r(Items.LILY_OF_THE_VALLEY, 1, F, true, AttributeBuff.LUCK);   // vanilla stew: poison
+        r(Items.WITHER_ROSE, 3, C, false, AttributeBuff.DAMAGE);       // vanilla stew: wither
         r(Items.SUNFLOWER, 1, F, true);
         r(Items.LILAC, 1, F, true);
         r(Items.ROSE_BUSH, 1, F, true);
@@ -911,8 +920,8 @@ public final class ItemBaseValues {
         r(Items.PALE_MOSS_BLOCK, 1, F, true);
         r(Items.PALE_MOSS_CARPET, 1, F, true);
         r(Items.PALE_HANGING_MOSS, 1, F, true);
-        r(Items.BROWN_MUSHROOM, 1, F, true);
-        r(Items.RED_MUSHROOM, 1, F, true);
+        r(Items.BROWN_MUSHROOM, 1, F, true, AttributeBuff.SAFE_FALL);
+        r(Items.RED_MUSHROOM, 1, F, true, AttributeBuff.MINING_SPEED);
         r(Items.BROWN_MUSHROOM_BLOCK, 1, F, true);
         r(Items.RED_MUSHROOM_BLOCK, 1, F, true);
         r(Items.MUSHROOM_STEM, 1, F, true);
@@ -1138,6 +1147,57 @@ public final class ItemBaseValues {
         conversion(Items.RAW_COPPER);
         conversion(Items.RAW_GOLD_BLOCK);
         conversion(Items.RAW_GOLD);
+
+        // Glass cycle: vanilla glass <-> Connected Glass mod variants (clear/borderless/scratched).
+        // Players can loop through the cycle in either direction, so every node is a conversion
+        // and must give 0 XP. Covers uncolored + all 16 dye variants, blocks + panes.
+        conversion(Items.GLASS);
+        conversion(Items.GLASS_PANE);
+        conversion(Items.WHITE_STAINED_GLASS);
+        conversion(Items.ORANGE_STAINED_GLASS);
+        conversion(Items.MAGENTA_STAINED_GLASS);
+        conversion(Items.LIGHT_BLUE_STAINED_GLASS);
+        conversion(Items.YELLOW_STAINED_GLASS);
+        conversion(Items.LIME_STAINED_GLASS);
+        conversion(Items.PINK_STAINED_GLASS);
+        conversion(Items.GRAY_STAINED_GLASS);
+        conversion(Items.LIGHT_GRAY_STAINED_GLASS);
+        conversion(Items.CYAN_STAINED_GLASS);
+        conversion(Items.PURPLE_STAINED_GLASS);
+        conversion(Items.BLUE_STAINED_GLASS);
+        conversion(Items.BROWN_STAINED_GLASS);
+        conversion(Items.GREEN_STAINED_GLASS);
+        conversion(Items.RED_STAINED_GLASS);
+        conversion(Items.BLACK_STAINED_GLASS);
+        conversion(Items.WHITE_STAINED_GLASS_PANE);
+        conversion(Items.ORANGE_STAINED_GLASS_PANE);
+        conversion(Items.MAGENTA_STAINED_GLASS_PANE);
+        conversion(Items.LIGHT_BLUE_STAINED_GLASS_PANE);
+        conversion(Items.YELLOW_STAINED_GLASS_PANE);
+        conversion(Items.LIME_STAINED_GLASS_PANE);
+        conversion(Items.PINK_STAINED_GLASS_PANE);
+        conversion(Items.GRAY_STAINED_GLASS_PANE);
+        conversion(Items.LIGHT_GRAY_STAINED_GLASS_PANE);
+        conversion(Items.CYAN_STAINED_GLASS_PANE);
+        conversion(Items.PURPLE_STAINED_GLASS_PANE);
+        conversion(Items.BLUE_STAINED_GLASS_PANE);
+        conversion(Items.BROWN_STAINED_GLASS_PANE);
+        conversion(Items.GREEN_STAINED_GLASS_PANE);
+        conversion(Items.RED_STAINED_GLASS_PANE);
+        conversion(Items.BLACK_STAINED_GLASS_PANE);
+
+        // Connected Glass mod variants (no-op if mod isn't loaded)
+        String[] cgVariants = {"clear", "borderless", "scratched"};
+        String[] cgColors = {"white", "orange", "magenta", "light_blue", "yellow", "lime",
+                "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"};
+        for (String v : cgVariants) {
+            conversionMod("connectedglass", v + "_glass");
+            conversionMod("connectedglass", v + "_glass_pane");
+            for (String c : cgColors) {
+                conversionMod("connectedglass", v + "_" + c + "_stained_glass");
+                conversionMod("connectedglass", v + "_" + c + "_stained_glass_pane");
+            }
+        }
     }
 
     // =========================================================================
@@ -1191,6 +1251,8 @@ public final class ItemBaseValues {
         COOKING_BLOCKS.add(Blocks.FURNACE);
         COOKING_BLOCKS.add(Blocks.BLAST_FURNACE);
         COOKING_BLOCKS.add(Blocks.SMOKER);
+        COOKING_BLOCKS.add(Blocks.CAMPFIRE);
+        COOKING_BLOCKS.add(Blocks.SOUL_CAMPFIRE);
 
         // Refurbished Furniture mod cooking blocks (registered by string if mod is loaded)
         registerModCookingBlock("refurbished_furniture", "light_stove");
@@ -1205,6 +1267,12 @@ public final class ItemBaseValues {
                 "light_blue", "lime", "magenta", "orange", "pink", "purple", "red", "white", "yellow"};
         for (String c : colors) {
             registerModCookingBlock("refurbished_furniture", c + "_grill");
+        }
+        // Cutting boards (all wood types)
+        String[] woods = {"acacia", "birch", "cherry", "crimson", "dark_oak", "jungle",
+                "mangrove", "oak", "pale_oak", "spruce", "warped"};
+        for (String w : woods) {
+            registerModCookingBlock("refurbished_furniture", w + "_cutting_board");
         }
     }
 
@@ -1236,7 +1304,6 @@ public final class ItemBaseValues {
             rMod("mlkymc", "dimension_compass", 15, ProfessionType.ADVENTURER, false);
             rMod("mlkymc", "blessed_ember", 5, ProfessionType.CLERIC, false);
             rMod("mlkymc", "totem_of_resurrection", 20, ProfessionType.CLERIC, false);
-            rMod("mlkymc", "holy_water", 8, ProfessionType.CLERIC, false);
             rMod("mlkymc", "blessing_scroll", 6, ProfessionType.CLERIC, false);
             rMod("mlkymc", "living_essence", 5, ProfessionType.FARMHAND, false);
             rMod("mlkymc", "growth_fertilizer", 3, ProfessionType.FARMHAND, false);
@@ -1271,22 +1338,22 @@ public final class ItemBaseValues {
         var A = ProfessionType.ADVENTURER;
 
         // Refurbished Furniture — food items (with buffs where applicable)
-        rMod("refurbished_furniture", "dough", 2, F, false);
-        rMod("refurbished_furniture", "bread_slice", 1, F, false);
-        rMod("refurbished_furniture", "toast", 2, F, false);
+        rMod("refurbished_furniture", "dough", 2, F, false, AttributeBuff.STEP_HEIGHT);
+        rMod("refurbished_furniture", "bread_slice", 1, F, false, AttributeBuff.KNOCKBACK_RESISTANCE);
+        rMod("refurbished_furniture", "toast", 2, F, false, AttributeBuff.MINING_SPEED);
         rMod("refurbished_furniture", "cheese", 2, F, false, AttributeBuff.ARMOR);
-        rMod("refurbished_furniture", "cheese_sandwich", 3, F, false);
-        rMod("refurbished_furniture", "cheese_toastie", 3, F, false);
-        rMod("refurbished_furniture", "raw_meatlovers_pizza", 3, F, false);
-        rMod("refurbished_furniture", "raw_vegetable_pizza", 3, F, false);
-        rMod("refurbished_furniture", "cooked_meatlovers_pizza", 5, F, false);
-        rMod("refurbished_furniture", "cooked_vegetable_pizza", 5, F, false);
-        rMod("refurbished_furniture", "meatlovers_pizza_slice", 2, F, false);
-        rMod("refurbished_furniture", "vegetable_pizza_slice", 2, F, false);
-        rMod("refurbished_furniture", "glow_berry_jam", 2, F, false);
-        rMod("refurbished_furniture", "sweet_berry_jam", 2, F, false);
-        rMod("refurbished_furniture", "glow_berry_jam_toast", 3, F, false);
-        rMod("refurbished_furniture", "sweet_berry_jam_toast", 3, F, false);
+        rMod("refurbished_furniture", "cheese_sandwich", 3, F, false, AttributeBuff.ARMOR_TOUGHNESS);
+        rMod("refurbished_furniture", "cheese_toastie", 3, F, false, AttributeBuff.BURNING_TIME);
+        rMod("refurbished_furniture", "raw_meatlovers_pizza", 3, F, false, AttributeBuff.DAMAGE);
+        rMod("refurbished_furniture", "raw_vegetable_pizza", 3, F, false, AttributeBuff.REACH);
+        rMod("refurbished_furniture", "cooked_meatlovers_pizza", 5, F, false, AttributeBuff.ATTACK_SPEED);
+        rMod("refurbished_furniture", "cooked_vegetable_pizza", 5, F, false, AttributeBuff.ENTITY_REACH);
+        rMod("refurbished_furniture", "meatlovers_pizza_slice", 2, F, false, AttributeBuff.SNEAKING_SPEED);
+        rMod("refurbished_furniture", "vegetable_pizza_slice", 2, F, false, AttributeBuff.UNDERWATER_MINING);
+        rMod("refurbished_furniture", "glow_berry_jam", 2, F, false, AttributeBuff.SAFE_FALL);
+        rMod("refurbished_furniture", "sweet_berry_jam", 2, F, false, AttributeBuff.SPEED);
+        rMod("refurbished_furniture", "glow_berry_jam_toast", 3, F, false, AttributeBuff.JUMP);
+        rMod("refurbished_furniture", "sweet_berry_jam_toast", 3, F, false, AttributeBuff.LUCK);
         rMod("refurbished_furniture", "sea_salt", 1, F, false, AttributeBuff.OXYGEN);
         rMod("refurbished_furniture", "wheat_flour", 1, F, false);
 
@@ -1373,24 +1440,24 @@ public final class ItemBaseValues {
         }
 
         // Nice Mobs — food and items (with buffs)
-        rMod("nice_mobs", "cheese", 2, F, false, AttributeBuff.ARMOR);
-        rMod("nice_mobs", "chorus_juice", 3, F, false, AttributeBuff.REACH);
-        rMod("nice_mobs", "chorus_kebab", 3, F, false, AttributeBuff.ENTITY_REACH);
-        rMod("nice_mobs", "chorus_pie", 5, F, false, AttributeBuff.STEP_HEIGHT);
-        rMod("nice_mobs", "chorus_salad", 3, F, false, AttributeBuff.SPEED);
-        rMod("nice_mobs", "cluckshroom_egg", 2, F, false, AttributeBuff.JUMP);
-        rMod("nice_mobs", "creamy_egg", 2, F, false, AttributeBuff.HEALTH);
-        rMod("nice_mobs", "dark_brown_egg", 1, F, false);
-        rMod("nice_mobs", "dried_jellyfish", 2, F, false, AttributeBuff.UNDERWATER_MINING);
-        rMod("nice_mobs", "duck_egg", 1, F, false, AttributeBuff.JUMP);
-        rMod("nice_mobs", "ender_egg", 3, F, false, AttributeBuff.REACH);
-        rMod("nice_mobs", "ender_horn", 5, A, false);
-        rMod("nice_mobs", "golden_chorus_fruit", 8, F, false, AttributeBuff.KNOCKBACK_RESISTANCE);
-        rMod("nice_mobs", "golden_egg", 5, F, false, AttributeBuff.HEALTH);
-        rMod("nice_mobs", "nautilus_helmet", 8, S, false);
-        rMod("nice_mobs", "nautilus_horn", 5, A, false);
-        rMod("nice_mobs", "used_nautilus_horn", 2, A, false);
-        rMod("nice_mobs", "zombie_egg", 1, F, false);
+        rMod("mr_nice_mobs", "cheese", 2, F, false, AttributeBuff.ARMOR);
+        rMod("mr_nice_mobs", "chorus_juice", 3, F, false, AttributeBuff.REACH);
+        rMod("mr_nice_mobs", "chorus_kebab", 3, F, false, AttributeBuff.ENTITY_REACH);
+        rMod("mr_nice_mobs", "chorus_pie", 5, F, false, AttributeBuff.STEP_HEIGHT);
+        rMod("mr_nice_mobs", "chorus_salad", 3, F, false, AttributeBuff.SPEED);
+        rMod("mr_nice_mobs", "cluckshroom_egg", 2, F, false, AttributeBuff.JUMP);
+        rMod("mr_nice_mobs", "creamy_egg", 2, F, false, AttributeBuff.HEALTH);
+        rMod("mr_nice_mobs", "dark_brown_egg", 1, F, false);
+        rMod("mr_nice_mobs", "dried_jellyfish", 2, F, false, AttributeBuff.UNDERWATER_MINING);
+        rMod("mr_nice_mobs", "duck_egg", 1, F, false, AttributeBuff.JUMP);
+        rMod("mr_nice_mobs", "ender_egg", 3, F, false, AttributeBuff.REACH);
+        rMod("mr_nice_mobs", "ender_horn", 5, A, false);
+        rMod("mr_nice_mobs", "golden_chorus_fruit", 8, F, false, AttributeBuff.KNOCKBACK_RESISTANCE);
+        rMod("mr_nice_mobs", "golden_egg", 5, F, false, AttributeBuff.HEALTH);
+        rMod("mr_nice_mobs", "nautilus_helmet", 8, S, false);
+        rMod("mr_nice_mobs", "nautilus_horn", 5, A, false);
+        rMod("mr_nice_mobs", "used_nautilus_horn", 2, A, false);
+        rMod("mr_nice_mobs", "zombie_egg", 1, F, false);
 
         // Refurbished Furniture — ALL remaining blocks (bulk by pattern)
         // Wood furniture variants: 11 wood types × 20+ furniture types

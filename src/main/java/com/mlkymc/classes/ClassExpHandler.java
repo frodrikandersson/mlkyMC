@@ -1,17 +1,14 @@
 package com.mlkymc.classes;
 
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.event.brewing.PlayerBrewedPotionEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.AnvilCraftEvent;
 import net.neoforged.neoforge.event.entity.player.ItemFishedEvent;
@@ -45,12 +42,22 @@ import java.util.UUID;
 public class ClassExpHandler {
     private final ClassManager classManager;
 
-    // Track explored block positions per player for Adventurer XP
-    private final java.util.Map<UUID, Set<Long>> exploredPositions = new java.util.HashMap<>();
+    // Track Lootr chests looted per player for Adventurer XP — persisted to disk
+    private java.util.Map<String, Set<String>> lootedLootrChests = new java.util.HashMap<>(); // UUID string -> set of chest keys
+    private java.nio.file.Path lootrDataFile;
 
     // Track player-placed sugar cane, pumpkin, melon positions (dimension key + block pos)
     // These blocks should NOT give Farmhand XP when broken
     private final Set<Long> playerPlacedGrowables = new HashSet<>();
+
+    // Brewing stand tracking: brewTime >0 to 0 AND outputs changed = brew completed.
+    private record BrewState(String ingredientId, boolean wasActive, int[] outputFingerprints) {}
+    private final java.util.Map<Long, BrewState> brewingStates = new java.util.HashMap<>();
+
+    private static int stackFingerprint(ItemStack stack) {
+        if (stack.isEmpty()) return 0;
+        return ItemStack.hashItemAndComponents(stack);
+    }
 
     public ClassExpHandler(ClassManager classManager) {
         this.classManager = classManager;
@@ -74,6 +81,23 @@ public class ClassExpHandler {
             PowerHandler.removeCursedMob(dead.getId());
         }
 
+        // Elite mob bonus: +50% class XP per elite type on the mob.
+        // Single-elite = 1.5×, dual-elite = 2×. Stacks with curse multiplier.
+        if (dead.getTags().contains("mlkymc_elite")) {
+            int eliteTypes = 0;
+            for (String tag : dead.getTags()) {
+                if (tag.startsWith("mlkymc_") && !tag.equals("mlkymc_elite")
+                        && !tag.equals("mlkymc_minion") && !tag.startsWith("mlkymc_threat_scaled_")) {
+                    eliteTypes++;
+                }
+            }
+            if (eliteTypes > 0) {
+                // 1.5× for single, 2× for dual — applied as multiplier on top of curse
+                double eliteBonus = 1.0 + (eliteTypes * 0.5);
+                multiplier = (int) Math.ceil(multiplier * eliteBonus);
+            }
+        }
+
         // Hostile mobs (including Phantoms) = Adventurer XP
         if (dead instanceof Monster || dead instanceof net.minecraft.world.entity.monster.Phantom) {
             int xp = 10;
@@ -88,28 +112,164 @@ public class ClassExpHandler {
                     || mobId.contains("evoker") || mobId.contains("vindicator") || mobId.contains("guardian")) {
                 xp = 15;
             }
-            classManager.addXp(player, ProfessionType.ADVENTURER, xp * multiplier);
+            classManager.addXp(player, ProfessionType.ADVENTURER, xp * multiplier,
+                    "kill " + dead.getType().getDescriptionId().replace("entity.minecraft.", "") + (cursed ? " (cursed 2x)" : ""));
+
+            // Adventurer exclusive: 1/100 chance of Totem of Undying from pillager-type mobs
+            ClassData advKillData = classManager.getOrCreate(player);
+            if (advKillData.getChosenClass() == ClassType.ADVENTURER) {
+                String killMobId = dead.getType().getDescriptionId();
+                if (killMobId.contains("pillager") || killMobId.contains("vindicator")
+                        || killMobId.contains("evoker") || killMobId.contains("ravager")
+                        || killMobId.contains("illusioner")) {
+                    if (java.util.concurrent.ThreadLocalRandom.current().nextInt(100) == 0) {
+                        ItemStack totem = new ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
+                        if (!player.getInventory().add(totem)) {
+                            player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), totem);
+                        }
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "A Totem of Undying materializes!").withColor(0xFF55FF));
+                    }
+                }
+            }
         }
 
-        // Neutral/passive mobs = Farmhand XP
-        if (dead instanceof Animal) {
-            classManager.addXp(player, ProfessionType.FARMHAND, 5 * multiplier);
+        // Hoglins are Animals (breedable) but hostile — route to Adventurer XP, not Farmhand.
+        if (dead instanceof Animal && dead.getType().getDescriptionId().contains("hoglin")) {
+            classManager.addXp(player, ProfessionType.ADVENTURER, 15 * multiplier,
+                    "kill " + dead.getType().getDescriptionId().replace("entity.minecraft.", ""));
+        }
+        // Neutral/passive mobs = Farmhand XP (excludes hoglins handled above)
+        else if (dead instanceof Animal) {
+            classManager.addXp(player, ProfessionType.FARMHAND, 5 * multiplier,
+                    "kill " + dead.getType().getDescriptionId().replace("entity.minecraft.", ""));
         }
 
         // Curse of Unrest XP doubling is now handled at pickup time (works with Clumps mod)
     }
 
     /**
-     * Adventurer XP: first-time block travel.
-     * Called from a tick handler. Grants 1 XP per new block position visited.
+     * Adventurer XP: looting a Lootr chest for the first time.
+     * Grants 100 XP per unique Lootr chest opened.
+     * Detects Lootr chests by checking if the block entity implements ILootrBlockEntity.
      */
-    public void onPlayerMove(ServerPlayer player, int blockX, int blockY, int blockZ) {
-        long pos = ((long) blockX & 0x3FFFFFF) << 38 | ((long) blockY & 0xFFF) << 26 | ((long) blockZ & 0x3FFFFFF);
-        UUID uuid = player.getUUID();
-        Set<Long> visited = exploredPositions.computeIfAbsent(uuid, k -> new HashSet<>());
-        if (visited.add(pos)) {
-            classManager.addXp(player, ProfessionType.ADVENTURER, 1);
+    @SubscribeEvent
+    public void onContainerOpen(net.neoforged.neoforge.event.entity.player.PlayerContainerEvent.Open event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel sl)) return;
+
+        // Check blocks in range — try raycast first, then scan nearby
+        net.minecraft.core.BlockPos lootrPos = null;
+
+        // Method 1: raycast
+        var hitResult = player.pick(6.0, 0, false);
+        if (hitResult instanceof net.minecraft.world.phys.BlockHitResult blockHit
+                && hitResult.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+            if (isLootrBlock(sl, blockHit.getBlockPos())) {
+                lootrPos = blockHit.getBlockPos();
+            }
         }
+
+        // Method 2: scan nearby blocks if raycast missed
+        if (lootrPos == null) {
+            var playerPos = player.blockPosition();
+            outer:
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dy = -2; dy <= 2; dy++) {
+                    for (int dz = -4; dz <= 4; dz++) {
+                        var checkPos = playerPos.offset(dx, dy, dz);
+                        if (isLootrBlock(sl, checkPos)) {
+                            lootrPos = checkPos;
+                            break outer;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (lootrPos == null) return;
+
+        // Track per-player per-chest
+        String chestKey = sl.dimension().identifier().toString() + ":" + lootrPos.asLong();
+        String uuidStr = player.getStringUUID();
+        Set<String> looted = lootedLootrChests.computeIfAbsent(uuidStr, k -> new HashSet<>());
+
+        if (looted.add(chestKey)) {
+            classManager.addXp(player, ProfessionType.ADVENTURER, 100, "Lootr chest discovery");
+            player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                    "+100 Adventurer XP (Loot discovery!)").withColor(0x55FFFF), true);
+            saveLootrData();
+
+            // Adventurer exclusive: chance to find Milky Stars in Lootr chests
+            ClassData advData = classManager.getOrCreate(player);
+            if (advData.getChosenClass() == ClassType.ADVENTURER) {
+                int advLvl = advData.getLevel(ProfessionType.ADVENTURER);
+                if (advLvl >= 10) {
+                    int starAmount = advLvl >= 50 ? 3 + player.level().random.nextInt(5)
+                            : advLvl >= 30 ? 2 + player.level().random.nextInt(3)
+                            : 1 + player.level().random.nextInt(2);
+                    var star = com.mlkymc.economy.MilkyStar.create(starAmount);
+                    if (!player.getInventory().add(star)) {
+                        player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), star);
+                    }
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "Found " + starAmount + " Milky Star" + (starAmount > 1 ? "s" : "") + " in the chest!").withColor(0xFFD700));
+                }
+            }
+        }
+    }
+
+    // --- Lootr data persistence ---
+
+    private static final com.google.gson.Gson LOOTR_GSON = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+
+    public void setLootrDataFile(java.nio.file.Path worldDir) {
+        this.lootrDataFile = worldDir.resolve("mlkymc_looted_chests.json");
+        loadLootrData();
+    }
+
+    private void loadLootrData() {
+        if (lootrDataFile == null || !java.nio.file.Files.exists(lootrDataFile)) return;
+        try (var reader = java.nio.file.Files.newBufferedReader(lootrDataFile)) {
+            var type = new com.google.gson.reflect.TypeToken<java.util.Map<String, Set<String>>>() {}.getType();
+            java.util.Map<String, Set<String>> loaded = LOOTR_GSON.fromJson(reader, type);
+            if (loaded != null) lootedLootrChests = loaded;
+        } catch (Exception e) {
+            com.mlkymc.MlkyMC.LOGGER.error("Failed to load looted chests data", e);
+        }
+    }
+
+    private void saveLootrData() {
+        if (lootrDataFile == null) return;
+        try {
+            java.nio.file.Files.createDirectories(lootrDataFile.getParent());
+            try (var writer = java.nio.file.Files.newBufferedWriter(lootrDataFile)) {
+                LOOTR_GSON.toJson(lootedLootrChests, writer);
+            }
+        } catch (Exception e) {
+            com.mlkymc.MlkyMC.LOGGER.error("Failed to save looted chests data", e);
+        }
+    }
+
+    /**
+     * Check if a block is a Lootr block by checking block ID or block entity class name.
+     */
+    private boolean isLootrBlock(net.minecraft.server.level.ServerLevel sl, net.minecraft.core.BlockPos pos) {
+        // Check block ID for "lootr"
+        String blockId = sl.getBlockState(pos).getBlock().getDescriptionId();
+        if (blockId.contains("lootr")) return true;
+
+        // Check block entity class hierarchy for ILootrBlockEntity
+        var be = sl.getBlockEntity(pos);
+        if (be == null) return false;
+        Class<?> cls = be.getClass();
+        while (cls != null) {
+            for (Class<?> iface : cls.getInterfaces()) {
+                if (iface.getName().contains("Lootr")) return true;
+            }
+            cls = cls.getSuperclass();
+        }
+        return false;
     }
 
     // =========================================================================
@@ -118,53 +278,197 @@ public class ClassExpHandler {
     // =========================================================================
 
     /**
-     * Cleric XP: enchanting items at an enchanting table.
-     * Higher enchantment level cost = more XP.
+     * Cleric XP + Milky Stars: enchanting items at an enchanting table.
+     * XP scales with total enchantment levels. Stars are Cleric exclusive.
      */
     @SubscribeEvent
     public void onEnchantItem(PlayerEnchantItemEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.isCreative()) return;
 
-        // XP scales with number of enchantments applied
-        int enchantCount = event.getEnchantments().size();
-        classManager.addXp(player, ProfessionType.CLERIC, 5 + enchantCount * 5);
+        // XP scales with total enchantment levels applied
+        int totalLevels = 0;
+        for (var inst : event.getEnchantments()) {
+            totalLevels += inst.level();
+        }
+        int enchantXp = 5 + totalLevels * 12;
+        classManager.addXp(player, ProfessionType.CLERIC, enchantXp,
+                "enchant (" + event.getEnchantments().size() + " enchants, " + totalLevels + " total lvls)");
+
+        // Milky Stars: Cleric exclusive, scaled by enchant level cost
+        ClassData data = classManager.getOrCreate(player);
+        if (data.getChosenClass() == ClassType.CLERIC) {
+            int stars = Math.max(1, totalLevels); // 1 star per enchant level, minimum 1
+            var starStack = com.mlkymc.economy.MilkyStar.create(stars);
+            if (!player.getInventory().add(starStack)) {
+                player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), starStack);
+            }
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                    "+" + stars + " Milky Stars (enchanting)").withColor(0xFFD700));
+        }
     }
 
     /**
-     * Cleric XP: brewing potions. XP varies by potion complexity.
+     * Tick-based brewing stand tracker. Scans owned brewing stands near players.
+     * Snapshots the ingredient + output items. When the ingredient disappears AND
+     * the outputs have changed, a brew actually completed — award the owner.
+     * If the ingredient disappears but outputs are unchanged, it was manually removed.
+     * Called from MlkyMC server tick.
      */
-    @SubscribeEvent
-    public void onPotionBrewed(PlayerBrewedPotionEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (player.isCreative()) return;
+    public void tickBrewingStands(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof net.minecraft.server.level.ServerLevel sl)) return;
+        if (sl.getGameTime() % 5 != 0) return; // Check every 5 ticks
 
-        ItemStack stack = event.getStack();
-        String potionId = "";
-        PotionContents contents = stack.get(DataComponents.POTION_CONTENTS);
-        if (contents != null && contents.potion().isPresent()) {
-            potionId = contents.potion().get().getRegisteredName();
+        var ownerData = com.mlkymc.world.BlockOwnerData.get(sl.getServer());
+        var loadedOwned = ownerData.getLoadedOwned(sl);
+
+        for (var entry : loadedOwned.entrySet()) {
+            net.minecraft.core.BlockPos pos = entry.getKey();
+            var be = sl.getBlockEntity(pos);
+            if (!(be instanceof net.minecraft.world.level.block.entity.BrewingStandBlockEntity brewingStand)) continue;
+
+            long posKey = pos.asLong();
+
+            // Read brewTime via ContainerData (index 0 = brewTime, index 1 = fuel)
+            int brewTime;
+            try {
+                var field = net.minecraft.world.level.block.entity.BrewingStandBlockEntity.class.getDeclaredField("brewTime");
+                field.setAccessible(true);
+                brewTime = field.getInt(brewingStand);
+            } catch (Exception e) {
+                continue;
+            }
+
+            BrewState prev = brewingStates.get(posKey);
+            boolean wasActive = prev != null && prev.wasActive;
+
+            // Fingerprint current outputs
+            int[] currentFp = new int[3];
+            for (int i = 0; i < 3; i++) {
+                currentFp[i] = stackFingerprint(brewingStand.getItem(i));
+            }
+
+            if (brewTime > 0) {
+                // Brewing is active — record the ingredient and snapshot outputs
+                ItemStack ingredientSlot = brewingStand.getItem(3);
+                String ingId = ingredientSlot.isEmpty() ? "" : ingredientSlot.getItem().getDescriptionId();
+                brewingStates.put(posKey, new BrewState(ingId, true, currentFp));
+            } else {
+                // brewTime is 0 — if it WAS active, check if outputs actually changed
+                if (wasActive && prev.ingredientId != null && !prev.ingredientId.isEmpty()) {
+                    boolean outputsChanged = false;
+                    for (int i = 0; i < 3; i++) {
+                        if (currentFp[i] != prev.outputFingerprints[i]) {
+                            outputsChanged = true;
+                            break;
+                        }
+                    }
+
+                    if (outputsChanged) {
+                        // Brew completed! Find the owner
+                        UUID ownerUuid = ownerData.getOwnerUUID(pos);
+                        if (ownerUuid != null) {
+                            ServerPlayer owner = sl.getServer().getPlayerList().getPlayer(ownerUuid);
+                            if (owner != null) {
+                                int xp = getBrewIngredientXp(prev.ingredientId);
+                                int stars = getBrewIngredientStars(prev.ingredientId);
+
+                                classManager.addXp(owner, ProfessionType.CLERIC, xp,
+                                        "brew (" + prev.ingredientId.replace("block.minecraft.", "").replace("item.minecraft.", "") + ")");
+
+                                ClassData data = classManager.getOrCreate(owner);
+                                if (data.getChosenClass() == ClassType.CLERIC && stars > 0) {
+                                    var starStack = com.mlkymc.economy.MilkyStar.create(stars);
+                                    if (!owner.getInventory().add(starStack)) {
+                                        owner.spawnAtLocation(sl, starStack);
+                                    }
+                                    owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                            "+" + stars + " Milky Stars (brewing)").withColor(0xFFD700));
+                                }
+                            }
+                        }
+                    }
+                }
+                // Mark as inactive with current output fingerprints
+                brewingStates.put(posKey, new BrewState("", false, currentFp));
+            }
         }
+    }
 
-        // Tier by potion rarity
-        int xp;
-        if (potionId.contains("regeneration") || potionId.contains("strength")
-                || potionId.contains("invisibility") || potionId.contains("turtle_master")) {
-            xp = 10; // Complex potions
-        } else if (potionId.contains("swiftness") || potionId.contains("healing")
-                || potionId.contains("fire_resistance") || potionId.contains("night_vision")
-                || potionId.contains("water_breathing") || potionId.contains("leaping")) {
-            xp = 7; // Medium potions
-        } else if (potionId.contains("poison") || potionId.contains("weakness")
-                || potionId.contains("harming") || potionId.contains("slowness")) {
-            xp = 5; // Negative/easy potions
-        } else if (potionId.contains("long_") || potionId.contains("strong_")) {
-            xp = 8; // Extended/amplified variants
-        } else {
-            xp = 3; // Mundane, thick, awkward, etc.
+    /**
+     * Cleric XP from brewing, scaled by ingredient difficulty.
+     *
+     * Tier 4 (Rare):    Rare and end game ingredients, often from difficult mobs or dimensions
+     * Tier 3 (Medium):  Difficult to obtain but not super rare
+     * Tier 2 (Common):  Somewhat easy to obtain but not trivial
+     * Tier 1 (Basic):   Easy to obtain
+     */
+    private static int getBrewIngredientXp(String ingredientId) {
+        // Tier 4 - Rare
+        if (ingredientId.contains("dragon_breath")
+                || ingredientId.contains("ghast_tear")
+                || ingredientId.contains("rabbit_foot")) {
+            return 35;
         }
+        // Tier 3 - Medium
+        if (ingredientId.contains("blaze_powder") 
+                || ingredientId.contains("magma_cream")
+                || ingredientId.contains("golden_carrot") 
+                || ingredientId.contains("pufferfish")
+                || ingredientId.contains("phantom_membrane") 
+                || ingredientId.contains("fermented_spider_eye")) {
+            return 25;
+        }
+        // Tier 2 - Common
+        if (ingredientId.contains("glistering_melon") 
+                || ingredientId.contains("gunpowder") 
+                || ingredientId.contains("glowstone")
+                || ingredientId.contains("redstone")
+                || ingredientId.contains("spider_eye")) {
+            return 20;
+        }
+        // Tier 1 - Basic
+        if (ingredientId.contains("sugar") 
+                || ingredientId.contains("nether_wart")) {
+            return 10;
+        }
+        return 5; // Unknown/modded
+    }
 
-        classManager.addXp(player, ProfessionType.CLERIC, xp);
+    /**
+     * Cleric Milky Stars gainage from brewing, scaled by ingredient difficulty.
+     *
+     * Tier 4 (Rare):    Rare and end game ingredients, often from difficult mobs or dimensions
+     * Tier 3 (Medium):  Difficult to obtain but not super rare
+     * Tier 2 (Common):  Somewhat easy to obtain but not trivial
+     * Tier 1 (Basic):   Easy to obtain
+     */
+    private static int getBrewIngredientStars(String ingredientId) {
+        // Tier 4 - Rare
+        if (ingredientId.contains("dragon_breath")
+                || ingredientId.contains("ghast_tear")
+                || ingredientId.contains("rabbit_foot")) {
+            return 4;
+        }
+        // Tier 3 - Medium
+        if (ingredientId.contains("blaze_powder") 
+                || ingredientId.contains("phantom_membrane") 
+                || ingredientId.contains("magma_cream")
+                || ingredientId.contains("golden_carrot") 
+                || ingredientId.contains("pufferfish")
+                || ingredientId.contains("fermented_spider_eye")) {
+            return 3;
+        }
+        // Tier 2 - Common
+        if (ingredientId.contains("glistering_melon") 
+                || ingredientId.contains("gunpowder") 
+                || ingredientId.contains("glowstone")
+                || ingredientId.contains("redstone")) {
+            return 2;
+        }
+        // Tier 1 - Basic
+        return 1;
     }
 
     /**
@@ -260,7 +564,7 @@ public class ClassExpHandler {
 
         // Normal: grant Cleric XP from vanilla XP orbs
         int clericXp = Math.max(1, orbValue / 3);
-        classManager.addXp(player, ProfessionType.CLERIC, clericXp);
+        classManager.addXp(player, ProfessionType.CLERIC, clericXp, "xp orb pickup");
     }
 
     // Clumps mod removed — all XP handling is now in DebuffHandler.onXpPickup
@@ -312,7 +616,7 @@ public class ClassExpHandler {
     @SubscribeEvent
     public void onFishing(ItemFishedEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        classManager.addXp(player, ProfessionType.FARMHAND, 10);
+        classManager.addXp(player, ProfessionType.FARMHAND, 10, "fishing");
     }
 
     /**
@@ -322,7 +626,7 @@ public class ClassExpHandler {
     public void onAnimalBred(net.neoforged.neoforge.event.entity.living.BabyEntitySpawnEvent event) {
         if (event.getCausedByPlayer() == null) return;
         if (!(event.getCausedByPlayer() instanceof ServerPlayer player)) return;
-        classManager.addXp(player, ProfessionType.FARMHAND, 8);
+        classManager.addXp(player, ProfessionType.FARMHAND, 8, "breeding");
     }
 
     // =========================================================================
@@ -340,14 +644,53 @@ public class ClassExpHandler {
         BlockState state = event.getState();
         Item blockItem = state.getBlock().asItem();
 
-        // FAIL-SAFE: blocks that don't generate naturally never give mining XP
-        if (!ItemBaseValues.isNaturallyGenerated(blockItem)) {
+        // Only give mining/dig XP for naturally generated blocks
+        // Excludes crops, flowers, grass, etc. via profession + shovel check
+        String blockDesc = state.getBlock().getDescriptionId();
+        boolean isShovelBlock = blockDesc.contains("dirt") || blockDesc.contains("grass_block")
+                || blockDesc.contains("sand") || blockDesc.contains("gravel")
+                || blockDesc.contains("clay") || blockDesc.contains("soul_sand")
+                || blockDesc.contains("soul_soil") || blockDesc.contains("mud")
+                || blockDesc.contains("snow") || blockDesc.contains("mycelium")
+                || blockDesc.contains("podzol") || blockDesc.contains("concrete_powder");
+        ProfessionType blockProf = ItemBaseValues.getProfession(blockItem);
+        boolean isMiningOrSmith = blockProf == ProfessionType.MINECRAFTER || blockProf == ProfessionType.SMITH;
+        if (!ItemBaseValues.isNaturallyGenerated(blockItem) || (!isMiningOrSmith && !isShovelBlock)) {
             // Still allow crop XP below (crops are planted by players but XP is valid)
         } else {
-            // Mining XP based on the block's base value
-            int xp = ItemBaseValues.getBaseXp(blockItem);
-            if (xp > 0) {
-                classManager.addXp(player, ProfessionType.MINECRAFTER, xp);
+            // Check if this block was player-placed (no XP for placed blocks)
+            boolean isPlayerPlaced = false;
+            if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                var tracker = com.mlkymc.world.PlacedOreTracker.get(sl.getServer());
+                String dim = sl.dimension().identifier().toString();
+                if (tracker.isPlayerPlaced(dim, event.getPos())) {
+                    isPlayerPlaced = true;
+                    tracker.markBroken(dim, event.getPos());
+                }
+            }
+
+            if (!isPlayerPlaced) {
+                int xp = ItemBaseValues.getBaseXp(blockItem);
+                if (xp > 0) {
+                    // Shovel blocks give Smith XP, everything else gives MineCrafter XP
+                    ProfessionType prof = isShovelBlock ? ProfessionType.SMITH : ProfessionType.MINECRAFTER;
+                    classManager.addXp(player, prof, xp,
+                            (isShovelBlock ? "dig " : "mine ") + blockDesc.replace("block.minecraft.", ""));
+                }
+            }
+
+            // MineCrafter exclusive: 1/1000 chance of Totem of Undying from emerald ore
+            ClassData mcData = classManager.getOrCreate(player);
+            if (mcData.getChosenClass() == ClassType.MINECRAFTER
+                    && (blockDesc.contains("emerald_ore") || blockDesc.contains("deepslate_emerald_ore"))) {
+                if (java.util.concurrent.ThreadLocalRandom.current().nextInt(200) == 0) {
+                    ItemStack totem = new ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
+                    if (!player.getInventory().add(totem)) {
+                        player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), totem);
+                    }
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "A Totem of Undying materializes!").withColor(0xFF55FF));
+                }
             }
         }
 
@@ -355,21 +698,19 @@ public class ClassExpHandler {
         String blockId = state.getBlock().getDescriptionId();
         if (state.getBlock() instanceof CropBlock crop) {
             if (crop.isMaxAge(state)) {
-                classManager.addXp(player, ProfessionType.FARMHAND, 3);
+                classManager.addXp(player, ProfessionType.FARMHAND, 3, "harvest crop");
             }
         }
         // Nether wart has its own block type, check by ID + age
         if (blockId.contains("nether_wart")) {
-            classManager.addXp(player, ProfessionType.FARMHAND, 3);
+            classManager.addXp(player, ProfessionType.FARMHAND, 3, "harvest nether wart");
         }
         // Cocoa beans
         if (blockId.contains("cocoa")) {
-            classManager.addXp(player, ProfessionType.FARMHAND, 3);
+            classManager.addXp(player, ProfessionType.FARMHAND, 3, "harvest cocoa");
         }
 
-        // Sugar cane — count the full column above the broken block
-        // When you break a sugar cane, all blocks above it also break from block updates
-        // but those don't fire BlockDropsEvent, so we count them here
+        // Sugar cane — uses PlacedOreTracker to check if player-placed (persists through restarts)
         if (state.getBlock() instanceof SugarCaneBlock) {
             BlockPos pos = event.getPos();
             // Count how many sugar cane blocks are above this one (they will all break)
@@ -379,23 +720,50 @@ public class ClassExpHandler {
                 aboveCount++;
                 check = check.above();
             }
-            // Total blocks broken = 1 (this one) + aboveCount
             int totalBroken = 1 + aboveCount;
 
-            // Subtract any player-placed blocks in this column from XP
-            int naturalCount = 0;
-            BlockPos xpCheck = pos;
-            for (int i = 0; i < totalBroken; i++) {
-                long key = xpCheck.asLong();
-                if (playerPlacedGrowables.contains(key)) {
-                    playerPlacedGrowables.remove(key);
-                } else {
-                    naturalCount++;
+            if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                var tracker = com.mlkymc.world.PlacedOreTracker.get(sl.getServer());
+                String dim = sl.dimension().identifier().toString();
+
+                int naturalCount = 0;
+                BlockPos xpCheck = pos;
+                for (int i = 0; i < totalBroken; i++) {
+                    if (tracker.isPlayerPlaced(dim, xpCheck)) {
+                        tracker.markBroken(dim, xpCheck);
+                    } else {
+                        naturalCount++;
+                    }
+                    xpCheck = xpCheck.above();
                 }
-                xpCheck = xpCheck.above();
+                if (naturalCount > 0) {
+                    classManager.addXp(player, ProfessionType.FARMHAND, 3 * naturalCount, "harvest sugar cane x" + naturalCount);
+                }
             }
-            if (naturalCount > 0) {
-                classManager.addXp(player, ProfessionType.FARMHAND, 3 * naturalCount);
+
+            // Apply Farmhand drop bonus to the connected blocks above (they break via block updates
+            // and don't go through BlockDropsEvent, so the bonus never applies to them)
+            if (aboveCount > 0 && player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                ClassData cdata = classManager.getOrCreate(player);
+                if (cdata.getChosenClass() == ClassType.FARMHAND) {
+                    int fl = cdata.getLevel(ProfessionType.FARMHAND);
+                    double bonus = fl >= 45 ? 1.0 : fl >= 35 ? 0.8 : fl >= 25 ? 0.6 : fl >= 15 ? 0.4 : fl >= 5 ? 0.2 : 0.0;
+                    if (bonus > 0) {
+                        int bonusDrops = 0;
+                        for (int i = 0; i < aboveCount; i++) {
+                            if (sl.random.nextFloat() < bonus) {
+                                bonusDrops++;
+                            }
+                        }
+                        if (bonusDrops > 0) {
+                            var bonusStack = new net.minecraft.world.item.ItemStack(
+                                    net.minecraft.world.item.Items.SUGAR_CANE, bonusDrops);
+                            var itemEntity = new net.minecraft.world.entity.item.ItemEntity(
+                                    sl, player.getX(), player.getY(), player.getZ(), bonusStack);
+                            sl.addFreshEntity(itemEntity);
+                        }
+                    }
+                }
             }
         }
 
@@ -404,7 +772,7 @@ public class ClassExpHandler {
             BlockPos pos = event.getPos();
             long posKey = pos.asLong();
             if (!playerPlacedGrowables.contains(posKey)) {
-                classManager.addXp(player, ProfessionType.FARMHAND, 3);
+                classManager.addXp(player, ProfessionType.FARMHAND, 3, "harvest " + (state.getBlock() == Blocks.PUMPKIN ? "pumpkin" : "melon"));
             } else {
                 playerPlacedGrowables.remove(posKey);
             }
@@ -423,6 +791,9 @@ public class ClassExpHandler {
                 || id.contains("composter") || id.contains("brewing")
                 || id.contains("anvil") || id.contains("enchant")
                 || id.contains("soul_forge")
+                || id.contains("grill") || id.contains("stove")
+                || id.contains("microwave") || id.contains("toaster")
+                || id.contains("cutting_board") || id.contains("campfire")
                 || state.getBlock() instanceof net.minecraft.world.level.block.ComposterBlock
                 || state.getBlock() instanceof net.minecraft.world.level.block.EnchantingTableBlock;
     }
@@ -442,9 +813,9 @@ public class ClassExpHandler {
             playerPlacedGrowables.add(event.getPos().asLong());
         }
 
-        // Track player-placed ores for silk touch exploit prevention
+        // Track player-placed ores/stone/netherrack for exploit prevention
         String placedBlockId = placed.getBlock().getDescriptionId();
-        if (com.mlkymc.world.PlacedOreTracker.isOre(placedBlockId)
+        if (com.mlkymc.world.PlacedOreTracker.isTrackedBlock(placedBlockId)
                 && event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
             com.mlkymc.world.PlacedOreTracker.get(sl.getServer())
                     .markPlaced(sl.dimension().identifier().toString(), event.getPos());
@@ -513,6 +884,10 @@ public class ClassExpHandler {
         if (player.isCreative()) return;
 
         var output = event.getCrafting();
+        // Skip voided crafts — CraftRestrictionHandler runs at HIGHEST priority and zeroes
+        // the result stack when a class-restricted item is crafted by the wrong class.
+        // No item produced = no XP.
+        if (output.isEmpty() || output.getCount() == 0) return;
         // Skip conversion recipes entirely
         if (ItemBaseValues.isConversionOutput(output.getItem())) return;
 
@@ -530,7 +905,25 @@ public class ClassExpHandler {
 
         // Profession comes from the OUTPUT item
         ProfessionType profession = ItemBaseValues.getProfession(output.getItem());
-        classManager.addXp(player, profession, totalXp);
+        classManager.addXp(player, profession, totalXp, "craft " + output.getItem().getDescriptionId().replace("item.mlkymc.", "").replace("item.minecraft.", "").replace("block.minecraft.", ""));
+
+        // MineCrafter Lv30 exclusive: very small chance of getting 1 Milky Star per craft.
+        // Only rolls when this craft actually awarded MineCrafter XP — skips conversions
+        // (already filtered above via isConversionOutput) and skips crafts whose output
+        // routes XP to a different profession (e.g. a MineCrafter crafting food = FARMHAND XP).
+        ClassData craftData = classManager.getOrCreate(player);
+        if (craftData.getChosenClass() == ClassType.MINECRAFTER
+                && profession == ProfessionType.MINECRAFTER
+                && craftData.getLevel(ProfessionType.MINECRAFTER) >= 30) {
+            float starChance = craftData.getLevel(ProfessionType.MINECRAFTER) >= 50 ? 0.02f : 0.01f; // 2% at 50, 1% at 30
+            if (player.level().random.nextFloat() < starChance) {
+                // Auto-deposit into a Milky Star Jar if the player has one (hotbar / inventory /
+                // nested in a shulker box or pouch); otherwise adds loose stars to inventory.
+                com.mlkymc.economy.MilkyStar.giveOrDeposit(player, 1);
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "Found a Milky Star while crafting!").withColor(0xFFD700));
+            }
+        }
     }
 
     // =========================================================================
@@ -564,14 +957,17 @@ public class ClassExpHandler {
         // Profession: food outputs → FARMHAND, everything else → SMITH
         boolean isFood = result.has(net.minecraft.core.component.DataComponents.FOOD);
         ProfessionType profession = isFood ? ProfessionType.FARMHAND : ProfessionType.SMITH;
-        classManager.addXp(player, profession, xpPerItem * count);
+        classManager.addXp(player, profession, xpPerItem * count,
+                "smelt " + result.getItem().getDescriptionId().replace("item.minecraft.", "").replace("block.minecraft.", "") + " x" + count);
 
-        // Smith Lv20 exclusive: low chance to get Milky Stars from smelting (per item)
+        // Smith Lv10 exclusive: chance to get Milky Stars from smelting (scales with level)
         ClassData data = classManager.getOrCreate(player);
-        if (data.getChosenClass() == ClassType.SMITH && data.getLevel(ProfessionType.SMITH) >= 20) {
+        int smithLvl = data.getLevel(ProfessionType.SMITH);
+        if (data.getChosenClass() == ClassType.SMITH && smithLvl >= 10) {
+            float chance = smithLvl >= 50 ? 0.15f : smithLvl >= 30 ? 0.10f : 0.05f;
             int starsFound = 0;
             for (int i = 0; i < count; i++) {
-                if (player.level().random.nextFloat() < 0.05f) { // 5% chance per item
+                if (player.level().random.nextFloat() < chance) {
                     starsFound++;
                 }
             }
@@ -582,6 +978,19 @@ public class ClassExpHandler {
                 }
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "Found " + starsFound + " Milky Star" + (starsFound > 1 ? "s" : "") + " while smelting!").withColor(0xFFD700));
+            }
+        }
+
+        // Smith exclusive: 1/1000 chance of Totem of Undying when smelting gold ingots
+        if (data.getChosenClass() == ClassType.SMITH
+                && result.getItem() == net.minecraft.world.item.Items.GOLD_INGOT) {
+            if (java.util.concurrent.ThreadLocalRandom.current().nextInt(1000) == 0) {
+                ItemStack totem = new ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
+                if (!player.getInventory().add(totem)) {
+                    player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), totem);
+                }
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "A Totem of Undying materializes!").withColor(0xFF55FF));
             }
         }
     }
@@ -595,20 +1004,52 @@ public class ClassExpHandler {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (player.isCreative()) return;
 
+        ItemStack left = event.getLeft();
         ItemStack right = event.getRight();
-        String rightId = right.getItem().toString();
 
-        // Enchanting with books = higher XP
-        if (rightId.contains("enchanted_book")) {
-            classManager.addXp(player, ProfessionType.SMITH, 10);
+        if (right.isEmpty()) {
+            // Renaming only
+            classManager.addXp(player, ProfessionType.SMITH, 1, "anvil rename");
+            return;
         }
-        // Combining/repairing items
-        else if (!right.isEmpty()) {
-            classManager.addXp(player, ProfessionType.SMITH, 5);
+
+        // Base XP from the material tier of the item being worked on
+        int materialXp = getAnvilMaterialXp(left);
+
+        // Enchanted book: XP scales with total enchantment levels on the book
+        var storedEnchants = right.get(net.minecraft.core.component.DataComponents.STORED_ENCHANTMENTS);
+        if (storedEnchants != null && storedEnchants.size() > 0) {
+            int totalLevels = 0;
+            for (var entry : storedEnchants.entrySet()) {
+                totalLevels += entry.getIntValue();
+            }
+            int enchantXp = materialXp + totalLevels * 5;
+            classManager.addXp(player, ProfessionType.SMITH, enchantXp,
+                    "anvil enchant (tier " + materialXp + " + " + totalLevels + " enchant lvls)");
+            return;
         }
-        // Renaming only
-        else {
-            classManager.addXp(player, ProfessionType.SMITH, 1);
-        }
+
+        // Combining/repairing: XP based on material tier
+        classManager.addXp(player, ProfessionType.SMITH, Math.max(3, materialXp),
+                "anvil combine/repair (" + left.getItem().getDescriptionId().replace("item.minecraft.", "") + ")");
+    }
+
+    /**
+     * Anvil XP based on the material tier of the item being worked on.
+     */
+    private int getAnvilMaterialXp(ItemStack item) {
+        String id = item.getItem().getDescriptionId();
+        if (id.contains("netherite")) return 20;
+        if (id.contains("diamond")) return 15;
+        if (id.contains("iron")) return 8;
+        if (id.contains("gold")) return 6;
+        if (id.contains("chain")) return 7;
+        if (id.contains("stone")) return 4;
+        if (id.contains("leather")) return 3;
+        if (id.contains("wood") || id.contains("bow") || id.contains("crossbow")
+                || id.contains("fishing_rod") || id.contains("shears")
+                || id.contains("shield") || id.contains("trident")
+                || id.contains("mace") || id.contains("elytra")) return 10;
+        return 5; // default for unknown items
     }
 }

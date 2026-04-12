@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:spider_eye"
-    },
-    {
-      "item": "minecraft:fermented_spider_eye"
-    },
-    {
-      "item": "mlkymc:milky_star"
-    }
+    "minecraft:spider_eye",
+    "minecraft:fermented_spider_eye",
+    "mlkymc:milky_star"
   ],
   "result": {
     "id": "mlkymc:trophy_spider",

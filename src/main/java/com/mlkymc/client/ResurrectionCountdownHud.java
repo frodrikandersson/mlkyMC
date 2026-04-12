@@ -8,12 +8,12 @@ import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 
 /**
  * Shows a compact countdown above the hotbar when a player dies.
- * Indicates the 60s Cleric free resurrection window.
+ * Indicates the 5min Cleric free resurrection window.
  */
 public class ResurrectionCountdownHud {
 
     private static long countdownEndTimeMs = -1; // Wall-clock time when countdown expires
-    private static final int COUNTDOWN_SECONDS = 60;
+    private static final int COUNTDOWN_SECONDS = 300; // 5 minutes
     private static String deadPlayerName = "";
 
     @SubscribeEvent
@@ -54,6 +54,7 @@ public class ResurrectionCountdownHud {
 
     @SubscribeEvent
     public void onRenderHud(RenderGuiLayerEvent.Post event) {
+        if (net.minecraft.client.Minecraft.getInstance().options.hideGui) return;
         if (countdownEndTimeMs < 0) return;
 
         Minecraft mc = Minecraft.getInstance();
@@ -87,8 +88,11 @@ public class ResurrectionCountdownHud {
         int color = remaining > 0.3f ? 0xFFFFD700 : 0xFFFF3333;
         g.fill(barX, barY, barX + fillWidth, barY + barHeight, color);
 
-        // Text above bar: "PlayerName 45s" (compact)
-        String text = deadPlayerName + " " + secondsLeft + "s";
+        // Text above bar: "PlayerName 4m 30s" (compact)
+        int mins = secondsLeft / 60;
+        int secs = secondsLeft % 60;
+        String timeStr = mins > 0 ? mins + "m " + secs + "s" : secs + "s";
+        String text = deadPlayerName + " " + timeStr;
         int textWidth = mc.font.width(text);
         g.drawString(mc.font, text, (screenW - textWidth) / 2, barY - 10, 0xFFD700, true);
 

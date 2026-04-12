@@ -81,6 +81,27 @@ public class BlockOwnerData {
         return owners.size();
     }
 
+    /** Returns all entries in the ownership map. Keys are stringified BlockPos longs. */
+    public java.util.Set<java.util.Map.Entry<String, OwnerEntry>> getAllEntries() {
+        return owners.entrySet();
+    }
+
+    /**
+     * Get all owned blocks in loaded chunks for the given level.
+     * Works regardless of player proximity — any owned block in a loaded chunk is returned.
+     */
+    public java.util.Map<net.minecraft.core.BlockPos, OwnerEntry> getLoadedOwned(net.minecraft.server.level.ServerLevel level) {
+        java.util.Map<net.minecraft.core.BlockPos, OwnerEntry> result = new java.util.HashMap<>();
+        for (var entry : owners.entrySet()) {
+            long posLong = Long.parseLong(entry.getKey());
+            net.minecraft.core.BlockPos pos = net.minecraft.core.BlockPos.of(posLong);
+            if (level.isLoaded(pos)) {
+                result.put(pos, entry.getValue());
+            }
+        }
+        return result;
+    }
+
     /**
      * Get all owned blocks near a position (within radius).
      */

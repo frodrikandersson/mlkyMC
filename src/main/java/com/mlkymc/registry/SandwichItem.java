@@ -39,25 +39,25 @@ public class SandwichItem extends Item {
         int buffedCount = 0;
 
         for (ItemStack food : foodIngredients) {
-            // Base buff from the ingredient type
+            // Base inherent buff from the ingredient type
             AttributeBuff baseBuff = ItemBaseValues.getAttributeBuff(food.getItem());
             if (baseBuff != AttributeBuff.NONE) {
                 buffCounts.merge(baseBuff, 10, Integer::sum);
                 buffedCount++;
             }
 
-            // Inherited buffs from previous crafting steps
+            // Applied/tagged buffs from Farmhand Enhanced food (stacks on top)
             if (IngredientBuffHandler.hasBuff(food)) {
-                var inherited = IngredientBuffHandler.readBuffs(food);
-                for (var entry : inherited.entrySet()) {
+                var applied = IngredientBuffHandler.readBuffs(food);
+                for (var entry : applied.entrySet()) {
                     buffCounts.merge(entry.getKey(), entry.getValue(), Integer::sum);
                 }
-                if (!inherited.isEmpty()) buffedCount++;
+                if (!applied.isEmpty()) buffedCount++;
             }
         }
 
         // Duration: 30s base + 15s per buffed ingredient
-        int durationTicks = (30 + 15 * Math.max(buffedCount, foodIngredients.size())) * 20;
+        int durationTicks = (15 + 15 * Math.max(buffedCount, foodIngredients.size())) * 20;
 
         // Store buff data
         CompoundTag nbt = new CompoundTag();
@@ -84,7 +84,10 @@ public class SandwichItem extends Item {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.literal("Farmhand Sandwich").withColor(0x55FF55));
         for (var entry : buffCounts.entrySet()) {
-            lore.add(Component.literal("  +" + entry.getValue() + "% " +
+            boolean inverted = entry.getKey() == AttributeBuff.BURNING_TIME
+                    || entry.getKey() == AttributeBuff.FALL_DAMAGE;
+            String sign = inverted ? "-" : "+";
+            lore.add(Component.literal("  " + sign + entry.getValue() + "% " +
                     IngredientBuffHandler.formatBuffName(entry.getKey())).withColor(0xAAFFAA));
         }
         lore.add(Component.literal("  Duration: " + (durationTicks / 20) + "s").withColor(0xAAAAAA));

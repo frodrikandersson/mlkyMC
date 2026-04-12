@@ -20,9 +20,18 @@ public class ModKeybinds {
     public static KeyMapping KEY_PRIMARY_POWER;
     public static KeyMapping KEY_SECONDARY_POWER;
 
-    // Primary power charge tracking (for hold-to-charge skills like Weapon Dash)
+    // Ignore keybinds for a few ticks after closing a screen (prevents chat leaking)
+    private static int screenCloseCooldown = 0;
+    private static boolean wasScreenOpen = false;
+
+    // Primary power charge tracking (for hold-to-charge skills like Dash)
     private static boolean primaryHeld = false;
     private static long primaryHeldStartTick = 0;
+    private static boolean chargeCancelled = false;
+    private static long fullChargeTick = -1; // tick when charge first hit 100%
+
+    private static final int MAX_CHARGE_TICKS = 20;     // 1 second to reach 100%
+    private static final int OVERCHARGE_TICKS = 20;      // 1 second grace before cancel
 
     public static void registerKeys(RegisterKeyMappingsEvent event) {
         event.registerCategory(MLKYMC_CATEGORY);
@@ -50,7 +59,32 @@ public class ModKeybinds {
     @SubscribeEvent
     public void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.screen != null) return;
+        if (mc.player == null) return;
+
+        // Track screen close — ignore keybinds for 5 ticks after closing chat/screen
+        if (mc.screen != null) {
+            wasScreenOpen = true;
+            // Consume any queued presses while screen is open
+            if (KEY_PRIMARY_POWER != null) while (KEY_PRIMARY_POWER.consumeClick()) {}
+            if (KEY_SECONDARY_POWER != null) while (KEY_SECONDARY_POWER.consumeClick()) {}
+            if (KEY_CLASS_MENU != null) while (KEY_CLASS_MENU.consumeClick()) {}
+            return;
+        }
+        if (wasScreenOpen) {
+            wasScreenOpen = false;
+            screenCloseCooldown = 5;
+            // Consume any leftover presses from typing
+            if (KEY_PRIMARY_POWER != null) while (KEY_PRIMARY_POWER.consumeClick()) {}
+            if (KEY_SECONDARY_POWER != null) while (KEY_SECONDARY_POWER.consumeClick()) {}
+            if (KEY_CLASS_MENU != null) while (KEY_CLASS_MENU.consumeClick()) {}
+        }
+        if (screenCloseCooldown > 0) {
+            screenCloseCooldown--;
+            if (KEY_PRIMARY_POWER != null) while (KEY_PRIMARY_POWER.consumeClick()) {}
+            if (KEY_SECONDARY_POWER != null) while (KEY_SECONDARY_POWER.consumeClick()) {}
+            if (KEY_CLASS_MENU != null) while (KEY_CLASS_MENU.consumeClick()) {}
+            return;
+        }
 
         // --- Class Menu (K) ---
         if (KEY_CLASS_MENU != null && KEY_CLASS_MENU.consumeClick()) {
@@ -70,11 +104,11 @@ public class ModKeybinds {
 
     private void handlePrimaryPower(Minecraft mc) {
         if (KEY_PRIMARY_POWER.isDown()) {
-            // Key is being held
-            if (!primaryHeld) {
+            if (!primaryHeld && !chargeCancelled) {
                 // Just started holding
                 primaryHeld = true;
                 primaryHeldStartTick = mc.player.tickCount;
+                fullChargeTick = -1;
 
                 if (!ClientClassData.hasChosenClass()) {
                     mc.player.displayClientMessage(
@@ -82,19 +116,39 @@ public class ModKeybinds {
                     return;
                 }
             }
-            // While held: show charge bar for classes that need it (Adventurer)
-            // The XP bar overlay is handled in PowerChargeHud
-        } else if (primaryHeld) {
-            // Key was released
-            primaryHeld = false;
 
-            if (!ClientClassData.hasChosenClass()) return;
+            // Check for overcharge cancel (only for Adventurer dash)
+            if (primaryHeld && ClientClassData.getChosenClass() == ClassType.ADVENTURER) {
+                long holdTicks = mc.player.tickCount - primaryHeldStartTick;
 
-            long holdTicks = mc.player.tickCount - primaryHeldStartTick;
-            int chargePercent = (int) Math.min(holdTicks * 5, 100); // 20 ticks = 100%
+                // Track when charge first hits 100%
+                if (holdTicks >= MAX_CHARGE_TICKS && fullChargeTick < 0) {
+                    fullChargeTick = mc.player.tickCount;
+                }
 
-            // Send to server with charge amount
-            mc.player.connection.sendChat("[MLKYMC_PRIMARY:" + chargePercent + "]");
+                // If held too long past full charge, cancel
+                if (fullChargeTick > 0 && mc.player.tickCount - fullChargeTick >= OVERCHARGE_TICKS) {
+                    primaryHeld = false;
+                    chargeCancelled = true;
+                    mc.player.displayClientMessage(
+                            Component.literal("Dash cancelled — overcharged!").withColor(0xFF5555), true);
+                }
+            }
+        } else {
+            if (primaryHeld) {
+                // Key was released — fire the skill
+                primaryHeld = false;
+
+                if (!ClientClassData.hasChosenClass()) return;
+
+                long holdTicks = mc.player.tickCount - primaryHeldStartTick;
+                int chargePercent = (int) Math.min(holdTicks * 5, 100);
+
+                mc.player.connection.sendChat("[MLKYMC_PRIMARY:" + chargePercent + "]");
+            }
+            // Reset cancel flag when key is fully released
+            chargeCancelled = false;
+            fullChargeTick = -1;
         }
 
         // Consume any queued clicks to prevent double-firing
@@ -108,29 +162,28 @@ public class ModKeybinds {
             return;
         }
 
-        ClassType chosen = ClientClassData.getChosenClass();
-
-        switch (chosen) {
-            case ADVENTURER -> {
-                MinimapHud.toggle();
-                String state = MinimapHud.isEnabled() ? "ON" : "OFF";
-                mc.player.displayClientMessage(
-                        Component.literal("Map Wall HUD: " + state).withColor(0x55FFFF), true);
-            }
-            default -> {
-                // Other classes: send to server for server-side handling
-                mc.player.connection.sendChat("[MLKYMC_SECONDARY]");
-            }
-        }
+        // All classes send secondary to server
+        mc.player.connection.sendChat("[MLKYMC_SECONDARY]");
     }
 
     // --- Charge state for HUD rendering ---
     public static boolean isPrimaryHeld() { return primaryHeld; }
+    public static boolean isChargeCancelled() { return chargeCancelled; }
+
     public static float getChargePercent() {
         if (!primaryHeld) return 0;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return 0;
         long holdTicks = mc.player.tickCount - primaryHeldStartTick;
-        return Math.min(holdTicks * 5f / 100f, 1.0f); // 0.0 to 1.0 over 20 ticks
+        return Math.min(holdTicks * 5f / 100f, 1.0f);
+    }
+
+    /** Returns 0.0-1.0 for how far into the overcharge window (0 = just hit 100%, 1 = about to cancel) */
+    public static float getOverchargePercent() {
+        if (!primaryHeld || fullChargeTick < 0) return 0;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return 0;
+        long overTicks = mc.player.tickCount - fullChargeTick;
+        return Math.min((float) overTicks / OVERCHARGE_TICKS, 1.0f);
     }
 }

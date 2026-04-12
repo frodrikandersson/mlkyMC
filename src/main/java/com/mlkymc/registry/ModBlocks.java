@@ -32,17 +32,17 @@ public class ModBlocks {
                     .noOcclusion()
                     .lightLevel(state -> 5)));
 
-    // Trophy base pedestal shape
+    // Trophy base pedestal shape — full height so it's easy to click
     private static final net.minecraft.world.phys.shapes.VoxelShape TROPHY_BASE_SHAPE =
             net.minecraft.world.phys.shapes.Shapes.or(
                     Block.box(1, 0, 1, 15, 2, 15),   // base plate
                     Block.box(3, 2, 3, 13, 6, 13),    // pillar
-                    Block.box(2, 6, 2, 14, 8, 14)     // top platform
+                    Block.box(2, 6, 2, 14, 16, 14)    // top platform + interaction zone
             );
 
     public static final DeferredBlock<Block> TROPHY_BASE = BLOCKS.register(
             "trophy_base",
-            id -> new FacingBlock(BlockBehaviour.Properties.of()
+            id -> new TrophyBaseBlock(BlockBehaviour.Properties.of()
                     .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
                     .mapColor(MapColor.WOOD)
                     .strength(2.0f)
@@ -137,6 +137,17 @@ public class ModBlocks {
                     .noOcclusion()
                     .lightLevel(state -> 7)));
 
+    // --- Shop Stall (2-tall block with BlockEntity) ---
+
+    public static final DeferredBlock<Block> STALL_DEED = BLOCKS.register(
+            "stall_deed",
+            id -> new com.mlkymc.shop.ShopBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.WOOD)
+                    .strength(3.0f, 6.0f)
+                    .sound(SoundType.WOOD)
+                    .noOcclusion()));
+
     // --- Trophies (TrophyBlock: directional + only on Trophy Base) ---
 
     private static BlockBehaviour.Properties trophyProps(net.minecraft.resources.Identifier id) {
@@ -159,12 +170,45 @@ public class ModBlocks {
     public static final DeferredBlock<Block> TROPHY_PHANTOM = BLOCKS.register("trophy_phantom", id -> new TrophyBlock(trophyProps(id)));
     public static final DeferredBlock<Block> TROPHY_WITCH = BLOCKS.register("trophy_witch", id -> new TrophyBlock(trophyProps(id)));
 
+    // --- Radio Blocks ---
+
+    public static final DeferredBlock<Block> MICROPHONE = BLOCKS.register(
+            "microphone",
+            id -> new com.mlkymc.radio.MicrophoneBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.METAL)
+                    .strength(1.5f)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+
+    public static final DeferredBlock<Block> SPEAKER = BLOCKS.register(
+            "speaker",
+            id -> new com.mlkymc.radio.SpeakerBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.WOOD)
+                    .strength(2.0f)
+                    .sound(SoundType.WOOD)
+                    .noOcclusion()));
+
+    public static final DeferredBlock<Block> RADIO = BLOCKS.register(
+            "radio",
+            id -> new com.mlkymc.radio.RadioBlock(BlockBehaviour.Properties.of()
+                    .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.BLOCK, id))
+                    .mapColor(MapColor.WOOD)
+                    .strength(1.5f)
+                    .sound(SoundType.WOOD)
+                    .noOcclusion()));
+
     // --- Block Items ---
 
     public static final DeferredItem<BlockItem> WARP_ANCHOR_ITEM = ModItems.ITEMS.registerSimpleBlockItem(WARP_ANCHOR);
     public static final DeferredItem<BlockItem> TROPHY_BASE_ITEM = ModItems.ITEMS.registerSimpleBlockItem(TROPHY_BASE);
     public static final DeferredItem<BlockItem> SCARECROW_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SCARECROW);
     public static final DeferredItem<BlockItem> SOUL_FORGE_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SOUL_FORGE);
+    public static final DeferredItem<BlockItem> STALL_DEED_ITEM = ModItems.ITEMS.registerSimpleBlockItem(STALL_DEED);
+    public static final DeferredItem<BlockItem> MICROPHONE_ITEM = ModItems.ITEMS.registerSimpleBlockItem(MICROPHONE);
+    public static final DeferredItem<BlockItem> SPEAKER_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SPEAKER);
+    public static final DeferredItem<BlockItem> RADIO_ITEM = ModItems.ITEMS.registerSimpleBlockItem(RADIO);
 
     public static final DeferredItem<BlockItem> SOULSTONE_BRICK_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SOULSTONE_BRICK);
     public static final DeferredItem<BlockItem> SOUL_PILLAR_ITEM = ModItems.ITEMS.registerSimpleBlockItem(SOUL_PILLAR);

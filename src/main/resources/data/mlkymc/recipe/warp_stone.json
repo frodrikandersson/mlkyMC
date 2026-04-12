@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:ender_pearl"
-    },
-    {
-      "item": "mlkymc:waystone_shard"
-    },
-    {
-      "item": "mlkymc:milky_star"
-    }
+    "minecraft:ender_pearl",
+    "mlkymc:waystone_shard",
+    "mlkymc:milky_star"
   ],
   "result": {
     "id": "mlkymc:warp_stone",

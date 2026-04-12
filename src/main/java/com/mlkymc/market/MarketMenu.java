@@ -37,6 +37,7 @@ public class MarketMenu extends AbstractContainerMenu {
     private final MarketManager manager;
     private final ServerPlayer viewer;
     private final boolean isMarketplace; // true = marketplace, false = player stall
+    private final boolean fromComputer;  // true = opened via MrCrayfish Computer
     private final String stallOwnerUuid;  // only used when isMarketplace == false
     private String categoryFilter; // null = category view, non-null = detail view for this itemId
     private int page;
@@ -44,23 +45,30 @@ public class MarketMenu extends AbstractContainerMenu {
     /** Open the central marketplace (lectern Market Book). */
     public static MarketMenu marketplace(int containerId, Inventory playerInv,
                                          ServerPlayer viewer, MarketManager manager, int page) {
-        return new MarketMenu(containerId, playerInv, viewer, manager, true, null, page);
+        return new MarketMenu(containerId, playerInv, viewer, manager, true, false, null, page);
+    }
+
+    /** Open the marketplace via MrCrayfish Computer — requires mailbox for purchases. */
+    public static MarketMenu computerMarketplace(int containerId, Inventory playerInv,
+                                                  ServerPlayer viewer, MarketManager manager, int page) {
+        return new MarketMenu(containerId, playerInv, viewer, manager, true, true, null, page);
     }
 
     /** Open a player stall. */
     public static MarketMenu stall(int containerId, Inventory playerInv,
                                    ServerPlayer viewer, MarketManager manager,
                                    String stallOwnerUuid, int page) {
-        return new MarketMenu(containerId, playerInv, viewer, manager, false, stallOwnerUuid, page);
+        return new MarketMenu(containerId, playerInv, viewer, manager, false, false, stallOwnerUuid, page);
     }
 
     private MarketMenu(int containerId, Inventory playerInv, ServerPlayer viewer,
-                       MarketManager manager, boolean isMarketplace, String stallOwnerUuid, int page) {
+                       MarketManager manager, boolean isMarketplace, boolean fromComputer, String stallOwnerUuid, int page) {
         super(MenuType.GENERIC_9x6, containerId);
         this.container = new SimpleContainer(CONTAINER_SLOTS);
         this.manager = manager;
         this.viewer = viewer;
         this.isMarketplace = isMarketplace;
+        this.fromComputer = fromComputer;
         this.stallOwnerUuid = stallOwnerUuid;
         this.page = page;
 
@@ -209,9 +217,12 @@ public class MarketMenu extends AbstractContainerMenu {
             ItemStack sellBtn = new ItemStack(Items.LIME_STAINED_GLASS_PANE);
             sellBtn.set(DataComponents.CUSTOM_NAME,
                     Component.literal("Sell Item").withColor(0x55FF55));
-            sellBtn.set(DataComponents.LORE, new ItemLore(List.of(
-                    Component.literal("Click to list an item for sale").withColor(0xAAAAAA)
-            )));
+            var sellLore = new java.util.ArrayList<Component>();
+            sellLore.add(Component.literal("Click to list an item for sale").withColor(0xAAAAAA));
+            if (fromComputer) {
+                sellLore.add(Component.literal("Listing fee: 1 Milky Star").withColor(0xFFAA00));
+            }
+            sellBtn.set(DataComponents.LORE, new ItemLore(sellLore));
             container.setItem(47, sellBtn);
         }
 
@@ -257,7 +268,7 @@ public class MarketMenu extends AbstractContainerMenu {
                     (stallOwnerUuid != null && stallOwnerUuid.equals(serverPlayer.getStringUUID()));
             if (canSell) {
                 serverPlayer.openMenu(new SimpleMenuProvider(
-                        (cid, inv, p) -> new SellMenu(cid, inv, serverPlayer, manager, isMarketplace),
+                        (cid, inv, p) -> new SellMenu(cid, inv, serverPlayer, manager, isMarketplace, fromComputer),
                         Component.literal(isMarketplace ? "Sell on Marketplace" : "Sell in Stall")
                 ));
                 return;
@@ -316,7 +327,29 @@ public class MarketMenu extends AbstractContainerMenu {
                     broadcastChanges();
                 }
             } else {
-                // Purchase
+                // Purchase — Computer-specific gates
+                if (fromComputer) {
+                    // Require a named mailbox for delivery
+                    if (com.mlkymc.compat.FurnitureCompat.isAvailable()
+                            && !com.mlkymc.compat.FurnitureCompat.hasNamedMailbox(
+                            serverPlayer.level().getServer(), serverPlayer)) {
+                        serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "You need a Mailbox with your name to buy via Computer! " +
+                                "Place a Mailbox and rename it to your player name.")
+                                .withColor(0xFF5555));
+                        return;
+                    }
+                    // Transaction fee: 1 Milky Star per Computer purchase
+                    if (com.mlkymc.economy.MilkyStar.count(serverPlayer) < 1) {
+                        serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "Computer transaction fee: 1 Milky Star (you don't have enough!)")
+                                .withColor(0xFF5555));
+                        return;
+                    }
+                    com.mlkymc.economy.MilkyStar.remove(serverPlayer, 1);
+                    serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "Computer transaction fee: -1 Milky Star").withColor(0xFFAA00));
+                }
                 boolean success;
                 if (isMarketplace) {
                     success = manager.purchaseMarketplaceListing(serverPlayer, listing.getId());
@@ -349,9 +382,11 @@ public class MarketMenu extends AbstractContainerMenu {
         ItemStack stack = new ItemStack(item);
         String itemName = manager.getItemDisplayName(itemId);
 
+        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
         stack.set(DataComponents.CUSTOM_NAME,
-                Component.literal(itemName + " (" + group.size() + " listings)")
-                        .withColor(0x55FFFF));
+                Component.literal("[LISTING] ").withColor(0x55FFFF)
+                        .append(Component.literal(itemName + " (" + group.size() + " listings)")
+                                .withColor(0x55FFFF)));
 
         List<Component> lore = new ArrayList<>();
 
@@ -391,9 +426,9 @@ public class MarketMenu extends AbstractContainerMenu {
 
         stack.set(DataComponents.CUSTOM_NAME,
                 Component.literal(listing.getAmount() + "x " +
-                        displayName +
-                        " - " + listing.getPrice() + " Milky Stars")
-                        .withColor(isOwn ? 0xFF5555 : 0xFFD700));
+                                displayName +
+                                " - " + listing.getPrice() + " Stars")
+                                .withColor(isOwn ? 0xFF5555 : 0xFFD700));
 
         // Show durability if item is damaged
         List<Component> lore = new ArrayList<>();
@@ -411,6 +446,10 @@ public class MarketMenu extends AbstractContainerMenu {
         } else {
             lore.add(Component.literal("Seller: " + listing.getSellerName()).withColor(0xAAAAAA));
             lore.add(Component.literal("Price: " + listing.getPrice() + " Milky Stars").withColor(0x55FF55));
+            if (fromComputer) {
+                lore.add(Component.literal("+ 1 Milky Star transaction fee").withColor(0xFFAA00));
+                lore.add(Component.literal("(delivered to your Mailbox)").withColor(0xAAAAAA));
+            }
             lore.add(Component.literal("Click to purchase!").withColor(0xFFFF55));
         }
 

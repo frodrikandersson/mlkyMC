@@ -59,6 +59,14 @@ repositories {
 
 dependencies {
     compileOnly "de.maxhenkel.voicechat:voicechat-api:2.6.0"
+    // MrCrayfish's Refurbished Furniture — optional compile dependency for Computer
+    // program registration + DeliveryService mailbox API. mlkymc runs fine without it;
+    // all furniture-dependent code is guarded behind FMLLoader.isModLoaded checks.
+    compileOnly files("C:/Users/frodr/AppData/Roaming/ATLauncher/servers/mlkyMilky12111NF/mods/refurbished_furniture-neoforge-1.21.11-1.0.23.jar")
+    // Framework is a required dependency of refurbished_furniture (needed for compile)
+    compileOnly files("C:/Users/frodr/AppData/Roaming/ATLauncher/servers/mlkyMilky12111NF/mods/framework-neoforge-1.21.11-0.13.11.jar")
+    // JEI — optional compile dependency for transmutation recipe display
+    compileOnly files("C:/Users/frodr/AppData/Roaming/ATLauncher/servers/mlkyMilky12111NF/mods/jei-1.21.11-neoforge-27.4.0.15.jar")
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

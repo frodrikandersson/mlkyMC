@@ -45,14 +45,21 @@ public class SellMenu extends AbstractContainerMenu {
     private final SimpleContainer container;
     private final MarketManager manager;
     private final boolean isMarketplace;
+    private final boolean fromComputer;
     private int price = 1;
 
     public SellMenu(int containerId, Inventory playerInv, ServerPlayer seller,
                     MarketManager manager, boolean isMarketplace) {
+        this(containerId, playerInv, seller, manager, isMarketplace, false);
+    }
+
+    public SellMenu(int containerId, Inventory playerInv, ServerPlayer seller,
+                    MarketManager manager, boolean isMarketplace, boolean fromComputer) {
         super(MenuType.GENERIC_9x3, containerId);
         this.container = new SimpleContainer(CONTAINER_SLOTS);
         this.manager = manager;
         this.isMarketplace = isMarketplace;
+        this.fromComputer = fromComputer;
 
         // Container slots (3 rows)
         for (int row = 0; row < ROWS; row++) {
@@ -179,6 +186,19 @@ public class SellMenu extends AbstractContainerMenu {
             return;
         }
 
+        // Computer transaction fee: 1 Milky Star per listing
+        if (fromComputer) {
+            if (com.mlkymc.economy.MilkyStar.count(player) < 1) {
+                player.sendSystemMessage(Component.literal(
+                        "Computer listing fee: 1 Milky Star (you don't have enough!)")
+                        .withColor(0xFF5555));
+                return;
+            }
+            com.mlkymc.economy.MilkyStar.remove(player, 1);
+            player.sendSystemMessage(Component.literal(
+                    "Computer listing fee: -1 Milky Star").withColor(0xFFAA00));
+        }
+
         String itemId = BuiltInRegistries.ITEM.getKey(deposited.getItem()).toString();
         int amount = deposited.getCount();
         String itemNbt = MarketManager.serializeItemStack(deposited, player);
@@ -196,13 +216,16 @@ public class SellMenu extends AbstractContainerMenu {
                 "Listed " + amount + "x " + itemId.replace("minecraft:", "") +
                 " for " + price + " Milky Stars!").withColor(0x55FF55));
 
-        // Reopen the listings GUI
+        // Reopen the listings GUI — preserve the fromComputer flag so subsequent
+        // sells through the Computer still charge the transaction fee.
         player.closeContainer();
         String title = isMarketplace ? "Marketplace" : getStallTitle(player);
         player.openMenu(new SimpleMenuProvider(
                 (cid, inv, p) -> {
                     if (isMarketplace) {
-                        return MarketMenu.marketplace(cid, inv, player, manager, 0);
+                        return fromComputer
+                                ? MarketMenu.computerMarketplace(cid, inv, player, manager, 0)
+                                : MarketMenu.marketplace(cid, inv, player, manager, 0);
                     } else {
                         return MarketMenu.stall(cid, inv, player, manager, player.getStringUUID(), 0);
                     }

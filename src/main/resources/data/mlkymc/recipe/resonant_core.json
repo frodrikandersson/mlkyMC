@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:redstone_block"
-    },
-    {
-      "item": "minecraft:amethyst_shard"
-    },
-    {
-      "item": "minecraft:iron_ingot"
-    }
+    "mlkymc:milky_star",
+    "minecraft:raw_copper",
+    "minecraft:raw_iron"
   ],
   "result": {
     "id": "mlkymc:resonant_core",

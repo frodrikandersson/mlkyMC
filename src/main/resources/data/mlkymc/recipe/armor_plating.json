@@ -6,18 +6,10 @@
     " E "
   ],
   "key": {
-    "D": {
-      "item": "minecraft:diamond"
-    },
-    "M": {
-      "item": "mlkymc:milky_star"
-    },
-    "I": {
-      "item": "minecraft:iron_block"
-    },
-    "E": {
-      "item": "mlkymc:living_essence"
-    }
+    "D": "minecraft:diamond",
+    "M": "mlkymc:milky_star",
+    "I": "minecraft:iron_block",
+    "E": "mlkymc:living_essence"
   },
   "result": {
     "id": "mlkymc:armor_plating",

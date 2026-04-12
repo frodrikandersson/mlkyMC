@@ -44,6 +44,67 @@ public class GraveListener {
     }
 
     /**
+     * Prevent explosions from destroying grave blocks.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onExplosion(net.neoforged.neoforge.event.level.ExplosionEvent.Detonate event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        String dim = level.dimension().identifier().toString();
+        event.getAffectedBlocks().removeIf(pos -> graveManager.getGrave(dim, pos) != null);
+    }
+
+    /**
+     * Prevent pistons from pushing/pulling grave blocks.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onPistonPush(net.neoforged.neoforge.event.level.PistonEvent.Pre event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        String dim = level.dimension().identifier().toString();
+
+        // Check the block being pushed and adjacent blocks
+        var pos = event.getPos().relative(event.getDirection());
+        if (graveManager.getGrave(dim, pos) != null) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * Prevent liquid flow from destroying grave blocks.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onFluidPlace(net.neoforged.neoforge.event.level.BlockEvent.FluidPlaceBlockEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        String dim = level.dimension().identifier().toString();
+
+        if (graveManager.getGrave(dim, event.getPos()) != null) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * Prevent player head drops near grave positions (stops duped heads from water/lava).
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onItemSpawn(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.item.ItemEntity itemEntity)) return;
+        if (!itemEntity.getItem().is(net.minecraft.world.item.Items.PLAYER_HEAD)) return;
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+
+        String dim = level.dimension().identifier().toString();
+        BlockPos pos = itemEntity.blockPosition();
+
+        // Check if this head dropped near any grave
+        for (GraveData grave : graveManager.getAllGraves()) {
+            if (!grave.dimension.equals(dim)) continue;
+            if (grave.pos.closerToCenterThan(pos.getCenter(), 5)) {
+                event.setCanceled(true);
+                return;
+            }
+        }
+    }
+
+    /**
      * Right-click a grave block to interact.
      * - Owner (alive, not ghost): claim items or remove empty grave
      * - Owner (ghost): cannot interact until revived
@@ -84,6 +145,20 @@ public class GraveListener {
                 graveManager.claimGrave(player, grave, level);
                 player.sendSystemMessage(Component.literal("Grave claimed! Items restored.").withColor(0x55FF55));
             }
+            // Clear grave timer from HUD immediately
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("[MLKYMC_GRAVES:]").withColor(0x000000));
+            // Force skill sync to remove grave icon — send empty grave state
+            // The next full sync will confirm, but this clears it instantly
+            player.level().getServer().execute(() -> {
+                var ph = MlkyMC.getPowerHandler();
+                if (ph != null) {
+                    var cm = MlkyMC.getClassManager();
+                    var psh = MlkyMC.getPassiveSkillHandler();
+                    if (cm != null) {
+                        ph.syncSkillStatuses(player.level().getServer(), cm, psh, null);
+                    }
+                }
+            });
         } else if (grave.canOtherPlayerAccess(currentTime)) {
             // Others can loot after 10 minutes — open inventory GUI, head stays
             openGraveLootGUI(player, grave, dim, pos);

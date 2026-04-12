@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " Q ",
+    "IAI",
+    " C "
+  ],
+  "key": {
+    "Q": "minecraft:quartz",
+    "I": "minecraft:iron_ingot",
+    "A": "minecraft:amethyst_shard",
+    "C": "minecraft:comparator"
+  },
+  "result": {
+    "id": "mlkymc:microphone",
+    "count": 1
+  }
+}

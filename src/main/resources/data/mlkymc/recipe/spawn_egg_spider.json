@@ -6,15 +6,9 @@
     "SSS"
   ],
   "key": {
-    "S": {
-      "item": "mlkymc:milky_star"
-    },
-    "L": {
-      "item": "mlkymc:living_essence"
-    },
-    "M": {
-      "item": "minecraft:spider_eye"
-    }
+    "S": "mlkymc:milky_star",
+    "L": "mlkymc:living_essence",
+    "M": "minecraft:spider_eye"
   },
   "result": {
     "id": "minecraft:spider_spawn_egg",

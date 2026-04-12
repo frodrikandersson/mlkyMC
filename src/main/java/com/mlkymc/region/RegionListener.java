@@ -31,7 +31,7 @@ public class RegionListener {
     @SubscribeEvent
     public void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (!player.getMainHandItem().is(Items.STICK)) return;
+        if (!player.getMainHandItem().is(Items.BLAZE_ROD)) return;
         if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) return;
 
         BlockPos pos = event.getPos();
@@ -44,7 +44,7 @@ public class RegionListener {
     @SubscribeEvent
     public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (!player.getMainHandItem().is(Items.STICK)) return;
+        if (!player.getMainHandItem().is(Items.BLAZE_ROD)) return;
         if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) return;
 
         BlockPos pos = event.getPos();
@@ -171,7 +171,7 @@ public class RegionListener {
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onInteract(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (player.getMainHandItem().is(Items.STICK)
+        if (player.getMainHandItem().is(Items.BLAZE_ROD)
                 && player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) return; // Wand handled above
         if (canBypass(player)) return;
 
@@ -183,6 +183,37 @@ public class RegionListener {
         }
     }
 
+    // ---- Sign editing ----
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onSignEdit(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (canBypass(player)) return;
+
+        BlockPos pos = event.getPos();
+        if (!(player.level().getBlockState(pos).getBlock() instanceof net.minecraft.world.level.block.SignBlock)) return;
+
+        String dim = player.level().dimension().identifier().toString();
+        if (manager.isFlagActiveAt(RegionFlag.NO_SIGN_EDIT, dim, pos.getX(), pos.getY(), pos.getZ())) {
+            event.setCanceled(true);
+        }
+    }
+
+    // ---- Item frame protection (block left-click removal only) ----
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onEntityAttack(net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (canBypass(player)) return;
+        if (!(event.getTarget() instanceof net.minecraft.world.entity.decoration.ItemFrame)) return;
+
+        BlockPos pos = event.getTarget().blockPosition();
+        String dim = player.level().dimension().identifier().toString();
+        if (manager.isFlagActiveAt(RegionFlag.NO_ITEM_FRAME, dim, pos.getX(), pos.getY(), pos.getZ())) {
+            event.setCanceled(true);
+        }
+    }
+
     // ---- Helpers ----
 
     private boolean canBypass(ServerPlayer player) {
@@ -191,14 +222,21 @@ public class RegionListener {
 
     /**
      * Teleport new players (first join) to the exact spawn point.
+     *
+     * Must run at HIGHEST priority: ClassLoginHandler.onPlayerLogin also listens to
+     * PlayerLoggedInEvent and flips data.setIntroShown(true) inside its handler. If
+     * we ran after it, we'd always see introShown=true and never teleport anyone.
      */
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onPlayerLogin(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!manager.hasExactSpawn()) return;
 
-        // Only teleport if the player has no bed/respawn point set (first join or bed destroyed)
-        if (player.getRespawnConfig() != null) return;
+        // Only teleport first-time players — use the introShown flag (set after first login message)
+        var cm = com.mlkymc.MlkyMC.getClassManager();
+        if (cm == null) return;
+        var data = cm.getOrCreate(player);
+        if (data.isIntroShown()) return; // returning player — don't teleport
 
         player.level().getServer().execute(() -> {
             player.teleportTo(
@@ -216,15 +254,22 @@ public class RegionListener {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!manager.hasExactSpawn()) return;
 
+        // Skip during server shutdown — NeoForge fires PlayerRespawnEvent when
+        // disconnecting online players during stop, and teleporting them at that
+        // point overwrites their saved position with the spawn point.
+        var server = player.level().getServer();
+        if (!server.isRunning()) return;
+
         // Only override if they respawned at world spawn (no bed)
         // Check if they're near the world spawn (within 32 blocks = vanilla spawn area)
-        var worldSpawn = player.level().getServer().overworld().getLevelData().getRespawnData().pos();
+        var worldSpawn = server.overworld().getLevelData().getRespawnData().pos();
         double distSq = player.blockPosition().distSqr(worldSpawn);
         if (distSq > 1024) return; // They respawned at a bed, don't override
 
-        player.level().getServer().execute(() -> {
+        server.execute(() -> {
+            if (!server.isRunning()) return; // double-check in case shutdown happened between schedule and execution
             player.teleportTo(
-                    player.level().getServer().overworld(),
+                    server.overworld(),
                     manager.getSpawnX(), manager.getSpawnY(), manager.getSpawnZ(),
                     java.util.Set.of(), manager.getSpawnYaw(), manager.getSpawnPitch(), false);
         });

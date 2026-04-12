@@ -78,7 +78,7 @@ public class GraveManager {
         }
         LOGGER.info("[Grave] Collected {} items, placing grave at {}", items.size(), gravePos);
 
-        int xp = player.totalExperience;
+        int xp = 0; // No XP preservation in graves
         String dim = level.dimension().identifier().toString();
         GraveData grave = new GraveData(player.getUUID(), player.getName().getString(),
                 gravePos, dim, level.getGameTime(), items, xp);
@@ -87,22 +87,25 @@ public class GraveManager {
         graves.put(key, grave);
         dirty = true;
 
-        // Place a player head with the dead player's skin
-        level.setBlock(gravePos, Blocks.PLAYER_HEAD.defaultBlockState(), 3);
-        var blockEntity = level.getBlockEntity(gravePos);
-        if (blockEntity instanceof net.minecraft.world.level.block.entity.SkullBlockEntity skull) {
+        placeGraveHead(level, gravePos, player);
+
+        save();
+        return grave;
+    }
+
+    private void placeGraveHead(ServerLevel level, BlockPos pos, ServerPlayer owner) {
+        level.setBlock(pos, Blocks.PLAYER_HEAD.defaultBlockState(), 3);
+        var blockEntity = level.getBlockEntity(pos);
+        if (blockEntity instanceof net.minecraft.world.level.block.entity.SkullBlockEntity skull && owner != null) {
             try {
                 var ownerField = net.minecraft.world.level.block.entity.SkullBlockEntity.class.getDeclaredField("owner");
                 ownerField.setAccessible(true);
-                ownerField.set(skull, net.minecraft.world.item.component.ResolvableProfile.createResolved(player.getGameProfile()));
+                ownerField.set(skull, net.minecraft.world.item.component.ResolvableProfile.createResolved(owner.getGameProfile()));
                 skull.setChanged();
             } catch (Exception e) {
                 LOGGER.warn("[Grave] Failed to set skull owner skin", e);
             }
         }
-
-        save();
-        return grave;
     }
 
     /**
@@ -126,6 +129,41 @@ public class GraveManager {
                 }
             }
             if (level == null) continue;
+
+            // If grave block was destroyed (water, lava, etc.), relocate to nearest safe spot
+            var currentBlock = level.getBlockState(grave.pos);
+            if (!(currentBlock.getBlock() instanceof net.minecraft.world.level.block.SkullBlock)) {
+                // Remove any dropped player head items near the old position
+                var nearbyItems = level.getEntitiesOfClass(
+                        net.minecraft.world.entity.item.ItemEntity.class,
+                        new net.minecraft.world.phys.AABB(grave.pos).inflate(3),
+                        e -> e.getItem().is(net.minecraft.world.item.Items.PLAYER_HEAD));
+                for (var itemEntity : nearbyItems) {
+                    itemEntity.discard();
+                }
+
+                BlockPos newPos = findGravePosition(level, grave.pos);
+                if (newPos != null && !newPos.equals(grave.pos)) {
+                    // Create new grave data at the safe position
+                    String oldKey = makeKey(grave.dimension, grave.pos);
+                    iterator.remove();
+                    GraveData relocated = new GraveData(grave.ownerUUID, grave.ownerName,
+                            newPos, grave.dimension, grave.deathTime, grave.items, grave.xpPoints);
+                    graves.put(makeKey(grave.dimension, newPos), relocated);
+                    dirty = true;
+                    placeGraveHead(level, newPos, server.getPlayerList().getPlayer(grave.ownerUUID));
+                    ServerPlayer owner = server.getPlayerList().getPlayer(grave.ownerUUID);
+                    if (owner != null) {
+                        owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "Your grave was moved to a safer location: " +
+                                newPos.getX() + ", " + newPos.getY() + ", " + newPos.getZ())
+                                .withColor(0xFFAA00));
+                    }
+                } else {
+                    // No better spot found, restore at same position
+                    placeGraveHead(level, grave.pos, server.getPlayerList().getPlayer(grave.ownerUUID));
+                }
+            }
 
             long elapsed = level.getGameTime() - grave.deathTime;
             if (elapsed >= GRAVE_EXPIRY_TICKS) {
@@ -178,7 +216,7 @@ public class GraveManager {
                 player.drop(item.copy(), false);
             }
         }
-        player.giveExperiencePoints(grave.xpPoints);
+        // No XP restoration from graves
         level.setBlock(grave.pos, Blocks.AIR.defaultBlockState(), 3);
         String key = makeKey(grave.dimension, grave.pos);
         graves.remove(key);
@@ -300,14 +338,62 @@ public class GraveManager {
     }
 
     private BlockPos findGravePosition(ServerLevel level, BlockPos deathPos) {
-        if (level.getBlockState(deathPos).isAir() || !level.getFluidState(deathPos).isEmpty()) {
-            return deathPos;
-        }
-        for (int dy = 1; dy <= 5; dy++) {
+        // First: check if death position itself is safe (air, no fluid)
+        if (isSafeGraveSpot(level, deathPos)) return deathPos;
+
+        // Search outward in a spiral: up first, then nearby
+        // Check above (up to 10 blocks)
+        for (int dy = 1; dy <= 10; dy++) {
             BlockPos up = deathPos.above(dy);
-            if (level.getBlockState(up).isAir()) return up;
+            if (isSafeGraveSpot(level, up)) return up;
         }
-        return deathPos;
+
+        // Check nearby in expanding radius (solid block with air above, no fluid)
+        for (int radius = 1; radius <= 8; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (Math.abs(dx) != radius && Math.abs(dz) != radius) continue; // only check shell
+                    for (int dy = -3; dy <= 5; dy++) {
+                        BlockPos check = deathPos.offset(dx, dy, dz);
+                        if (isSafeGraveSpot(level, check)) return check;
+                    }
+                }
+            }
+        }
+
+        // Last resort: place at surface above death position
+        BlockPos surface = level.getHeightmapPos(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, deathPos);
+        if (isSafeGraveSpot(level, surface)) return surface;
+
+        // Absolute fallback
+        return deathPos.above(2);
+    }
+
+    /**
+     * A safe grave spot: replaceable block (air/grass/flower), no fluid, solid block below.
+     */
+    private boolean isSafeGraveSpot(ServerLevel level, BlockPos pos) {
+        var state = level.getBlockState(pos);
+        var fluid = level.getFluidState(pos);
+        var below = level.getBlockState(pos.below());
+
+        // Must not have fluid at the position or adjacent
+        if (!fluid.isEmpty()) return false;
+        if (!level.getFluidState(pos.above()).isEmpty()) return false;
+
+        // Must be replaceable (air, tall grass, etc.)
+        if (!state.isAir() && !state.canBeReplaced()) return false;
+
+        // Block below must be solid (not fluid, not air)
+        if (below.isAir() || !level.getFluidState(pos.below()).isEmpty()) return false;
+
+        // Check no fluid in adjacent blocks (prevents water/lava flow destroying it)
+        for (var dir : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            if (!level.getFluidState(pos.relative(dir)).isEmpty()) return false;
+        }
+
+        return true;
     }
 
     private String makeKey(String dim, BlockPos pos) {

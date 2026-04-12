@@ -44,6 +44,56 @@ public class ItemFunctionHandler {
     // RIGHT-CLICK ITEM (air)
     // =========================================================================
 
+    // Track which players have already seen the bottle hint (cleared when they stop holding it)
+    private final java.util.Set<java.util.UUID> bottleHintShown = new java.util.HashSet<>();
+    private final java.util.Set<java.util.UUID> potionHintShown = new java.util.HashSet<>();
+
+    @SubscribeEvent
+    public void onPlayerTick(net.neoforged.neoforge.event.tick.PlayerTickEvent.Post event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (player.level().getGameTime() % 10 != 0) return;
+
+        java.util.UUID uuid = player.getUUID();
+        var held = player.getMainHandItem();
+
+        // Glass bottle hint for Clerics
+        if (held.is(net.minecraft.world.item.Items.GLASS_BOTTLE)) {
+            if (!bottleHintShown.contains(uuid)) {
+                var cm = com.mlkymc.MlkyMC.getClassManager();
+                if (cm != null && cm.getOrCreate(player).getChosenClass() == ClassType.CLERIC) {
+                    int cost = getBottleCost(cm.getOrCreate(player));
+                    player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                            "Crouch + RMB to bottle your experience (costs " + cost + " XP)")
+                            .withColor(0xAA55FF), true);
+                    bottleHintShown.add(uuid);
+                }
+            }
+            potionHintShown.remove(uuid);
+        }
+        // Potion hint for Cleric Lv20+ concoction brewing
+        else if (held.is(net.minecraft.world.item.Items.POTION)
+                || held.is(net.minecraft.world.item.Items.SPLASH_POTION)
+                || held.is(net.minecraft.world.item.Items.LINGERING_POTION)) {
+            if (!potionHintShown.contains(uuid)) {
+                var cm = com.mlkymc.MlkyMC.getClassManager();
+                if (cm != null) {
+                    var data = cm.getOrCreate(player);
+                    if (data.getChosenClass() == ClassType.CLERIC
+                            && data.getLevel(ProfessionType.CLERIC) >= 20) {
+                        player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                                "Crouch + RMB on a Brewing Stand to brew a Concoction")
+                                .withColor(0xAA55FF), true);
+                        potionHintShown.add(uuid);
+                    }
+                }
+            }
+            bottleHintShown.remove(uuid);
+        } else {
+            bottleHintShown.remove(uuid);
+            potionHintShown.remove(uuid);
+        }
+    }
+
     @SubscribeEvent
     public void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
@@ -51,17 +101,57 @@ public class ItemFunctionHandler {
 
         ItemStack held = player.getMainHandItem();
 
-        // Tome of the Soul Warden — open as a written book
-        if (held.is(ModItems.TOME_OF_THE_SOUL_WARDEN.get())
-                && held.has(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT)) {
-            // Create a temporary vanilla written book with the same content to open the book GUI
-            var content = held.get(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT);
-            var tempBook = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WRITTEN_BOOK);
-            tempBook.set(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT, content);
-            // Put it in the player's hand temporarily, open, then restore
-            player.setItemInHand(InteractionHand.MAIN_HAND, tempBook);
-            player.openItemGui(tempBook, InteractionHand.MAIN_HAND);
-            player.setItemInHand(InteractionHand.MAIN_HAND, held);
+        // Concoction is now handled by ConcoctionItem directly
+
+        // Cleric: Crouch + RMB with glass bottle → convert to Bottle o' Enchanting
+        // Base cost: 20 XP points. Scales with Cleric XP bonus (+20/40/60/80/100%)
+        if (player.isShiftKeyDown() && held.is(net.minecraft.world.item.Items.GLASS_BOTTLE)) {
+            var cm = com.mlkymc.MlkyMC.getClassManager();
+            if (cm != null) {
+                var data = cm.getOrCreate(player);
+                if (data.getChosenClass() == ClassType.CLERIC) {
+                    int cost = getBottleCost(data);
+
+                    // Check player has enough total XP points (levels + progress bar)
+                    int totalXp = getTotalXpPoints(player);
+                    if (totalXp < cost) {
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                                "Need " + cost + " XP points! (Have: " + totalXp + ")")
+                                .withColor(0xFF5555));
+                        event.setCanceled(true);
+                        return;
+                    }
+
+                    // Consume XP points and 1 glass bottle
+                    player.giveExperiencePoints(-cost);
+                    held.shrink(1);
+
+                    // Give 1 Bottle o' Enchanting
+                    var expBottle = new net.minecraft.world.item.ItemStack(
+                            net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, 1);
+                    if (!player.getInventory().add(expBottle)) {
+                        player.spawnAtLocation(
+                                (net.minecraft.server.level.ServerLevel) player.level(), expBottle);
+                    }
+
+                    // Sound + message
+                    if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                        sl.playSound(null, player.blockPosition(),
+                                net.minecraft.sounds.SoundEvents.BOTTLE_FILL,
+                                net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
+                    }
+                    player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                            "Bottled experience! (-" + cost + " XP)").withColor(0xAA55FF), true);
+
+                    event.setCanceled(true);
+                    return;
+                }
+            }
+        }
+
+        // Tome of the Soul Warden — open altar guide GUI on client
+        if (held.is(ModItems.TOME_OF_THE_SOUL_WARDEN.get())) {
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("[MLKYMC_OPEN_ALTAR_GUIDE]").withColor(0x000000));
             event.setCanceled(true);
             return;
         }
@@ -73,7 +163,7 @@ public class ItemFunctionHandler {
             return;
         }
 
-        // Ender Chest Backpack
+        // Ender Pouch
         if (held.is(ModItems.ENDER_POUCH.get())) {
             player.openMenu(new net.minecraft.world.SimpleMenuProvider(
                     (id, inv, p) -> net.minecraft.world.inventory.ChestMenu.threeRows(id, inv, player.getEnderChestInventory()),
@@ -181,22 +271,6 @@ public class ItemFunctionHandler {
             return;
         }
 
-        // Holy Water: throw like splash potion
-        if (held.is(ModItems.HOLY_WATER.get())) {
-            if (player.level() instanceof ServerLevel sl) {
-                // Throw a snowball entity that triggers holy water on impact
-                net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball projectile =
-                        new net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball(sl, player, held.copy());
-                projectile.shootFromRotation(player, player.getXRot(), player.getYRot(), 0.0f, 1.5f, 1.0f);
-                projectile.addTag("mlkymc_holy_water");
-                sl.addFreshEntity(projectile);
-
-                held.shrink(1);
-                sl.playSound(null, player.blockPosition(), SoundEvents.SPLASH_POTION_THROW, SoundSource.PLAYERS, 0.5f, 0.4f);
-            }
-            event.setCanceled(true);
-            return;
-        }
     }
 
     // =========================================================================
@@ -339,7 +413,9 @@ public class ItemFunctionHandler {
             new BlessingEntry(Enchantments.SHARPNESS, 4, 28),
             new BlessingEntry(Enchantments.SHARPNESS, 5, 40),
             new BlessingEntry(Enchantments.SMITE, 1, 3),
+            new BlessingEntry(Enchantments.SMITE, 2, 7),
             new BlessingEntry(Enchantments.SMITE, 3, 12),
+            new BlessingEntry(Enchantments.SMITE, 4, 20),
             new BlessingEntry(Enchantments.SMITE, 5, 30),
             new BlessingEntry(Enchantments.FIRE_ASPECT, 1, 8),
             new BlessingEntry(Enchantments.FIRE_ASPECT, 2, 18),
@@ -349,10 +425,13 @@ public class ItemFunctionHandler {
             new BlessingEntry(Enchantments.KNOCKBACK, 1, 5),
             new BlessingEntry(Enchantments.KNOCKBACK, 2, 12),
             new BlessingEntry(Enchantments.SWEEPING_EDGE, 1, 5),
+            new BlessingEntry(Enchantments.SWEEPING_EDGE, 2, 10),
             new BlessingEntry(Enchantments.SWEEPING_EDGE, 3, 18),
             // Tool enchants
             new BlessingEntry(Enchantments.EFFICIENCY, 1, 3),
+            new BlessingEntry(Enchantments.EFFICIENCY, 2, 7),
             new BlessingEntry(Enchantments.EFFICIENCY, 3, 12),
+            new BlessingEntry(Enchantments.EFFICIENCY, 4, 20),
             new BlessingEntry(Enchantments.EFFICIENCY, 5, 30),
             new BlessingEntry(Enchantments.FORTUNE, 1, 8),
             new BlessingEntry(Enchantments.FORTUNE, 2, 18),
@@ -363,7 +442,9 @@ public class ItemFunctionHandler {
             new BlessingEntry(Enchantments.UNBREAKING, 3, 22),
             // Bow enchants
             new BlessingEntry(Enchantments.POWER, 1, 5),
+            new BlessingEntry(Enchantments.POWER, 2, 10),
             new BlessingEntry(Enchantments.POWER, 3, 15),
+            new BlessingEntry(Enchantments.POWER, 4, 25),
             new BlessingEntry(Enchantments.POWER, 5, 35),
             new BlessingEntry(Enchantments.PUNCH, 1, 5),
             new BlessingEntry(Enchantments.PUNCH, 2, 12),
@@ -371,20 +452,29 @@ public class ItemFunctionHandler {
             new BlessingEntry(Enchantments.INFINITY, 1, 25),
             // Armor enchants
             new BlessingEntry(Enchantments.THORNS, 1, 8),
+            new BlessingEntry(Enchantments.THORNS, 2, 16),
             new BlessingEntry(Enchantments.THORNS, 3, 25),
             new BlessingEntry(Enchantments.FEATHER_FALLING, 1, 5),
+            new BlessingEntry(Enchantments.FEATHER_FALLING, 2, 10),
+            new BlessingEntry(Enchantments.FEATHER_FALLING, 3, 16),
             new BlessingEntry(Enchantments.FEATHER_FALLING, 4, 22),
             new BlessingEntry(Enchantments.RESPIRATION, 1, 8),
+            new BlessingEntry(Enchantments.RESPIRATION, 2, 15),
             new BlessingEntry(Enchantments.RESPIRATION, 3, 22),
             new BlessingEntry(Enchantments.AQUA_AFFINITY, 1, 10),
             new BlessingEntry(Enchantments.DEPTH_STRIDER, 1, 8),
+            new BlessingEntry(Enchantments.DEPTH_STRIDER, 2, 15),
             new BlessingEntry(Enchantments.DEPTH_STRIDER, 3, 22),
             // Utility
             new BlessingEntry(Enchantments.MENDING, 1, 35),
 
             // mlkyMC custom enchantments
             new BlessingEntry(ResourceKey.create(Registries.ENCHANTMENT,
-                    net.minecraft.resources.Identifier.fromNamespaceAndPath("mlkymc", "wind_burst")), 1, 15),
+                    net.minecraft.resources.Identifier.fromNamespaceAndPath("mlkymc", "wind_burst")), 1, 10),
+            new BlessingEntry(ResourceKey.create(Registries.ENCHANTMENT,
+                    net.minecraft.resources.Identifier.fromNamespaceAndPath("mlkymc", "wind_burst")), 2, 13),
+            new BlessingEntry(ResourceKey.create(Registries.ENCHANTMENT,
+                    net.minecraft.resources.Identifier.fromNamespaceAndPath("mlkymc", "wind_burst")), 3, 15),
             new BlessingEntry(ResourceKey.create(Registries.ENCHANTMENT,
                     net.minecraft.resources.Identifier.fromNamespaceAndPath("mlkymc", "adaptive")), 1, 30)
     );
@@ -619,50 +709,45 @@ public class ItemFunctionHandler {
     }
 
     // =========================================================================
-    // HOLY WATER IMPACT — triggered when the thrown snowball with tag lands
-    // =========================================================================
+    // (Holy Water removed — replaced by Concoction system)
 
-    @SubscribeEvent
-    public void onProjectileImpact(net.neoforged.neoforge.event.entity.ProjectileImpactEvent event) {
-        if (event.getEntity().level().isClientSide()) return;
-        if (!event.getEntity().getTags().contains("mlkymc_holy_water")) return;
-        if (!(event.getEntity().level() instanceof ServerLevel sl)) return;
+    /**
+     * Calculate the XP point cost for bottling experience.
+     * Base: 20 XP points. Scales with Cleric XP bonus.
+     * Lv0: 20, Lv5: 24, Lv15: 28, Lv25: 32, Lv35: 36, Lv45: 40
+     */
+    private static int getBottleCost(ClassData data) {
+        int clericLevel = data.getLevel(ProfessionType.CLERIC);
+        double bonus;
+        if (clericLevel >= 45) bonus = 1.0;
+        else if (clericLevel >= 35) bonus = 0.8;
+        else if (clericLevel >= 25) bonus = 0.6;
+        else if (clericLevel >= 15) bonus = 0.4;
+        else if (clericLevel >= 5) bonus = 0.2;
+        else bonus = 0.0;
 
-        var impactPos = event.getEntity().position();
-        double radius = 8.0;
+        return (int) (20 * (1.0 + bonus));
+    }
 
-        // Damage undead mobs only
-        for (var mob : sl.getEntitiesOfClass(net.minecraft.world.entity.monster.Monster.class,
-                event.getEntity().getBoundingBox().inflate(radius))) {
-            if (mob.isInvertedHealAndHarm()) {
-                // Undead mobs (zombies, skeletons, wither, phantoms, etc.)
-                mob.hurtServer(sl, sl.damageSources().magic(), 40.0f);
-            }
+    /**
+     * Calculate total XP points from a player's level + progress bar.
+     * Uses the vanilla Minecraft XP formula.
+     */
+    private static int getTotalXpPoints(ServerPlayer player) {
+        int level = player.experienceLevel;
+        float progress = player.experienceProgress;
+
+        int total;
+        if (level <= 16) {
+            total = (int) (level * level + 6 * level);
+        } else if (level <= 31) {
+            total = (int) (2.5 * level * level - 40.5 * level + 360);
+        } else {
+            total = (int) (4.5 * level * level - 162.5 * level + 2220);
         }
 
-        // Heal + invulnerability for all nearby players (skip PvP-tagged except thrower)
-        java.util.UUID throwerUUID = null;
-        if (event.getEntity() instanceof net.minecraft.world.entity.projectile.Projectile proj && proj.getOwner() instanceof ServerPlayer sp) {
-            throwerUUID = sp.getUUID();
-        }
-        for (var nearby : sl.getEntitiesOfClass(ServerPlayer.class,
-                event.getEntity().getBoundingBox().inflate(radius))) {
-            if (throwerUUID != null && !nearby.getUUID().equals(throwerUUID)
-                    && com.mlkymc.pvp.PvPTagManager.isPvPTagged(nearby.getUUID())) continue;
-            nearby.heal(nearby.getMaxHealth());
-            nearby.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                    net.minecraft.world.effect.MobEffects.ABSORPTION, 400, 4, false, true, true));
-            nearby.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                    "Holy Water: Full heal + shield!").withColor(0xFFFFAA));
-        }
-
-        // Particles + sound at impact
-        sl.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD,
-                impactPos.x, impactPos.y, impactPos.z, 30, 2.0, 1.0, 2.0, 0.1);
-        sl.playSound(null, net.minecraft.core.BlockPos.containing(impactPos),
-                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.5f, 1.5f);
-
-        // Remove the projectile
-        event.getEntity().discard();
+        // Add progress within current level
+        total += Math.round(progress * player.getXpNeededForNextLevel());
+        return total;
     }
 }

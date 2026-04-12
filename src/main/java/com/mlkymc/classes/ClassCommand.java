@@ -94,7 +94,7 @@ public class ClassCommand {
                                                             int amount = IntegerArgumentType.getInteger(ctx, "amount");
                                                             try {
                                                                 ProfessionType prof = ProfessionType.valueOf(profName);
-                                                                classManager.addXp(target, prof, amount);
+                                                                classManager.addXpRaw(target, prof, amount);
                                                                 ctx.getSource().sendSuccess(() -> Component.literal(
                                                                         "Added " + amount + " XP to " + target.getName().getString() + "'s " + prof.getDisplayName()), true);
                                                             } catch (IllegalArgumentException e) {
@@ -179,7 +179,84 @@ public class ClassCommand {
                                     }
                                     return 1;
                                 })))
+                // /mlkymc xpdebug — toggle XP debug mode (OP only)
+                .then(Commands.literal("xpdebug")
+                        .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
+                        .executes(ctx -> {
+                            ServerPlayer player = ctx.getSource().getPlayerOrException();
+                            boolean enabled = classManager.toggleXpDebug(player.getUUID());
+                            player.sendSystemMessage(Component.literal("XP Debug mode: " + (enabled ? "ON" : "OFF"))
+                                    .withColor(enabled ? 0x55FF55 : 0xFF5555));
+                            return 1;
+                        }))
+                // /mlkymc scale <up|down|reset> — change nearest player scale
+                // Requires OP or command block (command blocks have permission level 2+)
+                .then(Commands.literal("scale")
+                        .requires(src -> src.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)
+                                || !(src.getEntity() instanceof ServerPlayer))
+                        .then(Commands.literal("up")
+                                .executes(ctx -> scalePlayer(ctx.getSource(), 0.1)))
+                        .then(Commands.literal("down")
+                                .executes(ctx -> scalePlayer(ctx.getSource(), -0.1)))
+                        .then(Commands.literal("reset")
+                                .executes(ctx -> scalePlayer(ctx.getSource(), 0.0))))
+                // /mlkymc guide — give (or re-give) the mlkyMC Guidebook
+                .then(Commands.literal("guide")
+                        .executes(ctx -> {
+                            ServerPlayer player = ctx.getSource().getPlayerOrException();
+                            com.mlkymc.guide.GuidebookHelper.giveGuidebook(player);
+                            ctx.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal(
+                                    "mlkyMC Guidebook given!").withColor(0x55FF55), false);
+                            return 1;
+                        }))
         );
+    }
+
+    private int scalePlayer(CommandSourceStack source, double delta) {
+        // Find nearest player to command source position
+        ServerPlayer target = null;
+        if (source.getEntity() instanceof ServerPlayer sp) {
+            target = sp;
+        } else {
+            // Command block: find nearest player
+            double closest = Double.MAX_VALUE;
+            for (var p : source.getServer().getPlayerList().getPlayers()) {
+                if (p.level().dimension().equals(source.getLevel().dimension())) {
+                    double dist = p.distanceToSqr(source.getPosition());
+                    if (dist < closest) {
+                        closest = dist;
+                        target = p;
+                    }
+                }
+            }
+        }
+        if (target == null) {
+            source.sendFailure(Component.literal("No player found nearby."));
+            return 0;
+        }
+
+        var scaleAttr = target.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
+        if (scaleAttr == null) return 0;
+
+        double current = scaleAttr.getBaseValue();
+
+        if (delta == 0.0) {
+            // Reset
+            scaleAttr.setBaseValue(1.0);
+            target.sendSystemMessage(Component.literal("Scale reset to normal.").withColor(0x55FF55));
+        } else {
+            double newScale = Math.round((current + delta) * 10.0) / 10.0; // avoid float drift
+            newScale = Math.max(0.7, Math.min(1.5, newScale));
+            if (newScale == current) {
+                target.sendSystemMessage(Component.literal("Scale limit reached! ("
+                        + String.format("%.1f", current) + ")").withColor(0xFF5555));
+                return 0;
+            }
+            scaleAttr.setBaseValue(newScale);
+            target.sendSystemMessage(Component.literal("Scale: " + String.format("%.1f", newScale))
+                    .withColor(0xFFAA00));
+        }
+        return 1;
     }
 
     private void showClassInfo(ServerPlayer viewer, ServerPlayer target) {
@@ -214,22 +291,6 @@ public class ClassCommand {
     }
 
     private void setLevel(ClassData data, ProfessionType prof, int targetLevel) {
-        // Reset XP and set level directly via addXp from 0
-        // We need to manipulate via serialize/deserialize workaround
-        // For simplicity, just add massive XP from current state
-        int currentLevel = data.getLevel(prof);
-        if (targetLevel <= currentLevel) {
-            // Can't reduce level via this method - would need data reset
-            return;
-        }
-        // Calculate total XP needed from current to target
-        int xpNeeded = 0;
-        for (int i = currentLevel; i < targetLevel; i++) {
-            xpNeeded += ProfessionType.xpForLevel(i);
-        }
-        xpNeeded -= data.getXp(prof); // subtract current partial XP
-        if (xpNeeded > 0) {
-            data.addXp(prof, xpNeeded);
-        }
+        data.setLevel(prof, targetLevel);
     }
 }

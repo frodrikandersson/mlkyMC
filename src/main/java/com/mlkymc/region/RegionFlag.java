@@ -11,7 +11,9 @@ public enum RegionFlag {
     NO_FALL_DAMAGE("no-fall-damage", "Prevent fall damage"),
     NO_FIRE_SPREAD("no-fire-spread", "Prevent fire spread"),
     NO_ITEM_DROP("no-item-drop", "Prevent item dropping"),
-    NO_ITEM_PICKUP("no-item-pickup", "Prevent item pickup");
+    NO_ITEM_PICKUP("no-item-pickup", "Prevent item pickup"),
+    NO_SIGN_EDIT("no-sign-edit", "Prevent writing on signs"),
+    NO_ITEM_FRAME("no-item-frame", "Prevent taking items from item frames");
 
     private final String id;
     private final String description;

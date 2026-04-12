@@ -38,9 +38,9 @@ public class GraveData {
     }
 
     /**
-     * Can a Cleric resurrect from this grave cheaply? (within 60 seconds = 1200 ticks)
+     * Can a Cleric resurrect from this grave cheaply? (within 5 minutes = 6000 ticks)
      */
     public boolean isWithinResurrectionWindow(long currentTime) {
-        return currentTime - deathTime <= 1200;
+        return currentTime - deathTime <= 6000;
     }
 }

@@ -6,15 +6,9 @@
     "MMM"
   ],
   "key": {
-    "M": {
-      "item": "mlkymc:milky_star"
-    },
-    "P": {
-      "item": "minecraft:paper"
-    },
-    "L": {
-      "item": "minecraft:lapis_block"
-    }
+    "M": "mlkymc:milky_star",
+    "P": "minecraft:paper",
+    "L": "minecraft:lapis_block"
   },
   "result": {
     "id": "mlkymc:blessing_scroll",

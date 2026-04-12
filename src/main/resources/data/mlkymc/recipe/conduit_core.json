@@ -6,15 +6,9 @@
     "CBC"
   ],
   "key": {
-    "C": {
-      "item": "minecraft:crying_obsidian"
-    },
-    "B": {
-      "item": "mlkymc:soulstone_brick"
-    },
-    "A": {
-      "item": "minecraft:amethyst_block"
-    }
+    "C": "minecraft:crying_obsidian",
+    "B": "mlkymc:soulstone_brick",
+    "A": "minecraft:amethyst_block"
   },
   "result": {
     "id": "mlkymc:conduit_core",

@@ -14,6 +14,8 @@ import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
 public class SpectralEnergyHud {
 
     private static int spectralEnergy = -1; // -1 = not a ghost
+    private static String nearestClericCoords = null; // "X, Y, Z" or null
+    private static int nearestClericDist = 0;
 
     @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.HIGHEST)
     public void onChatReceived(ClientChatReceivedEvent event) {
@@ -53,10 +55,30 @@ public class SpectralEnergyHud {
             event.setCanceled(true);
         }
         // REVIVED check moved to top of method (runs before cancel check)
+
+        if (msg.startsWith("[MLKYMC_CLERIC_POS:") && msg.endsWith("]")) {
+            String content = msg.substring(19, msg.length() - 1);
+            if (content.equals("NONE")) {
+                nearestClericCoords = null;
+                nearestClericDist = 0;
+            } else {
+                // Format: X/Y/Z:dist
+                String[] parts2 = content.split(":");
+                if (parts2.length >= 2) {
+                    String[] xyz = parts2[0].split("/");
+                    if (xyz.length == 3) {
+                        nearestClericCoords = xyz[0] + ", " + xyz[1] + ", " + xyz[2];
+                        try { nearestClericDist = Integer.parseInt(parts2[1]); } catch (NumberFormatException ignored) {}
+                    }
+                }
+            }
+            event.setCanceled(true);
+        }
     }
 
     @SubscribeEvent
     public void onRenderHud(RenderGuiLayerEvent.Post event) {
+        if (net.minecraft.client.Minecraft.getInstance().options.hideGui) return;
         if (spectralEnergy < 0) return;
 
         Minecraft mc = Minecraft.getInstance();
@@ -98,7 +120,12 @@ public class SpectralEnergyHud {
         int textY = barY + (barHeight - 8) / 2; // 8 = font height, center vertically
         g.drawString(mc.font, text, (screenW - textW) / 2, textY, 0xFFFFFFFF, true);
 
-        // Ability indicators removed — clutters the HUD
+        // Nearest Cleric coordinates (purple text above hearts/food bar)
+        if (nearestClericCoords != null) {
+            String clericText = "Nearest Cleric: " + nearestClericCoords + " (" + nearestClericDist + "m)";
+            int clericW = mc.font.width(clericText);
+            g.drawString(mc.font, clericText, (screenW - clericW) / 2, screenH - 52, 0xFFBB77FF, true);
+        }
     }
 
     public static boolean isGhost() {
@@ -107,5 +134,7 @@ public class SpectralEnergyHud {
 
     public static void reset() {
         spectralEnergy = -1;
+        nearestClericCoords = null;
+        nearestClericDist = 0;
     }
 }

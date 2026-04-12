@@ -57,7 +57,7 @@ public class SmithGambleHandler {
                 new AttributeRange("jump", 0.02, 0.15, true, false),
                 new AttributeRange("entity_reach", 0.5, 2.0, false, true),
                 new AttributeRange("mining_speed", 0.5, 3.0, false, true),
-                new AttributeRange("speed", 0.01, 0.06, true, false)
+                new AttributeRange("speed", 0.001, 0.01, true, false)
         ));
 
         // DIAMOND (6 attributes — 5 armor, 1 tool, 1 shared)
@@ -81,10 +81,10 @@ public class SmithGambleHandler {
      * Get the ingredient tier for an item, or null if not a valid gamble ingredient.
      */
     public static IngredientTier getTier(Item item) {
-        if (item == Items.COPPER_INGOT) return IngredientTier.COPPER;
-        if (item == Items.IRON_INGOT) return IngredientTier.IRON;
-        if (item == Items.GOLD_INGOT) return IngredientTier.GOLD;
-        if (item == Items.DIAMOND) return IngredientTier.DIAMOND;
+        if (item == com.mlkymc.registry.ModItems.WAYSTONE_SHARD.get()) return IngredientTier.COPPER;
+        if (item == com.mlkymc.registry.ModItems.BLESSED_EMBER.get()) return IngredientTier.IRON;
+        if (item == com.mlkymc.registry.ModItems.LIVING_ESSENCE.get()) return IngredientTier.GOLD;
+        if (item == com.mlkymc.registry.ModItems.RESONANT_CORE.get()) return IngredientTier.DIAMOND;
         if (item == Items.NETHERITE_INGOT) return IngredientTier.NETHERITE;
         return null;
     }
@@ -257,6 +257,10 @@ public class SmithGambleHandler {
     /**
      * Roll a value with steep curve: 60% low, 25% medium, 12% good, 3% max.
      */
+    public static double rollSteepCurvePublic(double min, double max, Random random) {
+        return rollSteepCurve(min, max, random);
+    }
+
     private static double rollSteepCurve(double min, double max, Random random) {
         double range = max - min;
         double roll = random.nextDouble();
@@ -277,8 +281,8 @@ public class SmithGambleHandler {
         }
 
         double value = min + range * t;
-        // Round to 2 decimal places
-        return Math.round(value * 100.0) / 100.0;
+        // Round to 3 decimal places
+        return Math.round(value * 1000.0) / 1000.0;
     }
 
     // =========================================================================
@@ -314,6 +318,10 @@ public class SmithGambleHandler {
         return result;
     }
 
+    public static void writeGambleDataPublic(ItemStack stack, Map<String, GambleEntry> data) {
+        writeGambleData(stack, data);
+    }
+
     private static void writeGambleData(ItemStack stack, Map<String, GambleEntry> data) {
         CompoundTag gambleTag = new CompoundTag();
         for (var entry : data.entrySet()) {
@@ -329,6 +337,10 @@ public class SmithGambleHandler {
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(nbt));
     }
 
+    public static void updateLorePublic(ItemStack equipment, Map<String, GambleEntry> data) {
+        updateLore(equipment, data);
+    }
+
     private static void updateLore(ItemStack equipment, Map<String, GambleEntry> data) {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.literal("Smith Forged:").withColor(0xFFAA00));
@@ -337,15 +349,26 @@ public class SmithGambleHandler {
             lore.add(Component.literal("  " + display).withColor(0xFFDD55));
         }
 
-        // Merge with existing non-gamble lore
+        // Merge with existing non-gamble lore. Strip Smith gamble lines (we just
+        // rebuilt them above) but preserve Fletcher Modifier lines and any other
+        // non-Smith lore (e.g. Farmhand Enhanced, enchantment descriptions, etc.).
         ItemLore existingLore = equipment.get(DataComponents.LORE);
         List<Component> finalLore = new ArrayList<>(lore);
         if (existingLore != null) {
             for (Component line : existingLore.lines()) {
                 String text = line.getString();
-                if (!text.startsWith("Smith Forged") && !text.startsWith("  +") && !text.startsWith("  -")) {
+                // Always keep Fletcher Modifier lines (they'd otherwise be caught by
+                // the "  +" prefix filter since they start with "Fletcher Modifier: +")
+                if (text.startsWith("Fletcher Modifier")) {
                     finalLore.add(line);
+                    continue;
                 }
+                // Strip Smith gamble lines (already rebuilt above)
+                if (text.startsWith("Smith Forged") || text.startsWith("  +") || text.startsWith("  -")
+                        || text.contains("???")) {
+                    continue;
+                }
+                finalLore.add(line);
             }
         }
         equipment.set(DataComponents.LORE, new ItemLore(finalLore));
@@ -354,6 +377,10 @@ public class SmithGambleHandler {
     // =========================================================================
     // Helpers
     // =========================================================================
+
+    public static AttributeRange findRangeForAttrPublic(String attrName) {
+        return findRangeForAttr(attrName);
+    }
 
     private static AttributeRange findRangeForAttr(String attrName) {
         for (var pool : ATTRIBUTE_POOLS.values()) {
@@ -369,7 +396,8 @@ public class SmithGambleHandler {
         name = name.substring(0, 1).toUpperCase() + name.substring(1);
         // Format with sign
         String sign = value >= 0 ? "+" : "";
-        return sign + String.format("%.2f", value) + " " + name;
+        String num = String.format("%.3f", value).replaceAll("0+$", "").replaceAll("\\.$", ".0");
+        return sign + num + " " + name;
     }
 
     /**

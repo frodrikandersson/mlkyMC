@@ -6,8 +6,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -44,10 +46,9 @@ public class CraftRestrictionHandler {
         // Cleric crafts
         restrict(ModItems.BLESSED_EMBER, ClassType.CLERIC);
         restrict(ModItems.TOTEM_OF_RESURRECTION, ClassType.CLERIC);
-        restrict(ModItems.HOLY_WATER, ClassType.CLERIC);
         restrict(ModItems.BLESSING_SCROLL, ClassType.CLERIC);
         restrictVanilla(net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE, ClassType.CLERIC);
-        restrictVanilla(net.minecraft.world.item.Items.EXPERIENCE_BOTTLE, ClassType.CLERIC);
+        // Bottle o' Enchanting: no longer craftable — Cleric converts via crouch+RMB
         restrict(ModItems.TOME_OF_THE_SOUL_WARDEN, ClassType.CLERIC);
         restrictBlock(ModBlocks.SOULSTONE_BRICK_ITEM, ClassType.CLERIC);
         restrictBlock(ModBlocks.SOUL_PILLAR_ITEM, ClassType.CLERIC);
@@ -131,22 +132,138 @@ public class CraftRestrictionHandler {
         restrictedItems.put(item, requiredClass);
     }
 
-    @SubscribeEvent
+    /**
+     * Per-player pending refund state. Collected during ItemCraftedEvent, drained in
+     * ServerTickEvent.Post — we cannot use server.execute() to defer, because when
+     * called from the server thread (which packet handling is) it runs synchronously,
+     * which would restore the matrix BEFORE vanilla's shrink loop inside ResultSlot.onTake.
+     */
+    private static final class PendingRefund {
+        final ServerPlayer player;
+        final Item restrictedItem;
+        final int allowedCount;
+        final net.minecraft.world.Container matrix;
+        final java.util.List<ItemStack> snapshot;
+        PendingRefund(ServerPlayer player, Item restrictedItem, int allowedCount,
+                      net.minecraft.world.Container matrix, java.util.List<ItemStack> snapshot) {
+            this.player = player;
+            this.restrictedItem = restrictedItem;
+            this.allowedCount = allowedCount;
+            this.matrix = matrix;
+            this.snapshot = snapshot;
+        }
+    }
+
+    private final Map<java.util.UUID, PendingRefund> pendingRefunds = new HashMap<>();
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onItemCrafted(PlayerEvent.ItemCraftedEvent event) {
         ensureInitialized();
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
         ItemStack result = event.getCrafting();
         ClassType required = restrictedItems.get(result.getItem());
-        if (required == null) return; // Not a restricted item
+        if (required == null) return;
 
         ClassData data = classManager.getOrCreate(player);
-        if (data.getChosenClass() == required) return; // Correct class, allow
+        if (data.getChosenClass() == required) return;
 
-        // Wrong class — void the craft
+        Item restrictedItem = result.getItem();
+        net.minecraft.world.Container matrix = event.getInventory();
+
+        // On first violation this tick, snapshot the pristine pre-shrink matrix state
+        // and record the player's legitimate item count. Subsequent craft events from the
+        // same shift-click batch piggyback on this snapshot.
+        if (!pendingRefunds.containsKey(player.getUUID())) {
+            int existing = countItem(player, restrictedItem);
+            // Subtract the result count since shift-click may already have placed it in inventory
+            int allowed = Math.max(0, existing - result.getCount());
+
+            java.util.List<ItemStack> snapshot = new java.util.ArrayList<>(matrix.getContainerSize());
+            for (int i = 0; i < matrix.getContainerSize(); i++) {
+                snapshot.add(matrix.getItem(i).copy());
+            }
+            pendingRefunds.put(player.getUUID(),
+                    new PendingRefund(player, restrictedItem, allowed, matrix, snapshot));
+
+            player.sendSystemMessage(Component.literal("Only " + required.getDisplayName() + " class can craft this!")
+                    .withColor(0xFF5555));
+        }
+
+        // Void this specific craft result so nothing ends up in the cursor/inventory
         result.setCount(0);
-        player.sendSystemMessage(Component.literal("Only " + required.getDisplayName() + " class can craft this!")
-                .withColor(0xFF5555));
+    }
+
+    /**
+     * Drain pending refunds at end of tick — guaranteed to run after all packet handling
+     * (and therefore after vanilla's shrink loop inside ResultSlot.onTake).
+     */
+    @SubscribeEvent
+    public void onServerTickPost(ServerTickEvent.Post event) {
+        if (pendingRefunds.isEmpty()) return;
+        for (PendingRefund pr : pendingRefunds.values()) {
+            ServerPlayer player = pr.player;
+            // Trim any crafted items that leaked into inventory/cursor (shift-click path)
+            trimItemToCount(player, pr.restrictedItem, pr.allowedCount);
+            // Restore the crafting matrix to its pre-craft contents
+            net.minecraft.world.Container mtx = pr.matrix;
+            java.util.List<ItemStack> snap = pr.snapshot;
+            if (mtx != null && snap != null) {
+                for (int i = 0; i < mtx.getContainerSize() && i < snap.size(); i++) {
+                    mtx.setItem(i, snap.get(i));
+                }
+                if (player.containerMenu != null) {
+                    player.containerMenu.slotsChanged(mtx);
+                    player.containerMenu.broadcastChanges();
+                }
+            }
+        }
+        pendingRefunds.clear();
+    }
+
+    private int countItem(ServerPlayer player, Item item) {
+        int count = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack slot = player.getInventory().getItem(i);
+            if (slot.is(item)) count += slot.getCount();
+        }
+        if (player.containerMenu != null && player.containerMenu.getCarried().is(item)) {
+            count += player.containerMenu.getCarried().getCount();
+        }
+        return count;
+    }
+
+    private void trimItemToCount(ServerPlayer player, Item item, int allowedCount) {
+        int remaining = allowedCount;
+
+        // Keep up to allowedCount, remove the rest
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack slot = player.getInventory().getItem(i);
+            if (slot.is(item)) {
+                if (remaining >= slot.getCount()) {
+                    remaining -= slot.getCount();
+                } else {
+                    slot.setCount(remaining);
+                    if (remaining == 0) player.getInventory().setItem(i, ItemStack.EMPTY);
+                    remaining = 0;
+                }
+            }
+        }
+        // Check cursor
+        if (player.containerMenu != null) {
+            ItemStack carried = player.containerMenu.getCarried();
+            if (carried.is(item)) {
+                if (remaining >= carried.getCount()) {
+                    remaining -= carried.getCount();
+                } else {
+                    carried.setCount(remaining);
+                    if (remaining == 0) player.containerMenu.setCarried(ItemStack.EMPTY);
+                    remaining = 0;
+                }
+            }
+            player.containerMenu.broadcastChanges();
+        }
+        player.inventoryMenu.broadcastChanges();
     }
 
     /**
@@ -167,23 +284,6 @@ public class CraftRestrictionHandler {
     }
 
     /**
-     * Apply built-in enchantments to reinforced tools when crafted.
+     * (Reinforced tool enchantment auto-apply removed — tools no longer get Unbreaking III + Efficiency IV)
      */
-    @SubscribeEvent
-    public void onReinforcedToolCrafted(PlayerEvent.ItemCraftedEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        ItemStack result = event.getCrafting();
-
-        if (result.is(ModItems.REINFORCED_PICKAXE.get()) || result.is(ModItems.REINFORCED_AXE.get())) {
-            var registry = player.level().registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
-
-            // Unbreaking III
-            registry.get(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING)
-                    .ifPresent(h -> result.enchant(h, 3));
-
-            // Efficiency IV
-            registry.get(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY)
-                    .ifPresent(h -> result.enchant(h, 4));
-        }
-    }
 }

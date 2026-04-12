@@ -6,12 +6,8 @@
     " G "
   ],
   "key": {
-    "G": {
-      "item": "minecraft:glass"
-    },
-    "N": {
-      "item": "minecraft:gold_nugget"
-    }
+    "G": "minecraft:glass",
+    "N": "minecraft:gold_nugget"
   },
   "result": {
     "id": "mlkymc:milky_star_jar_empty",

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "WQW",
+    "QAQ",
+    "WQW"
+  ],
+  "key": {
+    "W": "minecraft:red_wool",
+    "Q": "minecraft:quartz",
+    "A": "minecraft:amethyst_shard"
+  },
+  "result": {
+    "id": "mlkymc:speaker",
+    "count": 1
+  }
+}

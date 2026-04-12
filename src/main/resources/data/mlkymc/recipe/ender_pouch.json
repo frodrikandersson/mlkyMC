@@ -6,15 +6,9 @@
     "LML"
   ],
   "key": {
-    "L": {
-      "item": "minecraft:leather"
-    },
-    "C": {
-      "item": "minecraft:ender_chest"
-    },
-    "M": {
-      "item": "mlkymc:milky_star"
-    }
+    "L": "minecraft:leather",
+    "C": "minecraft:ender_chest",
+    "M": "mlkymc:milky_star"
   },
   "result": {
     "id": "mlkymc:ender_pouch",

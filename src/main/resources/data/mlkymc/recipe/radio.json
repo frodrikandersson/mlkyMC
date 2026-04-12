@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "WAW",
+    "ICI",
+    "WIW"
+  ],
+  "key": {
+    "W": "#minecraft:planks",
+    "A": "minecraft:amethyst_shard",
+    "C": "minecraft:comparator",
+    "I": "minecraft:iron_ingot"
+  },
+  "result": {
+    "id": "mlkymc:radio",
+    "count": 1
+  }
+}

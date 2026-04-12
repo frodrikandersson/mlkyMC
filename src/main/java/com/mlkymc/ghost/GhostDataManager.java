@@ -33,9 +33,9 @@ public class GhostDataManager {
     // SE gain rates (per minute, checked every second)
     private static final net.minecraft.resources.Identifier MIMIC_FLIGHT_ID =
             net.minecraft.resources.Identifier.fromNamespaceAndPath("mlkymc", "mimic_bat_flight");
-    private static final int BASE_GAIN_PER_MIN = 1;
-    private static final int NEAR_PLAYER_GAIN_PER_MIN = 3;
-    private static final int NEAR_COMBAT_GAIN_PER_MIN = 5;
+    private static final int BASE_GAIN_PER_MIN = 30;
+    private static final int NEAR_PLAYER_GAIN_PER_MIN = 90;
+    private static final int NEAR_COMBAT_GAIN_PER_MIN = 150;
     private static final int HAUNT_COST_PER_MIN = 5;
 
     private long lastSaveMs = 0;
@@ -229,9 +229,37 @@ public class GhostDataManager {
      * Uses per-player entity data packets so only the ghost sees the glow,
      * not other living players.
      */
+    private long lastPositionSaveTick = 0;
+
+    /**
+     * Periodically save ghost positions for crash recovery.
+     * Called every 20 ticks (1 second). Saves every 60 seconds.
+     */
+    public void tickPositionSave(MinecraftServer server) {
+        long gameTime = server.overworld().getGameTime();
+        if (gameTime - lastPositionSaveTick < 1200) return; // every 60 seconds
+        lastPositionSaveTick = gameTime;
+
+        var ghostManager = MlkyMC.getGhostManager();
+        if (ghostManager == null) return;
+
+        boolean dirty = false;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (!ghostManager.isGhost(player.getUUID())) continue;
+            GhostData data = getOrCreate(player.getUUID());
+            data.logoutX = player.getX();
+            data.logoutY = player.getY();
+            data.logoutZ = player.getZ();
+            data.logoutDimension = player.level().dimension().identifier().toString();
+            dirty = true;
+        }
+        if (dirty) save();
+    }
+
     public void tickSpectralVision(MinecraftServer server) {
         var ghostManager = MlkyMC.getGhostManager();
         if (ghostManager == null) return;
+        var classManager = MlkyMC.getClassManager();
 
         for (ServerPlayer ghostPlayer : server.getPlayerList().getPlayers()) {
             if (!ghostManager.isGhost(ghostPlayer.getUUID())) continue;
@@ -241,9 +269,44 @@ public class GhostDataManager {
                     ghostPlayer.getBoundingBox().inflate(30));
             for (var entity : nearbyEntities) {
                 if (entity == ghostPlayer) continue;
-                // Send fake glowing data only to the ghost's client
                 sendFakeGlowing(ghostPlayer, entity);
             }
+
+            // Send nearest Cleric coordinates to ghost via skill sync
+            sendNearestClericCoords(ghostPlayer, server, classManager);
+        }
+    }
+
+    /**
+     * Sends the nearest Cleric's coordinates to a ghost player via chat sync.
+     */
+    private void sendNearestClericCoords(ServerPlayer ghost, MinecraftServer server,
+                                          com.mlkymc.classes.ClassManager classManager) {
+        if (classManager == null) return;
+
+        ServerPlayer nearestCleric = null;
+        double nearestDist = Double.MAX_VALUE;
+
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player == ghost) continue;
+            if (player.level() != ghost.level()) continue; // same dimension only
+            var data = classManager.getOrCreate(player);
+            if (data.getChosenClass() != com.mlkymc.classes.ClassType.CLERIC) continue;
+
+            double dist = ghost.distanceToSqr(player);
+            if (dist < nearestDist) {
+                nearestDist = dist;
+                nearestCleric = player;
+            }
+        }
+
+        if (nearestCleric != null) {
+            var pos = nearestCleric.blockPosition();
+            int dist = (int) Math.sqrt(nearestDist);
+            String msg = "[MLKYMC_CLERIC_POS:" + pos.getX() + "/" + pos.getY() + "/" + pos.getZ() + ":" + dist + "]";
+            ghost.sendSystemMessage(net.minecraft.network.chat.Component.literal(msg).withColor(0x000000));
+        } else {
+            ghost.sendSystemMessage(net.minecraft.network.chat.Component.literal("[MLKYMC_CLERIC_POS:NONE]").withColor(0x000000));
         }
     }
 
@@ -266,20 +329,103 @@ public class GhostDataManager {
     }
 
     private void sendFakeGlowing(ServerPlayer viewer, net.minecraft.world.entity.LivingEntity target) {
+        sendFakeGlowing(viewer, target, false);
+    }
+
+    /**
+     * @param removeInvisible if true, clears the invisible flag so the viewer can see the entity
+     */
+    private void sendFakeGlowing(ServerPlayer viewer, net.minecraft.world.entity.LivingEntity target, boolean removeInvisible) {
         if (SHARED_FLAGS_ACCESSOR == null) return;
         try {
             byte currentFlags = target.getEntityData().get(SHARED_FLAGS_ACCESSOR);
-            byte glowingFlags = (byte) (currentFlags | 0x40); // Set glowing bit
+            byte modifiedFlags = (byte) (currentFlags | 0x40); // Set glowing bit
+            if (removeInvisible) {
+                modifiedFlags = (byte) (modifiedFlags & ~0x20); // Clear invisible bit
+            }
 
             var packedItems = new java.util.ArrayList<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>>();
             packedItems.add(net.minecraft.network.syncher.SynchedEntityData.DataValue.create(
-                    SHARED_FLAGS_ACCESSOR, glowingFlags));
+                    SHARED_FLAGS_ACCESSOR, modifiedFlags));
 
             var packet = new net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket(
                     target.getId(), packedItems);
             viewer.connection.send(packet);
         } catch (Exception e) {
             // Silently fail — non-critical visual feature
+        }
+    }
+
+    /**
+     * Cleric Ghost Vision: Clerics see soul particles at ghost positions.
+     * Green particles = ghost connected to this Cleric's soul altar.
+     * Blue/white particles = other ghosts.
+     * Particles are sent only to the Cleric's client.
+     * Called every 5 ticks.
+     */
+    public void tickClericGhostVision(MinecraftServer server) {
+        var ghostManager = MlkyMC.getGhostManager();
+        if (ghostManager == null) return;
+        var altarManager = MlkyMC.getSoulAltarManager();
+        var classManager = MlkyMC.getClassManager();
+        if (classManager == null) return;
+
+        for (ServerPlayer cleric : server.getPlayerList().getPlayers()) {
+            if (ghostManager.isGhost(cleric.getUUID())) continue;
+            var data = classManager.getOrCreate(cleric);
+            if (data.getChosenClass() != com.mlkymc.classes.ClassType.CLERIC) continue;
+            if (!(cleric.level() instanceof ServerLevel sl)) continue;
+
+            // Get this cleric's altar connected ghosts
+            Set<UUID> altarGhosts = new HashSet<>();
+            if (altarManager != null) {
+                var altar = altarManager.getAltarByOwner(cleric.getUUID());
+                if (altar != null) {
+                    for (var gc : altar.connectedGhosts) {
+                        altarGhosts.add(gc.ghostUuid);
+                    }
+                }
+            }
+
+            // Send particles at ghost positions
+            for (ServerPlayer ghostPlayer : sl.players()) {
+                if (!ghostManager.isGhost(ghostPlayer.getUUID())) continue;
+                if (cleric.distanceTo(ghostPlayer) > 48) continue;
+
+                boolean isConnected = altarGhosts.contains(ghostPlayer.getUUID());
+                sendGhostParticles(cleric, ghostPlayer, isConnected);
+            }
+        }
+    }
+
+    /**
+     * Send soul particles at a ghost's position, visible only to the viewer.
+     * Connected ghosts get green soul particles, others get blue/cyan.
+     */
+    private void sendGhostParticles(ServerPlayer viewer, ServerPlayer ghost, boolean isConnected) {
+        try {
+            double x = ghost.getX();
+            double y = ghost.getY() + 1.0; // chest height
+            double z = ghost.getZ();
+
+            // Connected = soul fire flame (green), other = soul (blue/cyan)
+            var particleType = isConnected
+                    ? net.minecraft.core.particles.ParticleTypes.SOUL_FIRE_FLAME
+                    : net.minecraft.core.particles.ParticleTypes.SOUL;
+
+            // Spawn a few particles in a small area around the ghost
+            var packet = new net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket(
+                    particleType,
+                    false,    // override limiter
+                    true,     // always show (long distance)
+                    x, y, z,
+                    0.2f, 0.4f, 0.2f,  // spread X, Y, Z
+                    0.01f,    // speed
+                    3         // count
+            );
+            viewer.connection.send(packet);
+        } catch (Exception e) {
+            // Silently fail
         }
     }
 

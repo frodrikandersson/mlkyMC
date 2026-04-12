@@ -1,15 +1,9 @@
 {
   "type": "minecraft:crafting_shapeless",
   "ingredients": [
-    {
-      "item": "minecraft:iron_block"
-    },
-    {
-      "item": "minecraft:netherite_scrap"
-    },
-    {
-      "item": "minecraft:coal_block"
-    }
+    "mlkymc:milky_star",
+    "minecraft:glass",
+    "minecraft:flint"
   ],
   "result": {
     "id": "mlkymc:tempered_plate",

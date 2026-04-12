@@ -6,30 +6,14 @@
     "MER"
   ],
   "key": {
-    "D": {
-      "item": "minecraft:dragon_breath"
-    },
-    "W": {
-      "item": "minecraft:wet_sponge"
-    },
-    "S": {
-      "item": "minecraft:sniffer_egg"
-    },
-    "N": {
-      "item": "minecraft:nether_star"
-    },
-    "E": {
-      "item": "minecraft:wind_charge"
-    },
-    "R": {
-      "item": "minecraft:totem_of_undying"
-    },
-    "M": {
-      "item": "minecraft:music_disc_5"
-    },
-    "P": {
-      "item": "minecraft:phantom_membrane"
-    }
+    "D": "minecraft:dragon_breath",
+    "W": "minecraft:wet_sponge",
+    "S": "minecraft:sniffer_egg",
+    "N": "minecraft:nether_star",
+    "E": "minecraft:wind_charge",
+    "R": "minecraft:totem_of_undying",
+    "M": "minecraft:music_disc_5",
+    "P": "minecraft:phantom_membrane"
   },
   "result": {
     "id": "minecraft:elytra",

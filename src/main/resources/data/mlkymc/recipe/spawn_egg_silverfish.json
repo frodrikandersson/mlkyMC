@@ -6,15 +6,9 @@
     "SSS"
   ],
   "key": {
-    "S": {
-      "item": "mlkymc:milky_star"
-    },
-    "L": {
-      "item": "mlkymc:living_essence"
-    },
-    "T": {
-      "item": "minecraft:tnt"
-    }
+    "S": "mlkymc:milky_star",
+    "L": "mlkymc:living_essence",
+    "T": "minecraft:tnt"
   },
   "result": {
     "id": "minecraft:silverfish_spawn_egg",

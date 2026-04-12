@@ -6,15 +6,9 @@
     "PSP"
   ],
   "key": {
-    "P": {
-      "item": "minecraft:paper"
-    },
-    "S": {
-      "tag": "minecraft:signs"
-    },
-    "G": {
-      "item": "minecraft:gold_nugget"
-    }
+    "P": "minecraft:paper",
+    "S": "#minecraft:signs",
+    "G": "minecraft:gold_nugget"
   },
   "result": {
     "id": "mlkymc:stall_deed",

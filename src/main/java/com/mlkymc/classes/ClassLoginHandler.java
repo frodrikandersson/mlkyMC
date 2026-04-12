@@ -19,7 +19,44 @@ public class ClassLoginHandler {
     @SubscribeEvent
     public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
         sendSync(player);
+
+        // Show intro message once per player (persisted)
+        ClassData data = classManager.getOrCreate(player);
+        if (!data.isIntroShown()) {
+            data.setIntroShown(true);
+            classManager.save();
+            player.level().getServer().execute(() -> player.level().getServer().execute(() -> {
+                player.sendSystemMessage(Component.empty());
+                player.sendSystemMessage(Component.literal("================================").withColor(0x5599FF));
+                player.sendSystemMessage(Component.literal("  Welcome to mlkyMC!").withColor(0xFFFFFF));
+                player.sendSystemMessage(Component.literal("================================").withColor(0x5599FF));
+                player.sendSystemMessage(Component.empty());
+                player.sendSystemMessage(Component.literal("This server features a unique class system").withColor(0xAABBCC));
+                player.sendSystemMessage(Component.literal("with 5 classes, each with their own skills,").withColor(0xAABBCC));
+                player.sendSystemMessage(Component.literal("abilities, and progression paths.").withColor(0xAABBCC));
+                player.sendSystemMessage(Component.empty());
+                player.sendSystemMessage(Component.literal("  Adventurer").withColor(0xFF5555)
+                        .append(Component.literal(" - Combat & exploration").withColor(0x999999)));
+                player.sendSystemMessage(Component.literal("  Cleric").withColor(0xAA55FF)
+                        .append(Component.literal(" - Healing, enchanting & revival").withColor(0x999999)));
+                player.sendSystemMessage(Component.literal("  Farmhand").withColor(0x55FF55)
+                        .append(Component.literal(" - Farming, fishing & cooking").withColor(0x999999)));
+                player.sendSystemMessage(Component.literal("  MineCrafter").withColor(0x55FFFF)
+                        .append(Component.literal(" - Mining & crafting").withColor(0x999999)));
+                player.sendSystemMessage(Component.literal("  Smith").withColor(0xFFAA00)
+                        .append(Component.literal(" - Smelting, forging & repair").withColor(0x999999)));
+                player.sendSystemMessage(Component.empty());
+                player.sendSystemMessage(Component.literal("  Press [K] to choose your class!").withColor(0xFFFF55));
+                player.sendSystemMessage(Component.literal("  Your choice is permanent, so choose wisely.").withColor(0xFF7777));
+                player.sendSystemMessage(Component.empty());
+                player.sendSystemMessage(Component.literal("================================").withColor(0x5599FF));
+
+                // Give the guidebook on first join
+                com.mlkymc.guide.GuidebookHelper.giveGuidebook(player);
+            }));
+        }
     }
 
     public void sendSync(ServerPlayer player) {

@@ -31,15 +31,64 @@ public class ScarecrowBlock extends HorizontalDirectionalBlock {
     /** Radius in blocks that the scarecrow prevents hostile mob spawns */
     public static final int SPAWN_PREVENTION_RADIUS = 32;
 
-    /** Tracks placed scarecrow positions for efficient spawn checks */
+    /** Tracks placed scarecrow positions for efficient spawn checks. Persisted to
+     *  a JSON file so the set survives server restarts. */
     private static final java.util.Set<BlockPos> activeScarecrows = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static java.nio.file.Path saveFile;
+    private static boolean dirty = false;
+
+    /** Called from MlkyMC.onServerStarting to set the save path and load persisted data. */
+    public static void reload(java.nio.file.Path worldDataDir) {
+        saveFile = worldDataDir.resolve("mlkymc_scarecrows.json");
+        activeScarecrows.clear();
+        if (java.nio.file.Files.exists(saveFile)) {
+            try (var reader = java.nio.file.Files.newBufferedReader(saveFile)) {
+                var type = new com.google.gson.reflect.TypeToken<java.util.Set<long[]>>() {}.getType();
+                java.util.Set<long[]> loaded = new com.google.gson.Gson().fromJson(reader, type);
+                if (loaded != null) {
+                    for (long[] coords : loaded) {
+                        if (coords.length == 3) {
+                            activeScarecrows.add(new BlockPos((int) coords[0], (int) coords[1], (int) coords[2]));
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                com.mlkymc.MlkyMC.LOGGER.warn("[Scarecrow] Failed to load scarecrow positions", e);
+            }
+        }
+        com.mlkymc.MlkyMC.LOGGER.info("[Scarecrow] Loaded {} scarecrow positions", activeScarecrows.size());
+    }
+
+    /** Save the current set to disk. Called periodically and on server stop. */
+    public static void save() {
+        if (saveFile == null || !dirty) return;
+        dirty = false;
+        try {
+            java.nio.file.Files.createDirectories(saveFile.getParent());
+            var positions = new java.util.ArrayList<long[]>();
+            for (BlockPos pos : activeScarecrows) {
+                positions.add(new long[]{pos.getX(), pos.getY(), pos.getZ()});
+            }
+            try (var writer = java.nio.file.Files.newBufferedWriter(saveFile)) {
+                new com.google.gson.Gson().toJson(positions, writer);
+            }
+        } catch (Exception e) {
+            com.mlkymc.MlkyMC.LOGGER.warn("[Scarecrow] Failed to save scarecrow positions", e);
+        }
+    }
 
     public static void registerScarecrow(BlockPos pos) {
-        activeScarecrows.add(pos.immutable());
+        if (activeScarecrows.add(pos.immutable())) {
+            dirty = true;
+            save();
+        }
     }
 
     public static void unregisterScarecrow(BlockPos pos) {
-        activeScarecrows.remove(pos);
+        if (activeScarecrows.remove(pos)) {
+            dirty = true;
+            save();
+        }
     }
 
     public static boolean isProtectedByScarecrow(BlockPos spawnPos) {
@@ -53,7 +102,7 @@ public class ScarecrowBlock extends HorizontalDirectionalBlock {
     }
 
     public static boolean isInScarecrowRange(BlockPos pos) {
-        return isProtectedByScarecrow(pos); // Same radius
+        return isProtectedByScarecrow(pos);
     }
 
     /**
@@ -96,10 +145,13 @@ public class ScarecrowBlock extends HorizontalDirectionalBlock {
     }
     public static final EnumProperty<DoubleBlockHalf> HALF = BlockStateProperties.DOUBLE_BLOCK_HALF;
 
-    // Bottom half: full block collision
-    private static final VoxelShape SHAPE_BOTTOM = Block.box(2, 0, 2, 14, 16, 14);
-    // Top half: upper body + head collision
-    private static final VoxelShape SHAPE_TOP = Block.box(3, 0, 3, 13, 14, 13);
+    // Bottom half: legs + body + arms (arms extend along X in model space)
+    private static final VoxelShape SHAPE_BOTTOM = net.minecraft.world.phys.shapes.Shapes.or(
+            Block.box(6, 0, 7, 10, 8, 11),    // legs (post)
+            Block.box(1, 8, 3, 15, 16, 13)    // body + arms area
+    );
+    // Top half: head
+    private static final VoxelShape SHAPE_TOP = Block.box(0, 0, 0, 16, 16, 16);
 
     @Override
     protected MapCodec<? extends HorizontalDirectionalBlock> codec() {

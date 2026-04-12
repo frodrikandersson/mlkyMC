@@ -8,9 +8,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -64,9 +62,29 @@ public class SpawnerAgingListener {
                 MlkyConfig.getSpawnerDefaultMaxSpawns());
 
         if (count >= maxSpawns) {
+            // Preserve the mlkymc_crafted flag (and any other persistent data) across
+            // the aging reset. Without this, aged crafted spawners lose their flag and
+            // can no longer be picked up by the player.
+            boolean wasCrafted = false;
+            {
+                var oldBe = serverLevel.getBlockEntity(spawnerPos);
+                if (oldBe instanceof SpawnerBlockEntity sbe) {
+                    wasCrafted = sbe.getPersistentData().getBooleanOr("mlkymc_crafted", false);
+                }
+            }
+
             // Reset spawner: set to AIR first to clear old block entity, then place fresh empty spawner
             serverLevel.setBlock(spawnerPos, Blocks.AIR.defaultBlockState(), 3);
             serverLevel.setBlock(spawnerPos, Blocks.SPAWNER.defaultBlockState(), 3);
+
+            // Re-apply the crafted flag on the fresh block entity so the player can still pick it up.
+            if (wasCrafted) {
+                var newBe = serverLevel.getBlockEntity(spawnerPos);
+                if (newBe instanceof SpawnerBlockEntity sbe) {
+                    sbe.getPersistentData().putBoolean("mlkymc_crafted", true);
+                    sbe.setChanged();
+                }
+            }
 
             manager.remove(key);
             manager.save();
@@ -95,25 +113,20 @@ public class SpawnerAgingListener {
     }
 
     /**
-     * When a spawner block is broken by a player, drop it as an item.
-     * Vanilla spawners don't drop themselves — we override that here.
+     * Clean up aging data when a spawner is broken. The actual drop logic
+     * (only crafted spawners drop) is handled in SpawnerHandler.onBlockDrop,
+     * which reads the persistent-data flag directly from the block entity.
      */
     @SubscribeEvent
     public void onSpawnerDrop(BlockDropsEvent event) {
         if (!(event.getLevel() instanceof ServerLevel sl)) return;
         if (event.getState().getBlock() != Blocks.SPAWNER) return;
 
-        // No XP from breaking spawners (since we drop the block itself)
+        // No XP from breaking spawners
         event.setDroppedExperience(0);
 
-        // Drop a spawner block item
-        BlockPos pos = event.getPos();
-        ItemStack spawnerItem = new ItemStack(Items.SPAWNER);
-        ItemEntity itemEntity = new ItemEntity(sl,
-                pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, spawnerItem);
-        event.getDrops().add(itemEntity);
-
         // Clean up aging data and depleted flag for this spawner
+        BlockPos pos = event.getPos();
         String dimension = sl.dimension().identifier().toString();
         String key = SpawnerAgingManager.makeKey(dimension, pos.getX(), pos.getY(), pos.getZ());
         manager.remove(key);

@@ -87,11 +87,10 @@ public class ModItems {
                             1.0f, -2.8f, 0.0f));
 
     public static final DeferredItem<Item> REINFORCED_AXE =
-            ITEMS.registerItem("reinforced_axe", Item::new,
-                    () -> net.minecraft.world.item.ToolMaterial.NETHERITE.applyToolProperties(
-                            new Item.Properties(),
-                            net.minecraft.tags.BlockTags.MINEABLE_WITH_AXE,
-                            5.0f, -3.0f, 0.0f));
+            ITEMS.registerItem("reinforced_axe",
+                    props -> new net.minecraft.world.item.AxeItem(
+                            net.minecraft.world.item.ToolMaterial.NETHERITE, 5.0f, -3.0f, props),
+                    new Item.Properties());
 
     public static final DeferredItem<Item> BUILDERS_WAND =
             ITEMS.registerSimpleItem("builders_wand", () -> new Item.Properties().stacksTo(1).durability(256));
@@ -107,8 +106,7 @@ public class ModItems {
             ITEMS.registerSimpleItem("armor_plating", () -> new Item.Properties().stacksTo(16));
 
     // --- Economy Items ---
-    public static final DeferredItem<Item> STALL_DEED =
-            ITEMS.registerSimpleItem("stall_deed", () -> new Item.Properties().stacksTo(1));
+    // STALL_DEED is now a block item — see ModBlocks.STALL_DEED_ITEM
 
     public static final DeferredItem<Item> MARKET_CATALOG =
             ITEMS.registerSimpleItem("market_catalog", () -> new Item.Properties().stacksTo(1));
@@ -121,7 +119,31 @@ public class ModItems {
     public static final DeferredItem<Item> SANDWICH =
             ITEMS.register("sandwich", id -> new SandwichItem(new Item.Properties()
                     .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ITEM, id))
-                    .stacksTo(16)
+                    .stacksTo(64)
                     .food(new net.minecraft.world.food.FoodProperties.Builder()
                             .nutrition(8).saturationModifier(0.8f).build())));
+
+    // --- Cleric Exclusive ---
+    public static final DeferredItem<Item> CONCOCTION =
+            ITEMS.register("concoction", id -> new com.mlkymc.registry.ConcoctionItem(
+                    new Item.Properties()
+                            .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ITEM, id))
+                            .stacksTo(1)
+                            .component(net.minecraft.core.component.DataComponents.CONSUMABLE,
+                                    net.minecraft.world.item.component.Consumables.defaultDrink().build()),
+                    ConcoctionItem.ConcoctionType.DRINKABLE));
+
+    public static final DeferredItem<Item> CONCOCTION_SPLASH =
+            ITEMS.register("concoction_splash", id -> new com.mlkymc.registry.ConcoctionItem(
+                    new Item.Properties()
+                            .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ITEM, id))
+                            .stacksTo(1),
+                    ConcoctionItem.ConcoctionType.SPLASH));
+
+    public static final DeferredItem<Item> CONCOCTION_LINGERING =
+            ITEMS.register("concoction_lingering", id -> new com.mlkymc.registry.ConcoctionItem(
+                    new Item.Properties()
+                            .setId(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ITEM, id))
+                            .stacksTo(1),
+                    ConcoctionItem.ConcoctionType.LINGERING));
 }

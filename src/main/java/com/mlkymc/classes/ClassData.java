@@ -21,6 +21,12 @@ public class ClassData {
     private boolean soulEnergyMode;   // true = SE mode, false = XP mode
     private int selectedAltarAbility; // 0 = base Soul Skill, 1+ = altar tier abilities
     private boolean tomeUnlocked;     // true when SE first reaches 100
+    private boolean introShown;       // true after first login intro message
+
+    // Soul Fracture stacks — applied when a Cleric uses the free (<5min) resurrection
+    // to save this player. Does NOT decay with time/sleep; only removed via the
+    // Cauldron Transmutation ritual (64 Milky Stars per stack). 0-5, default 0.
+    private int soulFractureStacks;
 
     public ClassData(UUID playerUuid) {
         this.playerUuid = playerUuid;
@@ -31,6 +37,7 @@ public class ClassData {
         this.soulEnergyMode = false;
         this.selectedAltarAbility = 0;
         this.tomeUnlocked = false;
+        this.soulFractureStacks = 0;
 
         for (ProfessionType prof : ProfessionType.values()) {
             levels.put(prof, 0);
@@ -65,6 +72,11 @@ public class ClassData {
         return levels.getOrDefault(profession, 0);
     }
 
+    public void setLevel(ProfessionType profession, int level) {
+        levels.put(profession, Math.max(0, Math.min(50, level)));
+        xp.put(profession, 0);
+    }
+
     /**
      * Halve all profession levels and reset XP within each level to 0.
      * Used when an alive player sacrifices levels to resurrect a ghost at the statue.
@@ -92,14 +104,22 @@ public class ClassData {
      * If this is the player's chosen class, XP is doubled (2x).
      * Returns the number of levels gained.
      */
+    public int addXpRaw(ProfessionType profession, int amount) {
+        return addXpInternal(profession, amount, false);
+    }
+
     public int addXp(ProfessionType profession, int amount) {
+        return addXpInternal(profession, amount, true);
+    }
+
+    private int addXpInternal(ProfessionType profession, int amount, boolean applyBonus) {
         if (amount <= 0) return 0;
 
         int currentLevel = getLevel(profession);
         if (currentLevel >= profession.getMaxLevel()) return 0;
 
         // 2x XP for chosen class profession
-        if (chosenClass != ClassType.NONE && chosenClass.getMatchingProfession() == profession) {
+        if (applyBonus && chosenClass != ClassType.NONE && chosenClass.getMatchingProfession() == profession) {
             amount *= 2;
         }
 
@@ -176,6 +196,29 @@ public class ClassData {
 
     public void setTomeUnlocked(boolean unlocked) { this.tomeUnlocked = unlocked; }
 
+    public boolean isIntroShown() { return introShown; }
+    public void setIntroShown(boolean shown) { this.introShown = shown; }
+
+    // --- Soul Fracture ---
+
+    public int getSoulFractureStacks() { return soulFractureStacks; }
+
+    public void setSoulFractureStacks(int stacks) {
+        this.soulFractureStacks = Math.max(0, Math.min(5, stacks));
+    }
+
+    /** Add one Soul Fracture stack (capped at 5). Returns the new stack count. */
+    public int addSoulFractureStack() {
+        this.soulFractureStacks = Math.min(5, this.soulFractureStacks + 1);
+        return this.soulFractureStacks;
+    }
+
+    /** Remove one Soul Fracture stack (floor at 0). Returns the new stack count. */
+    public int removeSoulFractureStack() {
+        this.soulFractureStacks = Math.max(0, this.soulFractureStacks - 1);
+        return this.soulFractureStacks;
+    }
+
     // --- Serialization helpers ---
 
     public Map<String, Object> serialize() {
@@ -197,6 +240,8 @@ public class ClassData {
         data.put("soulEnergyMode", soulEnergyMode);
         data.put("selectedAltarAbility", selectedAltarAbility);
         data.put("tomeUnlocked", tomeUnlocked);
+        data.put("introShown", introShown);
+        data.put("soulFractureStacks", soulFractureStacks);
 
         return data;
     }
@@ -236,6 +281,12 @@ public class ClassData {
         }
         if (data.containsKey("tomeUnlocked")) {
             cd.tomeUnlocked = (Boolean) data.get("tomeUnlocked");
+        }
+        if (data.containsKey("introShown")) {
+            cd.introShown = (Boolean) data.get("introShown");
+        }
+        if (data.containsKey("soulFractureStacks")) {
+            cd.soulFractureStacks = ((Number) data.get("soulFractureStacks")).intValue();
         }
 
         return cd;

@@ -28,17 +28,15 @@ public class TrophyBuffHandler {
 
     // Cached trophy base positions — updated on place/break
     private static final CopyOnWriteArraySet<BlockPos> trophyBases = new CopyOnWriteArraySet<>();
-    private static boolean cacheBuilt = false;
 
     @SubscribeEvent
     public void onLevelTick(LevelTickEvent.Post event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
         if (level.getGameTime() % 60 != 0) return; // Every 3 seconds
 
-        // One-time cache build on first tick
-        if (!cacheBuilt) {
+        // Periodically rescan near players to discover trophies in newly loaded chunks
+        if (level.getGameTime() % 200 == 0) { // Every 10 seconds
             rebuildCache(level);
-            cacheBuilt = true;
         }
 
         if (trophyBases.isEmpty()) return;
@@ -81,12 +79,14 @@ public class TrophyBuffHandler {
     }
 
     /**
-     * One-time scan on server start to find existing trophy bases.
-     * Only scans chunks near online players — trophies in unloaded chunks
-     * are picked up lazily when players move nearby.
+     * Scan chunks near online players to find existing trophy bases.
+     * Trophy bases have no block entity, so we use chunk section palette checks
+     * to skip sections that don't contain the block, then scan only matching sections.
      */
     private void rebuildCache(ServerLevel level) {
+        var targetBlock = ModBlocks.TROPHY_BASE.get();
         var scannedChunks = new java.util.HashSet<Long>();
+
         for (ServerPlayer player : level.players()) {
             BlockPos center = player.blockPosition();
             int chunkMinX = (center.getX() - 48) >> 4;
@@ -97,13 +97,24 @@ public class TrophyBuffHandler {
             for (int cx = chunkMinX; cx <= chunkMaxX; cx++) {
                 for (int cz = chunkMinZ; cz <= chunkMaxZ; cz++) {
                     long key = ((long) cx << 32) | (cz & 0xFFFFFFFFL);
-                    if (!scannedChunks.add(key)) continue; // skip already scanned
+                    if (!scannedChunks.add(key)) continue;
                     if (!level.hasChunk(cx, cz)) continue;
                     var chunk = level.getChunk(cx, cz);
-                    for (var be : chunk.getBlockEntities().values()) {
-                        BlockPos pos = be.getBlockPos();
-                        if (level.getBlockState(pos).is(ModBlocks.TROPHY_BASE.get())) {
-                            trophyBases.add(pos.immutable());
+
+                    // Scan each 16x16x16 section
+                    for (int secIdx = chunk.getMinSectionY(); secIdx <= chunk.getMaxSectionY(); secIdx++) {
+                        var section = chunk.getSection(chunk.getSectionIndexFromSectionY(secIdx));
+                        if (section == null || !section.getStates().maybeHas(s -> s.is(targetBlock))) continue;
+
+                        int baseY = secIdx << 4;
+                        for (int lx = 0; lx < 16; lx++) {
+                            for (int lz = 0; lz < 16; lz++) {
+                                for (int ly = 0; ly < 16; ly++) {
+                                    if (section.getBlockState(lx, ly, lz).is(targetBlock)) {
+                                        trophyBases.add(new BlockPos((cx << 4) + lx, baseY + ly, (cz << 4) + lz));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
