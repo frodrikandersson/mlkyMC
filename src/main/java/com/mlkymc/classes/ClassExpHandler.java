@@ -100,6 +100,13 @@ public class ClassExpHandler {
 
         // Hostile mobs (including Phantoms) = Adventurer XP
         if (dead instanceof Monster || dead instanceof net.minecraft.world.entity.monster.Phantom) {
+            // Pack Leader minions give only 1 XP flat — they're trivial to farm otherwise
+            if (dead.getTags().contains("mlkymc_minion")) {
+                classManager.addXp(player, ProfessionType.ADVENTURER, 1,
+                        "kill minion " + dead.getType().getDescriptionId().replace("entity.minecraft.", ""));
+                return;
+            }
+
             int xp = 10;
             String mobId = dead.getType().getDescriptionId();
             if (mobId.contains("ender_dragon") || mobId.contains("wither")) {
@@ -981,13 +988,22 @@ public class ClassExpHandler {
             }
         }
 
-        // Smith exclusive: 1/1000 chance of Totem of Undying when smelting gold ingots
+        // Smith exclusive: 1/1000 chance per ingot of Totem of Undying when smelting gold.
+        // Rolls once per item smelted, matching how the Milky Star drops above work.
         if (data.getChosenClass() == ClassType.SMITH
                 && result.getItem() == net.minecraft.world.item.Items.GOLD_INGOT) {
-            if (java.util.concurrent.ThreadLocalRandom.current().nextInt(1000) == 0) {
-                ItemStack totem = new ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
-                if (!player.getInventory().add(totem)) {
-                    player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), totem);
+            int totems = 0;
+            for (int i = 0; i < count; i++) {
+                if (java.util.concurrent.ThreadLocalRandom.current().nextInt(1000) == 0) {
+                    totems++;
+                }
+            }
+            if (totems > 0) {
+                for (int i = 0; i < totems; i++) {
+                    ItemStack totem = new ItemStack(net.minecraft.world.item.Items.TOTEM_OF_UNDYING);
+                    if (!player.getInventory().add(totem)) {
+                        player.spawnAtLocation((net.minecraft.server.level.ServerLevel) player.level(), totem);
+                    }
                 }
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "A Totem of Undying materializes!").withColor(0xFF55FF));

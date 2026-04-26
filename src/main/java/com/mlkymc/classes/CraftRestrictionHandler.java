@@ -74,7 +74,8 @@ public class CraftRestrictionHandler {
         restrict(ModItems.WHETSTONE, ClassType.SMITH);
         restrict(ModItems.ARMOR_PLATING, ClassType.SMITH);
         restrictVanilla(net.minecraft.world.item.Items.SPAWNER, ClassType.SMITH);
-        restrictVanilla(net.minecraft.world.item.Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE, ClassType.SMITH);
+        // Netherite upgrade template is NOT Smith-restricted — any class can craft
+        // the vanilla recipe. Smith still has their own exclusive recipe for it.
 
         // Farmhand crafts — vanilla mob eggs
         restrictVanilla(net.minecraft.world.item.Items.ZOMBIE_SPAWN_EGG, ClassType.FARMHAND);

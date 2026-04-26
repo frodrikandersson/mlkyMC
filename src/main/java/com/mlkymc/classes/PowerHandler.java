@@ -1195,6 +1195,18 @@ public class PowerHandler {
         if (bestTarget != null) {
             charmedMob.setTarget(bestTarget);
             charmedMob.setAggressive(true);
+
+            // Brain-based mobs (Hoglin, Piglin, etc.) ignore setTarget because their AI
+            // runs on Brain memories rather than the classic goal system. Force the
+            // ATTACK_TARGET memory and clear any pacify/repel memories so they commit.
+            try {
+                var brain = charmedMob.getBrain();
+                brain.setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET, bestTarget);
+                brain.eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.PACIFIED);
+                brain.eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.NEAREST_REPELLENT);
+            } catch (Exception ignored) {
+                // Non-brain mobs don't have these memory modules — fine to ignore
+            }
         }
     }
 
@@ -2038,6 +2050,8 @@ public class PowerHandler {
     // =========================================================================
 
     private final Map<UUID, Long> temperedBodyCooldown = new HashMap<>();
+    // Smith adaptive Tempered Body: red hot mode expiry (game time)
+    private final Map<UUID, Long> redHotExpiry = new java.util.concurrent.ConcurrentHashMap<>();
 
     private void smithSecondary(ServerPlayer player, ClassData data) {
         if (isOnCooldown(temperedBodyCooldown, player)) {
@@ -2049,22 +2063,19 @@ public class PowerHandler {
         int level = data.getLevel(ProfessionType.SMITH);
         boolean isSmith = data.getChosenClass() == ClassType.SMITH;
 
-        // Adaptive enchantment: ignite nearby mobs and players instead of extinguishing
+        // Adaptive enchantment: enter "Red Hot" mode for 10 seconds. Disables the
+        // normal extinguish-self behavior. While Red Hot: nearby mobs + PvP-tagged
+        // players take rapid ticking damage (counts as player damage), nearby
+        // furnaces smelt at 5x speed, and the Smith glows with lava particles.
         if (hasAdaptiveHelmet(player)) {
+            long expiry = player.level().getGameTime() + 200L; // 10 seconds
+            redHotExpiry.put(player.getUUID(), expiry);
             if (player.level() instanceof ServerLevel sl) {
-                var entities = sl.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
-                        player.getBoundingBox().inflate(5),
-                        e -> !e.getUUID().equals(player.getUUID()));
-                int ignited = 0;
-                for (var entity : entities) {
-                    entity.igniteForSeconds(5);
-                    ignited++;
-                }
                 sl.playSound(null, player.blockPosition(),
-                        SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.0f, 0.8f);
-                player.sendSystemMessage(Component.literal(
-                        "Tempered Body: Ignited " + ignited + " entities!").withColor(0xFFAA00));
+                        SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.0f, 0.6f);
             }
+            player.displayClientMessage(Component.literal(
+                    "Tempered Body: RED HOT (10s)").withColor(0xFF3300), true);
         } else {
             // Normal: Extinguish self instantly
             player.extinguishFire();
@@ -2123,6 +2134,69 @@ public class PowerHandler {
 
         // 10 second cooldown
         temperedBodyCooldown.put(player.getUUID(), player.level().getGameTime() + 200);
+    }
+
+    /**
+     * Tick Red Hot mode (Smith adaptive Tempered Body): every 10 ticks (0.5s),
+     * deal 1 HP damage to nearby mobs and PvP-tagged players, boost nearby
+     * furnaces to 5x speed, and emit lava particles around the Smith.
+     * Counts as player damage so kills credit the Smith.
+     */
+    public void tickRedHot(net.minecraft.world.level.Level level) {
+        if (level.isClientSide()) return;
+        if (!(level instanceof ServerLevel sl)) return;
+        if (sl.getGameTime() % 10 != 0) return; // every 0.5s
+        if (redHotExpiry.isEmpty()) return;
+
+        long now = sl.getGameTime();
+        var iter = redHotExpiry.entrySet().iterator();
+        while (iter.hasNext()) {
+            var entry = iter.next();
+            if (entry.getValue() <= now) {
+                iter.remove();
+                continue;
+            }
+
+            ServerPlayer player = sl.getServer().getPlayerList().getPlayer(entry.getKey());
+            if (player == null || !player.isAlive()) continue;
+            if (player.level() != sl) continue;
+
+            // Particle aura (lava drips around the Smith — "glowing red hot")
+            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.LAVA,
+                    player.getX(), player.getY() + 1.0, player.getZ(),
+                    8, 0.5, 0.8, 0.5, 0.0);
+            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.FLAME,
+                    player.getX(), player.getY() + 0.5, player.getZ(),
+                    4, 0.4, 0.6, 0.4, 0.01);
+
+            // Damage nearby hostile mobs
+            // Use Enemy interface — covers Monster (zombies/skeletons/etc), FlyingMob
+            // (phantoms/ghasts), MagmaCube/Slime, Hoglin/Zoglin, etc. Any hostile mob
+            // implements Enemy regardless of class hierarchy.
+            var mobs = sl.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
+                    player.getBoundingBox().inflate(3.5),
+                    e -> e != player && e.isAlive()
+                            && (e instanceof net.minecraft.world.entity.monster.Enemy
+                                || (e instanceof ServerPlayer p && com.mlkymc.pvp.PvPTagManager.isPvPTagged(p.getUUID())
+                                        && !p.getUUID().equals(player.getUUID()))));
+            for (var entity : mobs) {
+                entity.hurtServer(sl, sl.damageSources().playerAttack(player), 1.0f);
+            }
+
+            // Boost nearby furnaces to 5x speed (extraTicks = 8 → 1.0 + 8*0.5 = 5.0)
+            BlockPos center = player.blockPosition();
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dy = -4; dy <= 4; dy++) {
+                    for (int dz = -4; dz <= 4; dz++) {
+                        BlockPos check = center.offset(dx, dy, dz);
+                        var be = sl.getBlockEntity(check);
+                        if (be instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace) {
+                            speedUpFurnace(furnace, 8);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -2359,8 +2433,9 @@ public class PowerHandler {
             var entry = iterator.next();
             if (now >= entry.getValue()) {
                 var entity = level.getEntity(entry.getKey());
-                if (entity instanceof net.minecraft.world.entity.Mob mob && mob.isAlive()) {
-                    var attr = mob.getAttribute(
+                // Restore scale on both mobs and players (ServerPlayer is not a Mob)
+                if (entity instanceof net.minecraft.world.entity.LivingEntity living && living.isAlive()) {
+                    var attr = living.getAttribute(
                             net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
                     if (attr != null) {
                         attr.removeModifier(CRUSH_SCALE_ID);

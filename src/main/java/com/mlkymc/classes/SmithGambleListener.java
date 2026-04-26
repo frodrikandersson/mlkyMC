@@ -59,6 +59,12 @@ public class SmithGambleListener {
 
         if (!isReroll && !isNewTier && !isNetherite) return;
 
+        // Netherite consumes one of the 4 reagent slots; fail if at cap
+        if (isNetherite && existingData.size() >= 4) return;
+
+        // Snapshot tier keys before applying so we can detect which one Netherite filled
+        var preTierKeys = new java.util.HashSet<>(existingData.keySet());
+
         // Pre-roll the gamble result and store it in CUSTOM_DATA,
         // but show ??? in lore until taken from the anvil
         ItemStack output = left.copy();
@@ -75,11 +81,26 @@ public class SmithGambleListener {
                 }
             }
         } else {
-            SmithGambleHandler.applyGamble(output, tier, random);
+            String result = SmithGambleHandler.applyGamble(output, tier, random);
+            if (result == null) return; // gamble failed (e.g. netherite with no slots left)
         }
 
         // Bake attribute modifiers so they show in "When on Feet/etc"
         bakeAttributeModifiers(output);
+
+        // Determine which tier key is "new/changed" so we can mask it with ???
+        String maskedKey;
+        if (isNetherite) {
+            // Netherite stores under one of COPPER/IRON/GOLD/DIAMOND — find the one that wasn't there before
+            maskedKey = null;
+            var newData = SmithGambleHandler.readGambleData(output);
+            for (String k : newData.keySet()) {
+                if (!preTierKeys.contains(k)) { maskedKey = k; break; }
+            }
+        } else {
+            // Regular tier: the masked key is just the tier itself
+            maskedKey = tier.name();
+        }
 
         // Show ??? in lore (hide the actual result until taken)
         java.util.List<Component> lore = new java.util.ArrayList<>();
@@ -88,18 +109,35 @@ public class SmithGambleListener {
         for (var mapEntry : allData.entrySet()) {
             String tierKey = mapEntry.getKey();
             var entry = mapEntry.getValue();
+            String reagentName = SmithGambleHandler.reagentNameForTierKey(tierKey);
             // Show real values for previously applied tiers, ??? for the new/rerolled one
-            if (tierKey.equals(tier.name())) {
+            if (tierKey.equals(maskedKey)) {
                 if (isReroll) {
-                    lore.add(Component.literal("  ??? ?????? (reroll)").withColor(0xFF5555));
+                    lore.add(Component.literal("  ??? ?????? (reroll, " + reagentName + ")").withColor(0xFF5555));
                 } else {
-                    lore.add(Component.literal("  ??? ??????").withColor(0xAAAAFF));
+                    lore.add(Component.literal("  ??? ?????? (" + reagentName + ")").withColor(0xAAAAFF));
                 }
             } else {
-                lore.add(Component.literal("  " + SmithGambleHandler.formatAttribute(entry.attrName, entry.value))
+                lore.add(Component.literal("  " + SmithGambleHandler.formatAttribute(entry.attrName, entry.value)
+                                + " (" + reagentName + ")")
                         .withColor(0xFFDD55));
             }
         }
+
+        // Preserve the Fletcher Modifier line (and any other non-Smith-gamble lore)
+        // from the original item so it doesn't look like the Fletcher modifier was
+        // stripped. The attribute modifier itself is already preserved by
+        // bakeAttributeModifiers above.
+        var existingLore = left.get(DataComponents.LORE);
+        if (existingLore != null) {
+            for (Component line : existingLore.lines()) {
+                String text = line.getString();
+                if (text.startsWith("Fletcher Modifier")) {
+                    lore.add(line);
+                }
+            }
+        }
+
         output.set(DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(lore));
 
         // Mark as needing lore reveal

@@ -95,8 +95,8 @@ public class SmithGambleHandler {
     public static boolean canApplyTier(ItemStack equipment, IngredientTier tier) {
         var data = readGambleData(equipment);
         if (tier == IngredientTier.NETHERITE) {
-            // Netherite: can always apply (re-rolls if 4 attributes already exist)
-            return true;
+            // Netherite consumes one of the 4 reagent slots — capped at 4 total
+            return data.size() < 4;
         }
         // Other tiers: can only apply if this tier hasn't been used yet
         return !data.containsKey(tier.name());
@@ -177,20 +177,8 @@ public class SmithGambleHandler {
 
     private static String applyNetherite(ItemStack equipment, Map<String, GambleEntry> existingData,
                                          Random random, boolean isArmorPiece) {
-        int appliedCount = existingData.size();
-
-        if (appliedCount >= 4) {
-            // Already has 4 attributes — re-roll ALL values (not attributes)
-            for (var entry : existingData.values()) {
-                var pool = findRangeForAttr(entry.attrName);
-                if (pool != null) {
-                    entry.value = rollSteepCurve(pool.min(), pool.max(), random);
-                }
-            }
-            writeGambleData(equipment, existingData);
-            updateLore(equipment, existingData);
-            return "Re-rolled all attribute values!";
-        }
+        // Netherite consumes one of the 4 reagent slots — fail if at cap
+        if (existingData.size() >= 4) return null;
 
         // Determine which tier pools are still available
         Set<IngredientTier> usedTiers = new HashSet<>();
@@ -208,46 +196,26 @@ public class SmithGambleHandler {
                 candidates.add(ar);
             }
         }
-
-        if (candidates.isEmpty()) {
-            // All pools used — just re-roll
-            for (var entry : existingData.values()) {
-                var pool = findRangeForAttr(entry.attrName);
-                if (pool != null) {
-                    entry.value = rollSteepCurve(pool.min(), pool.max(), random);
-                }
-            }
-            writeGambleData(equipment, existingData);
-            updateLore(equipment, existingData);
-            return "Re-rolled all attribute values!";
-        }
+        if (candidates.isEmpty()) return null;
 
         // Pick random from candidates
         AttributeRange chosen = candidates.get(random.nextInt(candidates.size()));
         double value = rollSteepCurve(chosen.min(), chosen.max(), random);
 
-        // Determine which tier this attribute belongs to
-        String tierKey = "NETHERITE_" + appliedCount;
+        // Determine which tier this attribute belongs to and store under that tier key
+        String tierKey = null;
         for (var poolEntry : ATTRIBUTE_POOLS.entrySet()) {
             if (poolEntry.getValue().contains(chosen)) {
                 tierKey = poolEntry.getKey().name();
                 break;
             }
         }
+        if (tierKey == null) return null;
 
         existingData.put(tierKey, new GambleEntry(chosen.attrName(), value));
-
-        // Re-roll ALL existing values when netherite is applied
-        for (var entry : existingData.values()) {
-            var pool = findRangeForAttr(entry.attrName);
-            if (pool != null) {
-                entry.value = rollSteepCurve(pool.min(), pool.max(), random);
-            }
-        }
-
         writeGambleData(equipment, existingData);
         updateLore(equipment, existingData);
-        return "Applied " + formatAttribute(chosen.attrName(), value) + " (all values re-rolled!)";
+        return "Applied " + formatAttribute(chosen.attrName(), value);
     }
 
     // =========================================================================
@@ -344,9 +312,11 @@ public class SmithGambleHandler {
     private static void updateLore(ItemStack equipment, Map<String, GambleEntry> data) {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.literal("Smith Forged:").withColor(0xFFAA00));
-        for (var entry : data.values()) {
+        for (var mapEntry : data.entrySet()) {
+            var entry = mapEntry.getValue();
             String display = formatAttribute(entry.attrName, entry.value);
-            lore.add(Component.literal("  " + display).withColor(0xFFDD55));
+            String reagent = reagentNameForTierKey(mapEntry.getKey());
+            lore.add(Component.literal("  " + display + " (" + reagent + ")").withColor(0xFFDD55));
         }
 
         // Merge with existing non-gamble lore. Strip Smith gamble lines (we just
@@ -389,6 +359,21 @@ public class SmithGambleHandler {
             }
         }
         return null;
+    }
+
+    /** Display name of the reagent that fills/rerolls a given tier slot. */
+    static String reagentNameForTierKey(String tierKey) {
+        try {
+            return switch (IngredientTier.valueOf(tierKey)) {
+                case COPPER  -> "Waystone Shard";
+                case IRON    -> "Blessed Ember";
+                case GOLD    -> "Living Essence";
+                case DIAMOND -> "Resonant Core";
+                case NETHERITE -> "Netherite Ingot";
+            };
+        } catch (IllegalArgumentException e) {
+            return tierKey;
+        }
     }
 
     static String formatAttribute(String attrName, double value) {

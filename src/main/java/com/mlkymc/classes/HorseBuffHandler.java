@@ -96,10 +96,19 @@ public class HorseBuffHandler {
             return;
         }
 
+        // Capture pre-apply MOVEMENT_SPEED so we can verify the modifier landed
+        var speedAttr = horse.getAttribute(Attributes.MOVEMENT_SPEED);
+        double speedBefore = speedAttr != null ? speedAttr.getValue() : 0.0;
+
         // Apply the buffs as transient attribute modifiers
         long expiryTick = level.getGameTime() + Math.max(200, IngredientBuffHandler.readDuration(stack));
         applyTransientBuffs(horse, healthPct, speedPct, jumpPct);
         writeBuffNbt(horse, expiryTick, healthPct, speedPct, jumpPct);
+
+        double speedAfter = speedAttr != null ? speedAttr.getValue() : 0.0;
+        com.mlkymc.MlkyMC.LOGGER.info("[HorseBuff] {} fed {} (H+{} S+{} J+{}) speed {} -> {}",
+                player.getName().getString(), horse.getUUID(), healthPct, speedPct, jumpPct,
+                String.format("%.4f", speedBefore), String.format("%.4f", speedAfter));
 
         // Heal horse based on the food's nutrition (rough 1:2 mapping)
         var food = stack.get(DataComponents.FOOD);
@@ -119,8 +128,9 @@ public class HorseBuffHandler {
             stack.shrink(1);
         }
 
-        // Feedback to the player
-        player.displayClientMessage(Component.literal("Horse enhanced!").withColor(0x55FF55), true);
+        // Feedback to the player — include actual speed delta so they can verify
+        String msg = String.format("Horse enhanced! Speed %.3f -> %.3f", speedBefore, speedAfter);
+        player.displayClientMessage(Component.literal(msg).withColor(0x55FF55), true);
 
         // Cancel so vanilla doesn't also try to do something with the interaction
         event.setCanceled(true);
@@ -214,12 +224,22 @@ public class HorseBuffHandler {
         if (!(horse instanceof Horse || horse instanceof Donkey || horse instanceof Mule)) return;
         CompoundTag nbt = horse.getPersistentData();
 
-        // 1. Transient buff expiry cleanup
+        // 1. Transient buff: either expire it, or re-attach the in-memory attribute
+        //    modifier that gets lost on entity unload. NBT survives unload but the
+        //    attribute modifier set via addPermanentModifier does not persist reliably
+        //    across chunk reload for mob entities, so we re-apply from NBT here.
         if (nbt.contains(NBT_EXPIRY_TICK)) {
             if (event.getLevel() instanceof ServerLevel level) {
                 long expiry = nbt.getLongOr(NBT_EXPIRY_TICK, 0L);
                 if (level.getGameTime() >= expiry) {
                     clearTransientBuffs(horse);
+                } else {
+                    int h = nbt.getIntOr(NBT_BUFF_HEALTH, 0);
+                    int s = nbt.getIntOr(NBT_BUFF_SPEED, 0);
+                    int j = nbt.getIntOr(NBT_BUFF_JUMP, 0);
+                    if (h > 0 || s > 0 || j > 0) {
+                        applyTransientBuffs(horse, h, s, j);
+                    }
                 }
             }
         }

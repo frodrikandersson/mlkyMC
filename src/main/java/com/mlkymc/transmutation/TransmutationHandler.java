@@ -149,27 +149,43 @@ public class TransmutationHandler {
 
     private void fireRecipe(ServerLevel level, BlockPos pos, ServerPlayer player,
                              TransmutationRecipe recipe, List<ItemEntity> itemEntities) {
-        // Consume required inputs from the item entities
+        // Consume required inputs. Use an explicit copy + setItem pattern so the
+        // entity data tracker reliably picks up the change (in 1.21.11 the in-place
+        // shrink+setItem pattern can be seen as "unchanged" if the same object is
+        // passed back, which leaves the entity's stack visually shrunken but with
+        // its true count restored on the next read).
         Map<Item, Integer> remainingToConsume = new HashMap<>(recipe.inputs());
+        java.util.Set<Integer> processedEntityIds = new java.util.HashSet<>();
         for (ItemEntity ie : itemEntities) {
             if (remainingToConsume.isEmpty()) break;
+            // Defensive: never process the same entity twice in this loop
+            if (!processedEntityIds.add(ie.getId())) continue;
+
             ItemStack stack = ie.getItem();
             if (stack.isEmpty()) continue;
             Integer needed = remainingToConsume.get(stack.getItem());
             if (needed == null || needed <= 0) continue;
 
-            int take = Math.min(needed, stack.getCount());
-            stack.shrink(take);
-            needed -= take;
-            if (needed <= 0) {
+            int currentCount = stack.getCount();
+            int take = Math.min(needed, currentCount);
+            int newCount = currentCount - take;
+
+            // Update the consumption tracker FIRST so a duplicate iteration can't double-take
+            int leftover = needed - take;
+            if (leftover <= 0) {
                 remainingToConsume.remove(stack.getItem());
             } else {
-                remainingToConsume.put(stack.getItem(), needed);
+                remainingToConsume.put(stack.getItem(), leftover);
             }
-            if (stack.isEmpty()) {
+
+            if (newCount <= 0) {
                 ie.discard();
             } else {
-                ie.setItem(stack);
+                // Write a fresh ItemStack instance with the new count so the data
+                // tracker definitely registers the change.
+                ItemStack updated = stack.copy();
+                updated.setCount(newCount);
+                ie.setItem(updated);
             }
         }
 

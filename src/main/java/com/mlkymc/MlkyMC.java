@@ -435,6 +435,7 @@ public class MlkyMC {
             powerHandler.tickJackhammer(level);
             powerHandler.tickCharmedMobs(level);
             powerHandler.tickAirDashReset(level);
+            powerHandler.tickRedHot(level);
         }
         if (concoctionHandler != null) {
             concoctionHandler.tickPreserveBrewData(level);

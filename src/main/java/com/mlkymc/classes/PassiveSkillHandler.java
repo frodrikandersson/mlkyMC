@@ -445,9 +445,12 @@ public class PassiveSkillHandler {
 
         ClassData data = classManager.getOrCreate(checkPlayer);
         if (!data.hasExclusiveSkills(ProfessionType.FARMHAND)) return;
-        if (data.getLevel(ProfessionType.FARMHAND) < 10) return;
+        int farmLevel = data.getLevel(ProfessionType.FARMHAND);
+        if (farmLevel < 10) return;
 
-        if (ThreadLocalRandom.current().nextDouble() < 0.20) {
+        // Chance scales with Farmhand level: 20% at Lv10, 40% at Lv30, 60% at Lv50
+        double chance = farmLevel >= 50 ? 0.60 : farmLevel >= 30 ? 0.40 : 0.20;
+        if (ThreadLocalRandom.current().nextDouble() < chance) {
             var star = new ItemStack(com.mlkymc.registry.ModItems.MILKY_STAR.get(), 1);
             serverLevel.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
                     serverLevel, event.getPos().getX() + 0.5, event.getPos().getY() + 1.0,
@@ -500,34 +503,37 @@ public class PassiveSkillHandler {
         if (!data.hasExclusiveSkills(ProfessionType.FARMHAND)) return;
         if (data.getLevel(ProfessionType.FARMHAND) < 10) return;
 
-        // 20% chance to drop a Milky Star
-        if (ThreadLocalRandom.current().nextDouble() < 0.20) {
-            var star = new ItemStack(com.mlkymc.registry.ModItems.MILKY_STAR.get(), 1);
+        // Only vanilla hoppers beneath the composter can extract Milky Stars.
+        // Any other extraction method (Tom's Storage, hopper minecart, mod pipes,
+        // etc.) produces zero stars. Manual right-click harvesting still works
+        // via onComposterRightClick at the normal 20% rate, unaffected by this.
+        var belowBe = level.getBlockEntity(pos.below());
+        if (!(belowBe instanceof net.minecraft.world.level.block.entity.HopperBlockEntity hopper)) return;
 
-            // Try to insert into hopper below the composter first
-            boolean inserted = false;
-            var belowBe = level.getBlockEntity(pos.below());
-            if (belowBe instanceof net.minecraft.world.level.block.entity.HopperBlockEntity hopper) {
-                for (int i = 0; i < hopper.getContainerSize(); i++) {
-                    var slot = hopper.getItem(i);
-                    if (slot.isEmpty()) {
-                        hopper.setItem(i, star.copy());
-                        inserted = true;
-                        break;
-                    } else if (ItemStack.isSameItemSameComponents(slot, star)
-                            && slot.getCount() < slot.getMaxStackSize()) {
-                        slot.grow(1);
-                        inserted = true;
-                        break;
-                    }
-                }
-            }
+        // Hopper-extracted composters: 10% chance per emptying, rate limited to 100/hr/player.
+        if (ThreadLocalRandom.current().nextDouble() >= 0.10) return;
+        if (!com.mlkymc.util.HopperStarRateLimit.tryGrant(ownerUUID)) return;
 
-            // If no hopper or hopper full, spawn as item entity on top
-            if (!inserted) {
-                level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
-                        level, pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, star));
+        var star = new ItemStack(com.mlkymc.registry.ModItems.MILKY_STAR.get(), 1);
+
+        // Try to insert into the hopper below; if full, spawn on top
+        boolean inserted = false;
+        for (int i = 0; i < hopper.getContainerSize(); i++) {
+            var slot = hopper.getItem(i);
+            if (slot.isEmpty()) {
+                hopper.setItem(i, star.copy());
+                inserted = true;
+                break;
+            } else if (ItemStack.isSameItemSameComponents(slot, star)
+                    && slot.getCount() < slot.getMaxStackSize()) {
+                slot.grow(1);
+                inserted = true;
+                break;
             }
+        }
+        if (!inserted) {
+            level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(
+                    level, pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, star));
         }
     }
 
@@ -575,10 +581,22 @@ public class PassiveSkillHandler {
         if (!data.hasExclusiveSkills(ProfessionType.SMITH)) return;
         if (data.getLevel(ProfessionType.SMITH) < 10) return;
 
-        // 5% chance per extracted item to get a Milky Star
+        // Only vanilla hoppers beneath the furnace grant Milky Stars via automation.
+        // Any other extraction method (Tom's Storage, hopper minecart, mod pipes,
+        // etc.) produces zero stars here. Manual player extraction is handled
+        // separately by ClassExpHandler.onItemSmelted (a PlayerEvent that only
+        // fires for player-driven extraction).
+        boolean hopperBelow = level.getBlockEntity(pos.below())
+                instanceof net.minecraft.world.level.block.entity.HopperBlockEntity;
+        if (!hopperBelow) return;
+
+        // Hopper-extracted: 10% per item, rate limited to 100/hr/player.
         int starsFound = 0;
         for (int i = 0; i < count; i++) {
-            if (ThreadLocalRandom.current().nextDouble() < 0.05) {
+            if (ThreadLocalRandom.current().nextDouble() < 0.10) {
+                if (!com.mlkymc.util.HopperStarRateLimit.tryGrant(ownerUUID)) {
+                    break; // Hit hourly cap
+                }
                 starsFound++;
             }
         }

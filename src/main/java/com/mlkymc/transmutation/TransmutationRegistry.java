@@ -22,19 +22,21 @@ import java.util.Map;
 public final class TransmutationRegistry {
 
     private static final List<TransmutationRecipe> RECIPES = new ArrayList<>();
-    private static boolean initialized = false;
 
     private TransmutationRegistry() {}
 
     /** Returns the full recipe list, sorted by priority descending. */
     public static List<TransmutationRecipe> getRecipes() {
-        ensureInitialized();
         return RECIPES;
     }
 
-    private static synchronized void ensureInitialized() {
-        if (initialized) return;
-        initialized = true;
+    // Eager init via static block — ensures recipes exist before JEI's registration
+    // flow or any other consumer queries getRecipes().
+    static {
+        populate();
+    }
+
+    private static void populate() {
 
         // ---- R1: Soul Fracture Cleanse ----
         // 64 Milky Stars → remove 1 Soul Fracture stack. Highest priority so that the
@@ -64,14 +66,14 @@ public final class TransmutationRegistry {
                 }
         ));
 
-        // ---- R2: Raw Iron → Tempered Plate ----
-        // 16 Raw Iron + 16 Milky Stars → 1 Tempered Plate. Base-unlock ore sink.
+        // ---- R2: Flint → Tempered Plate ----
+        // 16 Flint + 16 Milky Stars → 1 Tempered Plate. Smith reagent base recipe.
         RECIPES.add(new TransmutationRecipe(
-                "raw_iron_to_tempered_plate",
+                "flint_to_tempered_plate",
                 /* priority */ 50,
                 /* clericLevelRequired */ 30,
                 inputs(
-                        Items.RAW_IRON, 16,
+                        Items.FLINT, 16,
                         ModItems.MILKY_STAR.get(), 16
                 ),
                 new ItemStack(ModItems.TEMPERED_PLATE.get()),
@@ -135,6 +137,62 @@ public final class TransmutationRegistry {
                         ModItems.MILKY_STAR.get(), 8
                 ),
                 new ItemStack(ModItems.WAYSTONE_SHARD.get()),
+                null
+        ));
+
+        // ---- R7: Gravel → Flint ----
+        // 16 Gravel + 16 Milky Stars → 8 Flint. Consistent flint supply without RNG.
+        RECIPES.add(new TransmutationRecipe(
+                "gravel_to_flint",
+                /* priority */ 50,
+                /* clericLevelRequired */ 30,
+                inputs(
+                        Items.GRAVEL, 16,
+                        ModItems.MILKY_STAR.get(), 16
+                ),
+                new ItemStack(Items.FLINT, 8),
+                null
+        ));
+
+        // ---- R8: Raw Copper → Raw Iron ----
+        // 16 Raw Copper + 16 Milky Stars → 8 Raw Iron.
+        RECIPES.add(new TransmutationRecipe(
+                "raw_copper_to_raw_iron",
+                /* priority */ 50,
+                /* clericLevelRequired */ 30,
+                inputs(
+                        Items.RAW_COPPER, 16,
+                        ModItems.MILKY_STAR.get(), 16
+                ),
+                new ItemStack(Items.RAW_IRON, 8),
+                null
+        ));
+
+        // ---- R9: Raw Iron → Raw Gold ----
+        // 16 Raw Iron + 16 Milky Stars → 8 Raw Gold.
+        RECIPES.add(new TransmutationRecipe(
+                "raw_iron_to_raw_gold",
+                /* priority */ 50,
+                /* clericLevelRequired */ 30,
+                inputs(
+                        Items.RAW_IRON, 16,
+                        ModItems.MILKY_STAR.get(), 16
+                ),
+                new ItemStack(Items.RAW_GOLD, 8),
+                null
+        ));
+
+        // ---- R10: Raw Gold → Diamonds ----
+        // 16 Raw Gold + 16 Milky Stars → 2 Diamonds.
+        RECIPES.add(new TransmutationRecipe(
+                "raw_gold_to_diamond",
+                /* priority */ 50,
+                /* clericLevelRequired */ 30,
+                inputs(
+                        Items.RAW_GOLD, 16,
+                        ModItems.MILKY_STAR.get(), 16
+                ),
+                new ItemStack(Items.DIAMOND, 2),
                 null
         ));
 

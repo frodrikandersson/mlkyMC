@@ -15,6 +15,9 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Radio block — functionally identical to a Speaker (receives audio from
@@ -24,10 +27,28 @@ import net.minecraft.world.phys.BlockHitResult;
 public class RadioBlock extends HorizontalDirectionalBlock implements EntityBlock {
     public static final MapCodec<RadioBlock> CODEC = simpleCodec(RadioBlock::new);
 
+    // Per-direction collision/selection shapes. Model bounding box is roughly
+    // x=2-14, y=0-8, z=5.5-10 when facing north. Shapes are rotated for each FACING.
+    private static final VoxelShape SHAPE_NORTH = Shapes.box(2/16.0, 0, 5.5/16.0, 14/16.0, 8/16.0, 10/16.0);
+    private static final VoxelShape SHAPE_SOUTH = Shapes.box(2/16.0, 0, 6/16.0,   14/16.0, 8/16.0, 10.5/16.0);
+    private static final VoxelShape SHAPE_EAST  = Shapes.box(6/16.0, 0, 2/16.0,   10.5/16.0, 8/16.0, 14/16.0);
+    private static final VoxelShape SHAPE_WEST  = Shapes.box(5.5/16.0, 0, 2/16.0, 10/16.0,   8/16.0, 14/16.0);
+
     public RadioBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any()
                 .setValue(FACING, Direction.NORTH));
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, net.minecraft.world.level.BlockGetter level,
+                                   BlockPos pos, CollisionContext context) {
+        return switch (state.getValue(FACING)) {
+            case SOUTH -> SHAPE_SOUTH;
+            case EAST  -> SHAPE_EAST;
+            case WEST  -> SHAPE_WEST;
+            default    -> SHAPE_NORTH; // NORTH (and any non-horizontal fallback)
+        };
     }
 
     @Override

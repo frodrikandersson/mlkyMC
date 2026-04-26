@@ -99,7 +99,6 @@ public class ItemTooltipHandler {
         classRestrictions.put(ModItems.ARMOR_PLATING.get(), "Smith");
         classRestrictions.put(ModBlocks.SOUL_FORGE_ITEM.get(), "Smith");
         classRestrictions.put(Items.SPAWNER, "Smith");
-        classRestrictions.put(Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE, "Smith");
     }
 
     private static String getClassRestriction(Item item) {

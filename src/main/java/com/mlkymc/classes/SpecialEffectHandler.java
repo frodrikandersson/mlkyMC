@@ -138,8 +138,9 @@ public class SpecialEffectHandler {
         }
 
         // Exclusive drop bonus: +20/40/60/80/100% at Lv5/15/25/35/45
-        // Skip on player-placed ores
-        if (isMiningBlock && !(isOre && isPlayerPlacedBlock)) {
+        // Skip on ANY player-placed block (prevents place→break exploits across
+        // all tracked block types: ores, stone, deepslate, logs, etc).
+        if (isMiningBlock && !isPlayerPlacedBlock) {
             double bonusPercent = getMinecrafterDropBonus(level);
             if (bonusPercent > 0) {
                 var random = player.level().random;

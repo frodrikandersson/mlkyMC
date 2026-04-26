@@ -640,6 +640,24 @@ public class ThreatScalingHandler {
     private final java.util.Map<java.util.UUID, Long> fluxCooldown = new java.util.HashMap<>();
 
     // =========================================================================
+    // Minion drops: clear item + XP drops entirely so Pack Leader farms are worthless
+    // =========================================================================
+
+    @SubscribeEvent
+    public void onMinionDrops(net.neoforged.neoforge.event.entity.living.LivingDropsEvent event) {
+        if (event.getEntity().getTags().contains(TAG_MINION)) {
+            event.getDrops().clear();
+        }
+    }
+
+    @SubscribeEvent
+    public void onMinionXpDrop(net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent event) {
+        if (event.getEntity().getTags().contains(TAG_MINION)) {
+            event.setDroppedExperience(0);
+        }
+    }
+
+    // =========================================================================
     // DEATH: Volatile explosion + Leech heal + Necromancer raise
     // =========================================================================
 

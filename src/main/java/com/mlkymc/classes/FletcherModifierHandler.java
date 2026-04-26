@@ -9,6 +9,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.player.Inventory;
@@ -77,7 +78,7 @@ public class FletcherModifierHandler {
     // Open the menu on MineCrafter right-click
     // =========================================================================
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.HIGHEST, receiveCanceled = true)
     public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (event.getHand() != InteractionHand.MAIN_HAND) return;
@@ -89,13 +90,43 @@ public class FletcherModifierHandler {
         ClassData data = classManager.getOrCreate(player);
         if (data.getChosenClass() != ClassType.MINECRAFTER) return;
 
+        // Fully block the interaction so the held item (armor, etc.) doesn't run
+        // its own use() path (e.g. auto-equip). HIGHEST priority + all three cancel
+        // paths ensures neither vanilla nor other mods process the use.
         event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
+        event.setUseBlock(net.minecraft.util.TriState.FALSE);
+        event.setUseItem(net.minecraft.util.TriState.FALSE);
 
         player.openMenu(new SimpleMenuProvider(
                 (containerId, inv, p) -> new FletcherForgeMenu(
                         containerId, inv, ContainerLevelAccess.create(level, pos)),
                 Component.literal("Fletcher's Forge")
         ));
+    }
+
+    /**
+     * Safety net: if another mod or vanilla somehow still fires the item-use
+     * path after our block cancellation, catch it at the item-use level when
+     * the player is looking at a fletching table and holding armor.
+     */
+    @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.HIGHEST, receiveCanceled = true)
+    public void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        if (!(player.level() instanceof ServerLevel level)) return;
+
+        ClassData data = classManager.getOrCreate(player);
+        if (data.getChosenClass() != ClassType.MINECRAFTER) return;
+
+        // Pick-raycast what the player is looking at. If it's a fletching table
+        // within reach, cancel the item-use so e.g. armor doesn't auto-equip.
+        var hit = player.pick(5.0, 1.0f, false);
+        if (!(hit instanceof net.minecraft.world.phys.BlockHitResult blockHit)) return;
+        if (!level.getBlockState(blockHit.getBlockPos()).is(Blocks.FLETCHING_TABLE)) return;
+
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
     }
 
     // =========================================================================
